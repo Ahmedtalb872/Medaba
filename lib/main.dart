@@ -7,10 +7,23 @@ import 'screens/home_shell.dart';
 import 'state/app_state.dart';
 import 'theme/app_colors.dart';
 
+/// نسخة العرض (`--dart-define=DEMO=true`) تبدأ ببيانات تجريبية عند أول تشغيل.
+const _demo = bool.fromEnvironment('DEMO');
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final state = AppState(await PrefsStorage.create());
+  Storage storage;
+  try {
+    storage = await PrefsStorage.create();
+  } catch (_) {
+    // بعض المتصفحات تمنع التخزين المحلي (نافذة خاصة مثلاً)؛ نعمل في الذاكرة.
+    storage = MemoryStorage();
+  }
+  final state = AppState(storage);
   await state.load();
+  if (_demo && state.partners.isEmpty && state.products.isEmpty) {
+    await state.seedDemoData();
+  }
   runApp(MedabaApp(state: state));
 }
 
