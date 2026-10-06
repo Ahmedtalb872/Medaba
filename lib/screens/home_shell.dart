@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
+
 import 'dashboard_screen.dart';
 import 'investors_screen.dart';
 import 'partners_screen.dart';
@@ -38,31 +40,70 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 800;
+    final width = MediaQuery.sizeOf(context).width;
     final page = _dests[_index].page;
-    const title = Text('مدبّر - إدارة الأعمال');
+    const appName = 'مدبّر';
+    final label = Theme.of(context).textTheme.labelLarge;
 
-    if (wide) {
+    if (width >= 800) {
+      final extended = width >= 1100;
       return Scaffold(
         body: Row(
           children: [
-            NavigationRail(
-              extended: MediaQuery.sizeOf(context).width >= 1100,
-              selectedIndex: _index,
-              onDestinationSelected: (i) => setState(() => _index = i),
-              leading: const Padding(
-                padding: EdgeInsets.symmetric(vertical: 16),
-                child: Icon(Icons.business, size: 32),
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: AppColors.sidebar,
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
               ),
-              destinations: [
-                for (final d in _dests)
-                  NavigationRailDestination(
-                    icon: Icon(d.icon),
-                    label: Text(d.label),
+              child: NavigationRail(
+                extended: extended,
+                backgroundColor: Colors.transparent,
+                indicatorColor: Colors.white.withValues(alpha: 0.18),
+                selectedIconTheme: const IconThemeData(color: Colors.white),
+                unselectedIconTheme: IconThemeData(
+                  color: Colors.white.withValues(alpha: 0.65),
+                ),
+                selectedLabelTextStyle: label?.copyWith(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+                unselectedLabelTextStyle: label?.copyWith(
+                  color: Colors.white.withValues(alpha: 0.70),
+                ),
+                selectedIndex: _index,
+                onDestinationSelected: (i) => setState(() => _index = i),
+                leading: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const _Logo(),
+                      if (extended) ...[
+                        const SizedBox(width: 12),
+                        const Text(
+                          appName,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-              ],
+                ),
+                destinations: [
+                  for (final d in _dests)
+                    NavigationRailDestination(
+                      icon: Icon(d.icon),
+                      label: Text(d.label),
+                    ),
+                ],
+              ),
             ),
-            const VerticalDivider(width: 1),
             Expanded(child: page),
           ],
         ),
@@ -70,26 +111,89 @@ class _HomeShellState extends State<HomeShell> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: title),
-      drawer: NavigationDrawer(
-        selectedIndex: _index,
-        onDestinationSelected: (i) {
-          setState(() => _index = i);
-          Navigator.pop(context);
-        },
-        children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(28, 24, 16, 16),
-            child: title,
+      appBar: AppBar(
+        title: Text(_dests[_index].label),
+        foregroundColor: Colors.white,
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: AppColors.gradient(AppColors.sidebar),
           ),
-          for (final d in _dests)
-            NavigationDrawerDestination(
-              icon: Icon(d.icon),
-              label: Text(d.label),
+        ),
+      ),
+      drawer: Theme(
+        data: Theme.of(context).copyWith(
+          navigationDrawerTheme: NavigationDrawerThemeData(
+            backgroundColor: AppColors.sidebar.first,
+            indicatorColor: Colors.white.withValues(alpha: 0.18),
+            iconTheme: WidgetStateProperty.resolveWith(
+              (s) => IconThemeData(
+                color: s.contains(WidgetState.selected)
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.65),
+              ),
             ),
-        ],
+            labelTextStyle: WidgetStateProperty.resolveWith(
+              (s) => label?.copyWith(
+                color: s.contains(WidgetState.selected)
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: 0.75),
+                fontWeight: s.contains(WidgetState.selected)
+                    ? FontWeight.bold
+                    : null,
+              ),
+            ),
+          ),
+        ),
+        child: NavigationDrawer(
+          selectedIndex: _index,
+          onDestinationSelected: (i) {
+            setState(() => _index = i);
+            Navigator.pop(context);
+          },
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(24, 28, 24, 20),
+              child: Row(
+                children: [
+                  _Logo(),
+                  SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      '$appName - إدارة الأعمال',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            for (final d in _dests)
+              NavigationDrawerDestination(
+                icon: Icon(d.icon),
+                label: Text(d.label),
+              ),
+          ],
+        ),
       ),
       body: page,
     );
   }
+}
+
+class _Logo extends StatelessWidget {
+  const _Logo();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      gradient: AppColors.gradient(AppColors.people),
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: const Icon(Icons.business, color: Colors.white, size: 26),
+  );
 }

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
 
 /// رأس الصفحة مع عنوان وزر إضافة اختياري.
@@ -58,62 +59,91 @@ class PageHeader extends StatelessWidget {
   }
 }
 
-/// بطاقة مؤشر رقمي (KPI).
+/// بطاقة مؤشر رقمي (KPI) بخلفية متدرجة الألوان.
 class StatCard extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
-  final Color? color;
+  final List<Color> colors;
   const StatCard({
     super.key,
     required this.label,
     required this.value,
     required this.icon,
-    this.color,
+    this.colors = AppColors.profit,
   });
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final c = color ?? cs.primary;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: c.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, color: c),
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        gradient: AppColors.gradient(colors),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: colors.last.withValues(alpha: 0.30),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          // أيقونة زخرفية كبيرة شفافة في الزاوية.
+          PositionedDirectional(
+            end: -14,
+            bottom: -18,
+            child: Icon(
+              icon,
+              size: 96,
+              color: Colors.white.withValues(alpha: 0.13),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: TextStyle(color: cs.onSurfaceVariant),
-                    overflow: TextOverflow.ellipsis,
+          ),
+          Padding(
+            padding: const EdgeInsets.all(18),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.22),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  const SizedBox(height: 4),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: AlignmentDirectional.centerStart,
-                    child: Text(
-                      value,
-                      style: Theme.of(context).textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
+                  child: Icon(icon, color: Colors.white),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.88),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: AlignmentDirectional.centerStart,
+                        child: Text(
+                          value,
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -128,7 +158,7 @@ class StatGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, c) {
-        final cols = c.maxWidth > 1100
+        final cols = c.maxWidth > 950
             ? 4
             : c.maxWidth > 700
             ? 3
@@ -177,20 +207,23 @@ class IncomeExpenseChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     final maxV = data.fold<double>(
       1,
       (m, e) => math.max(m, math.max(e.income, e.expenses)),
     );
     const h = 180.0;
-    Widget bar(double v, Color c) => Tooltip(
+    Widget bar(double v, List<Color> c) => Tooltip(
       message: fmt.money(v),
       child: Container(
-        width: 14,
+        width: 16,
         height: math.max(2, h * v / maxV),
         decoration: BoxDecoration(
-          color: c,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+          gradient: LinearGradient(
+            colors: c,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
         ),
       ),
     );
@@ -200,9 +233,9 @@ class IncomeExpenseChart extends StatelessWidget {
       children: [
         Row(
           children: [
-            _Legend(color: Colors.green.shade600, label: 'الإيرادات'),
+            _Legend(color: AppColors.income.last, label: 'الإيرادات'),
             const SizedBox(width: 16),
-            _Legend(color: cs.error, label: 'المصروفات'),
+            _Legend(color: AppColors.expense.last, label: 'المصروفات'),
           ],
         ),
         const SizedBox(height: 16),
@@ -219,9 +252,9 @@ class IncomeExpenseChart extends StatelessWidget {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        bar(e.income, Colors.green.shade600),
+                        bar(e.income, AppColors.income),
                         const SizedBox(width: 4),
-                        bar(e.expenses, cs.error),
+                        bar(e.expenses, AppColors.expense),
                       ],
                     ),
                     const SizedBox(height: 6),

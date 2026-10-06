@@ -39,9 +39,7 @@ class DataTableCard<T> extends StatelessWidget {
           child: ConstrainedBox(
             constraints: BoxConstraints(minWidth: c.maxWidth),
             child: DataTable(
-              headingRowColor: WidgetStatePropertyAll(
-                Theme.of(context).colorScheme.surfaceContainerHighest,
-              ),
+              columnSpacing: 28,
               columns: [
                 for (final col in columns) DataColumn(label: Text(col)),
                 if (hasActions) const DataColumn(label: Text('إجراءات')),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
+import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
 import '../widgets/common.dart';
 import '../widgets/data_table_card.dart';
@@ -91,25 +92,25 @@ class _ProfitsScreenState extends State<ProfitsScreen> {
               label: 'الإيرادات',
               value: fmt.money(r.income),
               icon: Icons.trending_up,
-              color: Colors.green.shade600,
+              colors: AppColors.income,
             ),
             StatCard(
               label: 'المصروفات التشغيلية',
               value: fmt.money(r.expenses),
               icon: Icons.trending_down,
-              color: cs.error,
+              colors: AppColors.expense,
             ),
             StatCard(
               label: 'صافي الربح',
               value: fmt.money(r.netProfit),
               icon: Icons.account_balance,
-              color: r.netProfit >= 0 ? cs.primary : cs.error,
+              colors: r.netProfit >= 0 ? AppColors.profit : AppColors.loss,
             ),
             StatCard(
               label: 'نصيب الشركاء',
               value: fmt.money(r.partnersPool),
               icon: Icons.handshake_outlined,
-              color: Colors.indigo,
+              colors: AppColors.people,
             ),
           ],
         ),
