@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 import 'dashboard_screen.dart';
-import 'investors_screen.dart';
+import 'inventory_screen.dart';
 import 'partners_screen.dart';
 import 'profits_screen.dart';
 import 'settings_screen.dart';
@@ -20,8 +20,8 @@ class _Dest {
 const _dests = [
   _Dest('لوحة التحكم', Icons.dashboard_outlined, DashboardScreen()),
   _Dest('الشركاء', Icons.handshake_outlined, PartnersScreen()),
-  _Dest('المستثمرون', Icons.account_balance_outlined, InvestorsScreen()),
   _Dest('العمال', Icons.engineering_outlined, WorkersScreen()),
+  _Dest('المخازن', Icons.warehouse_outlined, InventoryScreen()),
   _Dest('المعاملات', Icons.receipt_long_outlined, TransactionsScreen()),
   _Dest('توزيع الأرباح', Icons.pie_chart_outline, ProfitsScreen()),
   _Dest('الإعدادات', Icons.settings_outlined, SettingsScreen()),

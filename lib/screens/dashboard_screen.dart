@@ -17,6 +17,7 @@ class DashboardScreen extends StatelessWidget {
     final thisMonth = Period.month(DateTime.now());
     final report = s.profitReport(thisMonth);
     final recent = s.transactions.take(6).toList();
+    final lowStock = s.lowStockProducts;
 
     final chart = SectionCard(
       title: 'الإيرادات والمصروفات (آخر 6 أشهر)',
@@ -25,14 +26,11 @@ class DashboardScreen extends StatelessWidget {
 
     final distribution = SectionCard(
       title: 'توزيع أرباح هذا الشهر',
-      child: report.partners.isEmpty && report.investors.isEmpty
-          ? const EmptyState(message: 'أضف شركاء أو مستثمرين لعرض التوزيع')
+      child: report.partners.isEmpty
+          ? const EmptyState(message: 'أضف شركاء لعرض التوزيع')
           : Column(
               children: [
-                for (final (i, e) in [
-                  ...report.investors,
-                  ...report.partners,
-                ].indexed)
+                for (final (i, e) in report.partners.indexed)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 7),
                     child: Column(
@@ -106,16 +104,16 @@ class DashboardScreen extends StatelessWidget {
               colors: AppColors.cash,
             ),
             StatCard(
-              label: 'إجمالي رأس المال',
-              value: fmt.money(s.totalCapital),
-              icon: Icons.business_center_outlined,
-              colors: AppColors.capital,
+              label: 'قيمة المخزون',
+              value: fmt.money(s.stockValue()),
+              icon: Icons.warehouse_outlined,
+              colors: AppColors.stock,
             ),
             StatCard(
-              label: 'الشركاء / المستثمرون',
-              value: '${s.partners.length} / ${s.investors.length}',
-              icon: Icons.groups_outlined,
-              colors: AppColors.people,
+              label: 'أصناف تحت الحد الأدنى',
+              value: '${lowStock.length}',
+              icon: Icons.inventory_2_outlined,
+              colors: lowStock.isEmpty ? AppColors.ok : AppColors.loss,
             ),
             StatCard(
               label: 'العمال النشطون',
@@ -146,6 +144,34 @@ class DashboardScreen extends StatelessWidget {
                   children: [chart, const SizedBox(height: 12), distribution],
                 ),
         ),
+        if (lowStock.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          SectionCard(
+            title: 'تنبيه: أصناف قاربت على النفاد',
+            trailing: const Icon(
+              Icons.warning_amber_rounded,
+              color: Color(0xFFDC2626),
+            ),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final p in lowStock)
+                  Chip(
+                    avatar: const Icon(Icons.inventory_2_outlined, size: 18),
+                    label: Text(
+                      '${p.name}: ${fmt.number(s.stockOf(p.id))} ${p.unit} '
+                      '(الحد ${fmt.number(p.minQty)})',
+                    ),
+                    backgroundColor: AppColors.loss.first.withValues(
+                      alpha: 0.15,
+                    ),
+                    side: BorderSide.none,
+                  ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         SectionCard(
           title: 'آخر المعاملات',

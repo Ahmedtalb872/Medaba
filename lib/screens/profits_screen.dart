@@ -72,9 +72,7 @@ class _ProfitsScreenState extends State<ProfitsScreen> {
       children: [
         const PageHeader(
           title: 'توزيع الأرباح',
-          subtitle:
-              'يأخذ المستثمرون نسبتهم من صافي الربح أولاً، '
-              'ثم يُوزَّع الباقي على الشركاء حسب نسبهم',
+          subtitle: 'يُوزَّع صافي الربح على الشركاء حسب نسبة كل شريك',
         ),
         SegmentedButton<_Range>(
           segments: const [
@@ -107,9 +105,11 @@ class _ProfitsScreenState extends State<ProfitsScreen> {
               colors: r.netProfit >= 0 ? AppColors.profit : AppColors.loss,
             ),
             StatCard(
-              label: 'نصيب الشركاء',
-              value: fmt.money(r.partnersPool),
-              icon: Icons.handshake_outlined,
+              label: 'مسحوبات الشركاء',
+              value: fmt.money(
+                r.partners.fold<double>(0, (s, e) => s + e.withdrawn),
+              ),
+              icon: Icons.outbox_outlined,
               colors: AppColors.people,
             ),
           ],
@@ -122,13 +122,11 @@ class _ProfitsScreenState extends State<ProfitsScreen> {
               child: const ListTile(
                 leading: Icon(Icons.warning_amber),
                 title: Text(
-                  'الفترة المحددة فيها خسارة؛ لا تُصرف أرباح للمستثمرين ويتحمل الشركاء الخسارة حسب نسبهم.',
+                  'الفترة المحددة فيها خسارة يتحملها الشركاء حسب نسبهم.',
                 ),
               ),
             ),
           ),
-        const SizedBox(height: 16),
-        table('حصص المستثمرين', r.investors, 'نسبة الربح'),
         const SizedBox(height: 16),
         table('حصص الشركاء', r.partners, 'نسبة الشراكة'),
       ],

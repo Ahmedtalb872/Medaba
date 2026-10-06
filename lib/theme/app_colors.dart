@@ -15,6 +15,8 @@ abstract final class AppColors {
   static const people = [Color(0xFFE879F9), Color(0xFF9333EA)];
   static const workers = [Color(0xFFFBBF24), Color(0xFFEA580C)];
   static const payroll = [Color(0xFFF472B6), Color(0xFFBE185D)];
+  static const stock = [Color(0xFF2DD4BF), Color(0xFF0F766E)];
+  static const ok = [Color(0xFFA3E635), Color(0xFF4D7C0F)];
 
   /// خلفية القائمة الجانبية.
   static const sidebar = [

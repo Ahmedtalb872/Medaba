@@ -1,10 +1,11 @@
-/// نماذج البيانات الأساسية للتطبيق: الشركاء، المستثمرون، العمال، والمعاملات المالية.
+/// نماذج البيانات الأساسية للتطبيق: الشركاء، العمال، والمعاملات المالية.
 library;
 
 String newId() => '${DateTime.now().microsecondsSinceEpoch}${_counter++}';
 int _counter = 0;
 
-DateTime _date(Object? v) => v is String ? DateTime.parse(v) : DateTime.now();
+DateTime parseDate(Object? v) =>
+    v is String ? DateTime.parse(v) : DateTime.now();
 
 /// شريك في المشروع يملك نسبة من الأرباح ويساهم برأس مال.
 class Partner {
@@ -44,50 +45,7 @@ class Partner {
     phone: j['phone'] as String? ?? '',
     sharePercent: (j['sharePercent'] as num).toDouble(),
     capital: (j['capital'] as num?)?.toDouble() ?? 0,
-    joinedAt: _date(j['joinedAt']),
-    notes: j['notes'] as String? ?? '',
-  );
-}
-
-/// مستثمر يضخ مبلغاً ويحصل على نسبة من صافي الربح قبل توزيعه على الشركاء.
-class Investor {
-  final String id;
-  final String name;
-  final String phone;
-  final double amount;
-
-  /// نسبة المستثمر من صافي الربح (0 - 100).
-  final double profitPercent;
-  final DateTime investedAt;
-  final String notes;
-
-  const Investor({
-    required this.id,
-    required this.name,
-    this.phone = '',
-    required this.amount,
-    required this.profitPercent,
-    required this.investedAt,
-    this.notes = '',
-  });
-
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'name': name,
-    'phone': phone,
-    'amount': amount,
-    'profitPercent': profitPercent,
-    'investedAt': investedAt.toIso8601String(),
-    'notes': notes,
-  };
-
-  factory Investor.fromJson(Map<String, dynamic> j) => Investor(
-    id: j['id'] as String,
-    name: j['name'] as String,
-    phone: j['phone'] as String? ?? '',
-    amount: (j['amount'] as num).toDouble(),
-    profitPercent: (j['profitPercent'] as num).toDouble(),
-    investedAt: _date(j['investedAt']),
+    joinedAt: parseDate(j['joinedAt']),
     notes: j['notes'] as String? ?? '',
   );
 }
@@ -128,7 +86,7 @@ class Worker {
     phone: j['phone'] as String? ?? '',
     jobTitle: j['jobTitle'] as String? ?? '',
     monthlySalary: (j['monthlySalary'] as num).toDouble(),
-    hiredAt: _date(j['hiredAt']),
+    hiredAt: parseDate(j['hiredAt']),
     active: j['active'] as bool? ?? true,
   );
 }
@@ -150,7 +108,7 @@ enum TxCategory {
   supplies('مشتريات ومواد', TxType.expense),
   utilities('فواتير وخدمات', TxType.expense),
   otherExpense('مصروف آخر', TxType.expense),
-  withdrawal('مسحوبات شريك/مستثمر', TxType.expense);
+  withdrawal('مسحوبات شريك', TxType.expense);
 
   final String label;
   final TxType type;
@@ -162,7 +120,7 @@ enum TxCategory {
       values.where((c) => c.type == t).toList();
 }
 
-/// معاملة مالية (إيراد أو مصروف)، يمكن ربطها بعامل أو شريك أو مستثمر.
+/// معاملة مالية (إيراد أو مصروف)، يمكن ربطها بعامل أو شريك.
 class Transaction {
   final String id;
   final TxCategory category;
@@ -170,7 +128,7 @@ class Transaction {
   final DateTime date;
   final String note;
 
-  /// معرّف الشخص المرتبط (عامل/شريك/مستثمر) إن وجد.
+  /// معرّف الشخص المرتبط (عامل/شريك) إن وجد.
   final String? personId;
 
   const Transaction({
@@ -197,7 +155,7 @@ class Transaction {
     id: j['id'] as String,
     category: TxCategory.values.byName(j['category'] as String),
     amount: (j['amount'] as num).toDouble(),
-    date: _date(j['date']),
+    date: parseDate(j['date']),
     note: j['note'] as String? ?? '',
     personId: j['personId'] as String?,
   );

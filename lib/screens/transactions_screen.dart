@@ -104,8 +104,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             Text(s.personName(t.personId) ?? '-'),
             Text(t.note),
           ],
-          onEdit: (t) => showTransactionForm(context, existing: t),
+          onEdit: (t) => s.isStockTransaction(t.id)
+              ? _stockTxNotice(context)
+              : showTransactionForm(context, existing: t),
           onDelete: (t) async {
+            if (s.isStockTransaction(t.id)) return _stockTxNotice(context);
             if (await confirmDelete(
               context,
               '${t.category.label} ${fmt.money(t.amount)}',
@@ -118,6 +121,17 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
     );
   }
 }
+
+/// معاملات الشراء والبيع المرتبطة بحركات المخزون تُعدَّل من شاشة المخازن
+/// حتى لا تختلف الكميات عن المبالغ.
+void _stockTxNotice(BuildContext context) => ScaffoldMessenger.of(context)
+    .showSnackBar(
+      const SnackBar(
+        content: Text(
+          'هذه المعاملة مرتبطة بحركة مخزون؛ عدّلها أو احذفها من شاشة المخازن',
+        ),
+      ),
+    );
 
 Future<void> showTransactionForm(
   BuildContext context, {
@@ -148,13 +162,7 @@ Future<void> showTransactionForm(
     } else if (category == TxCategory.withdrawal) {
       list.addAll(
         s.partners.map(
-          (p) => DropdownMenuItem(value: p.id, child: Text('شريك: ${p.name}')),
-        ),
-      );
-      list.addAll(
-        s.investors.map(
-          (i) =>
-              DropdownMenuItem(value: i.id, child: Text('مستثمر: ${i.name}')),
+          (p) => DropdownMenuItem(value: p.id, child: Text(p.name)),
         ),
       );
     }
@@ -210,9 +218,7 @@ Future<void> showTransactionForm(
           key: ValueKey(category),
           initialValue: personId,
           decoration: InputDecoration(
-            labelText: category == TxCategory.salary
-                ? 'العامل'
-                : 'الشريك / المستثمر',
+            labelText: category == TxCategory.salary ? 'العامل' : 'الشريك',
           ),
           items: people(),
           validator: (v) => category == TxCategory.withdrawal && v == null

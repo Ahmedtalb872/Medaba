@@ -23,8 +23,8 @@ void main() {
 
       for (final label in [
         'الشركاء',
-        'المستثمرون',
         'العمال',
+        'المخازن',
         'المعاملات',
         'توزيع الأرباح',
         'الإعدادات',
@@ -39,4 +39,37 @@ void main() {
       }
     });
   }
+
+  testWidgets('inventory tabs and new stock movement form', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await state.seedDemoData();
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('المخازن').first);
+    await tester.pumpAndSettle();
+    for (final tab in ['الحركات', 'الأصناف', 'المخزون']) {
+      await tester.tap(find.widgetWithText(Tab, tab));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+
+    final movesBefore = state.moves.length;
+    final productId = state.products.first.id;
+    final stockBefore = state.stockOf(productId);
+    await tester.tap(find.text('حركة جديدة'));
+    await tester.pumpAndSettle();
+    // النوع الافتراضي "وارد - شراء" والسعر مملوء تلقائياً من سعر التكلفة.
+    await tester.enterText(find.widgetWithText(TextFormField, 'الكمية'), '5');
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+
+    expect(state.moves.length, movesBefore + 1);
+    expect(state.stockOf(productId), stockBefore + 5);
+  });
 }

@@ -25,7 +25,7 @@ class SettingsScreen extends StatelessWidget {
                 leading: const Icon(Icons.auto_awesome_outlined),
                 title: const Text('تحميل بيانات تجريبية'),
                 subtitle: const Text(
-                  'يضيف شركاء ومستثمراً وعمالاً ومعاملات لآخر 6 أشهر للعرض',
+                  'يضيف شركاء وعمالاً ومخازن وأصنافاً ومعاملات لآخر 6 أشهر للعرض',
                 ),
                 onTap: () async {
                   await s.seedDemoData();
@@ -40,7 +40,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 title: const Text('حذف كل البيانات'),
                 subtitle: const Text(
-                  'يحذف جميع الشركاء والمستثمرين والعمال والمعاملات',
+                  'يحذف جميع الشركاء والعمال والمخازن والأصناف والمعاملات',
                 ),
                 onTap: () async {
                   if (await confirmDelete(context, 'كل البيانات')) {
