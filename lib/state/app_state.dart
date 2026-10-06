@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../data/storage.dart';
 import '../models/inventory.dart';
+import '../models/invoice.dart';
 import '../models/models.dart';
 import '../utils/format.dart' as fmt;
 
@@ -61,6 +62,8 @@ class AppState extends ChangeNotifier {
   static const _kWarehouses = 'warehouses';
   static const _kProducts = 'products';
   static const _kMoves = 'stock_moves';
+  static const _kInvoices = 'invoices';
+  static const _kCompany = 'company';
 
   final Storage _storage;
   AppState(this._storage);
@@ -71,12 +74,23 @@ class AppState extends ChangeNotifier {
   List<Warehouse> _warehouses = [];
   List<Product> _products = [];
   List<StockMove> _moves = [];
+  List<Invoice> _invoices = [];
+  CompanyInfo _company = const CompanyInfo();
   bool loaded = false;
 
   List<Partner> get partners => List.unmodifiable(_partners);
   List<Worker> get workers => List.unmodifiable(_workers);
   List<Warehouse> get warehouses => List.unmodifiable(_warehouses);
   List<Product> get products => List.unmodifiable(_products);
+  CompanyInfo get company => _company;
+
+  /// الفواتير مرتبة من الأحدث للأقدم.
+  List<Invoice> get invoices => List.unmodifiable(
+    [..._invoices]..sort((a, b) {
+      final d = b.date.compareTo(a.date);
+      return d != 0 ? d : b.number.compareTo(a.number);
+    }),
+  );
 
   /// المعاملات مرتبة من الأحدث للأقدم.
   List<Transaction> get transactions => List.unmodifiable(
@@ -99,6 +113,9 @@ class AppState extends ChangeNotifier {
     _warehouses = await _read(_kWarehouses, Warehouse.fromJson);
     _products = await _read(_kProducts, Product.fromJson);
     _moves = await _read(_kMoves, StockMove.fromJson);
+    _invoices = await _read(_kInvoices, Invoice.fromJson);
+    final company = await _storage.readList(_kCompany);
+    if (company.isNotEmpty) _company = CompanyInfo.fromJson(company.first);
     loaded = true;
     notifyListeners();
   }
@@ -120,7 +137,11 @@ class AppState extends ChangeNotifier {
   Future<void> _saveMoves() =>
       _storage.writeList(_kMoves, _moves.map((e) => e.toJson()).toList());
 
+  Future<void> _saveInvoices() =>
+      _storage.writeList(_kInvoices, _invoices.map((e) => e.toJson()).toList());
+
   Future<void> _saveAll() => Future.wait([
+    _saveInvoices(),
     _savePartners(),
     _saveWorkers(),
     _saveTx(),
@@ -200,8 +221,10 @@ class AppState extends ChangeNotifier {
     await _saveTx();
   }
 
-  /// هل المعاملة مُنشأة تلقائياً من حركة مخزون؟ (تُعدَّل من شاشة المخازن فقط)
-  bool isStockTransaction(String txId) => _moves.any((m) => m.txId == txId);
+  /// هل المعاملة مُنشأة تلقائياً من حركة مخزون أو فاتورة؟
+  /// (تُعدَّل من شاشتها فقط حتى تبقى المبالغ مطابقة للكميات)
+  bool isLinkedTransaction(String txId) =>
+      _moves.any((m) => m.txId == txId) || _invoices.any((i) => i.txId == txId);
 
   String? personName(String? id) {
     if (id == null) return null;
@@ -334,8 +357,14 @@ class AppState extends ChangeNotifier {
     String productId, {
     String? warehouseId,
     String? excludeMoveId,
+    String? excludeInvoiceId,
   }) => _moves
-      .where((m) => m.productId == productId && m.id != excludeMoveId)
+      .where(
+        (m) =>
+            m.productId == productId &&
+            m.id != excludeMoveId &&
+            (excludeInvoiceId == null || m.invoiceId != excludeInvoiceId),
+      )
       .fold(0, (s, m) => s + m.effectOn(warehouseId));
 
   /// قيمة المخزون بسعر التكلفة.
@@ -395,6 +424,113 @@ class AppState extends ChangeNotifier {
     if (m.txId != null) _transactions.removeWhere((t) => t.id == m.txId);
     notifyListeners();
     await Future.wait([_saveMoves(), _saveTx()]);
+  }
+
+  // ---------- الفواتير ----------
+
+  Invoice? invoiceById(String? id) =>
+      _invoices.where((e) => e.id == id).firstOrNull;
+
+  /// الرقم التالي للفاتورة حسب نوعها، مثل S-0001.
+  String nextInvoiceNumber(InvoiceType type) {
+    var max = 0;
+    for (final i in _invoices.where((i) => i.type == type)) {
+      final n = int.tryParse(i.number.split('-').last) ?? 0;
+      if (n > max) max = n;
+    }
+    return '${type.prefix}-${(max + 1).toString().padLeft(4, '0')}';
+  }
+
+  /// يحفظ الفاتورة: يستبدل حركات المخزون الخاصة بها، ويحدّث معاملتها المالية.
+  /// يرمي [StateError] إذا كانت الفاتورة فارغة أو الكمية المباعة أكبر من المتاح.
+  Future<void> saveInvoice(Invoice inv) async {
+    if (inv.lines.isEmpty) throw StateError('أضف صنفاً واحداً على الأقل');
+    if (inv.type == InvoiceType.sale) {
+      final needed = <String, double>{};
+      for (final l in inv.lines) {
+        needed[l.productId] = (needed[l.productId] ?? 0) + l.qty;
+      }
+      for (final e in needed.entries) {
+        final available = stockOf(
+          e.key,
+          warehouseId: inv.warehouseId,
+          excludeInvoiceId: inv.id,
+        );
+        if (e.value > available + 1e-9) {
+          throw StateError(
+            'الكمية المتاحة من "${productById(e.key)?.name}" '
+            'هي ${fmt.number(available)} فقط',
+          );
+        }
+      }
+    }
+
+    _moves.removeWhere((m) => m.invoiceId == inv.id);
+    for (final l in inv.lines) {
+      _moves.add(
+        StockMove(
+          id: newId(),
+          type: inv.type == InvoiceType.sale
+              ? MoveType.sale
+              : MoveType.purchase,
+          productId: l.productId,
+          warehouseId: inv.warehouseId,
+          qty: l.qty,
+          unitPrice: l.unitPrice,
+          date: inv.date,
+          note: '${inv.type.label} ${inv.number}',
+          invoiceId: inv.id,
+        ),
+      );
+    }
+
+    final tx = Transaction(
+      id: inv.txId ?? newId(),
+      category: inv.type == InvoiceType.sale
+          ? TxCategory.sales
+          : TxCategory.supplies,
+      amount: inv.total,
+      date: inv.date,
+      note: [
+        '${inv.type.label} ${inv.number}',
+        if (inv.partyName.isNotEmpty) inv.partyName,
+      ].join(' - '),
+    );
+    _upsert(_transactions, tx, (e) => e.id);
+    _upsert(_invoices, inv.withTx(tx.id), (e) => e.id);
+
+    notifyListeners();
+    await Future.wait([_saveInvoices(), _saveMoves(), _saveTx()]);
+  }
+
+  /// يحذف الفاتورة مع حركات المخزون والمعاملة المالية المرتبطة بها.
+  /// حذف فاتورة شراء يُرفض إذا كانت كمياتها قد بيعت أو حُوّلت.
+  Future<void> deleteInvoice(String id) async {
+    final inv = invoiceById(id);
+    if (inv == null) return;
+    if (inv.type == InvoiceType.purchase) {
+      for (final p in {for (final l in inv.lines) l.productId}) {
+        for (final w in _warehouses) {
+          if (stockOf(p, warehouseId: w.id, excludeInvoiceId: id) < -1e-9) {
+            throw StateError(
+              'لا يمكن حذف الفاتورة: كمية "${productById(p)?.name}" '
+              'صُرفت أو بيعت بعد شرائها',
+            );
+          }
+        }
+      }
+    }
+    _invoices.removeWhere((e) => e.id == id);
+    _moves.removeWhere((m) => m.invoiceId == id);
+    if (inv.txId != null) _transactions.removeWhere((t) => t.id == inv.txId);
+    notifyListeners();
+    await Future.wait([_saveInvoices(), _saveMoves(), _saveTx()]);
+  }
+
+  Future<void> saveCompany(CompanyInfo c) async {
+    _company = c;
+    notifyListeners();
+    await _storage.writeList(_kCompany, [c.toJson()]);
   }
 
   // ---------- بيانات تجريبية ----------
@@ -573,18 +709,6 @@ class AppState extends ChangeNotifier {
     await saveMove(
       StockMove(
         id: newId(),
-        type: MoveType.purchase,
-        productId: items[1].id,
-        warehouseId: main.id,
-        qty: 4,
-        unitPrice: items[1].costPrice,
-        date: thisMonth,
-        note: 'فاتورة مورد',
-      ),
-    );
-    await saveMove(
-      StockMove(
-        id: newId(),
         type: MoveType.transfer,
         productId: items[0].id,
         warehouseId: main.id,
@@ -593,28 +717,89 @@ class AppState extends ChangeNotifier {
         date: thisMonth,
       ),
     );
-    await saveMove(
-      StockMove(
+    await saveInvoice(
+      Invoice(
         id: newId(),
-        type: MoveType.sale,
-        productId: items[0].id,
-        warehouseId: main.id,
-        qty: 380,
-        unitPrice: items[0].salePrice,
+        type: InvoiceType.purchase,
+        number: nextInvoiceNumber(InvoiceType.purchase),
         date: thisMonth,
+        partyName: 'مؤسسة الحديد المتحدة',
+        partyPhone: '0112223333',
+        warehouseId: main.id,
+        lines: [
+          InvoiceLine(
+            productId: items[1].id,
+            qty: 4,
+            unitPrice: items[1].costPrice,
+          ),
+          InvoiceLine(
+            productId: items[4].id,
+            qty: 100,
+            unitPrice: items[4].costPrice,
+          ),
+        ],
+        taxPercent: 15,
       ),
     );
-    await saveMove(
-      StockMove(
+    await saveInvoice(
+      Invoice(
         id: newId(),
-        type: MoveType.sale,
-        productId: items[3].id,
+        type: InvoiceType.sale,
+        number: nextInvoiceNumber(InvoiceType.sale),
+        date: DateTime(now.year, now.month, 3),
+        partyName: 'شركة البناء الحديث',
+        partyPhone: '0551234567',
         warehouseId: main.id,
-        qty: 30,
-        unitPrice: items[3].salePrice,
-        date: thisMonth,
+        lines: [
+          InvoiceLine(
+            productId: items[0].id,
+            qty: 380,
+            unitPrice: items[0].salePrice,
+          ),
+          InvoiceLine(
+            productId: items[2].id,
+            qty: 120,
+            unitPrice: items[2].salePrice,
+          ),
+          InvoiceLine(
+            productId: items[3].id,
+            qty: 30,
+            unitPrice: items[3].salePrice,
+          ),
+        ],
+        discount: 500,
+        taxPercent: 15,
+        notes: 'التسليم في موقع العميل',
       ),
     );
+    await saveInvoice(
+      Invoice(
+        id: newId(),
+        type: InvoiceType.sale,
+        number: nextInvoiceNumber(InvoiceType.sale),
+        date: DateTime(now.year, now.month, 4),
+        partyName: 'عميل نقدي',
+        warehouseId: main.id,
+        lines: [
+          InvoiceLine(
+            productId: items[4].id,
+            qty: 40,
+            unitPrice: items[4].salePrice,
+          ),
+        ],
+        taxPercent: 15,
+      ),
+    );
+    if (_company.phone.isEmpty) {
+      _company = const CompanyInfo(
+        name: 'مؤسسة مدبّر لمواد البناء',
+        phone: '0500000000',
+        address: 'الرياض - المنطقة الصناعية',
+        taxNumber: '300000000000003',
+        defaultTaxPercent: 15,
+      );
+      await _storage.writeList(_kCompany, [_company.toJson()]);
+    }
 
     notifyListeners();
     await _saveAll();
@@ -627,6 +812,7 @@ class AppState extends ChangeNotifier {
     _warehouses.clear();
     _products.clear();
     _moves.clear();
+    _invoices.clear();
     notifyListeners();
     await _saveAll();
   }

@@ -259,8 +259,13 @@ class _MovesTab extends StatelessWidget {
               Text(m.note),
             ];
           },
-          onEdit: (m) => showMoveForm(context, existing: m),
+          onEdit: (m) => m.invoiceId != null
+              ? _invoiceMoveNotice(context, s, m)
+              : showMoveForm(context, existing: m),
           onDelete: (m) async {
+            if (m.invoiceId != null) {
+              return _invoiceMoveNotice(context, s, m);
+            }
             if (!await confirmDelete(context, 'حركة ${m.type.label}')) return;
             await s.deleteMove(m.id);
           },
@@ -294,6 +299,14 @@ class _MoveTypeChip extends StatelessWidget {
     ),
   );
 }
+
+/// حركات الفواتير تُعدَّل من شاشة الفواتير حتى تبقى الفاتورة مطابقة للمخزون.
+void _invoiceMoveNotice(BuildContext context, AppState s, StockMove m) =>
+    _snack(
+      context,
+      'هذه الحركة جزء من ${s.invoiceById(m.invoiceId)?.number ?? 'فاتورة'}؛ '
+      'عدّلها أو احذفها من شاشة الفواتير',
+    );
 
 Future<void> showMoveForm(BuildContext context, {StockMove? existing}) async {
   final s = context.read<AppState>();

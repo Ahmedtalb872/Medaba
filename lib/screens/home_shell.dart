@@ -4,6 +4,7 @@ import '../theme/app_colors.dart';
 
 import 'dashboard_screen.dart';
 import 'inventory_screen.dart';
+import 'invoices_screen.dart';
 import 'partners_screen.dart';
 import 'profits_screen.dart';
 import 'settings_screen.dart';
@@ -22,6 +23,7 @@ const _dests = [
   _Dest('الشركاء', Icons.handshake_outlined, PartnersScreen()),
   _Dest('العمال', Icons.engineering_outlined, WorkersScreen()),
   _Dest('المخازن', Icons.warehouse_outlined, InventoryScreen()),
+  _Dest('الفواتير', Icons.request_quote_outlined, InvoicesScreen()),
   _Dest('المعاملات', Icons.receipt_long_outlined, TransactionsScreen()),
   _Dest('توزيع الأرباح', Icons.pie_chart_outline, ProfitsScreen()),
   _Dest('الإعدادات', Icons.settings_outlined, SettingsScreen()),

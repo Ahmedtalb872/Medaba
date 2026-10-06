@@ -123,8 +123,11 @@ class StockMove {
   final DateTime date;
   final String note;
 
-  /// المعاملة المالية المرتبطة (للشراء والبيع).
+  /// المعاملة المالية المرتبطة (للشراء والبيع خارج الفواتير).
   final String? txId;
+
+  /// الفاتورة التي أنشأت هذه الحركة؛ تُعدَّل وتُحذف من شاشة الفواتير فقط.
+  final String? invoiceId;
 
   const StockMove({
     required this.id,
@@ -137,6 +140,7 @@ class StockMove {
     required this.date,
     this.note = '',
     this.txId,
+    this.invoiceId,
   });
 
   double get total => qty * unitPrice;
@@ -164,6 +168,7 @@ class StockMove {
     date: date,
     note: note,
     txId: clearTx ? null : (txId ?? this.txId),
+    invoiceId: invoiceId,
   );
 
   Map<String, dynamic> toJson() => {
@@ -177,6 +182,7 @@ class StockMove {
     'date': date.toIso8601String(),
     'note': note,
     'txId': txId,
+    'invoiceId': invoiceId,
   };
 
   factory StockMove.fromJson(Map<String, dynamic> j) => StockMove(
@@ -190,5 +196,6 @@ class StockMove {
     date: parseDate(j['date']),
     note: j['note'] as String? ?? '',
     txId: j['txId'] as String?,
+    invoiceId: j['invoiceId'] as String?,
   );
 }

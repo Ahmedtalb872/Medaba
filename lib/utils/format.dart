@@ -4,8 +4,8 @@ import 'package:intl/intl.dart';
 const currencySymbol = 'ر.س';
 
 final _money = NumberFormat('#,##0.##', 'en');
-final _date = DateFormat('yyyy/MM/dd', 'en');
-final _month = DateFormat('MM/yyyy', 'en');
+final _date = DateFormat('yyyy/MM/dd', 'en_US');
+final _month = DateFormat('MM/yyyy', 'en_US');
 
 String money(num v) => '${_money.format(v)} $currencySymbol';
 String number(num v) => _money.format(v);

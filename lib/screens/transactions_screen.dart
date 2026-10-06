@@ -104,11 +104,11 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
             Text(s.personName(t.personId) ?? '-'),
             Text(t.note),
           ],
-          onEdit: (t) => s.isStockTransaction(t.id)
+          onEdit: (t) => s.isLinkedTransaction(t.id)
               ? _stockTxNotice(context)
               : showTransactionForm(context, existing: t),
           onDelete: (t) async {
-            if (s.isStockTransaction(t.id)) return _stockTxNotice(context);
+            if (s.isLinkedTransaction(t.id)) return _stockTxNotice(context);
             if (await confirmDelete(
               context,
               '${t.category.label} ${fmt.money(t.amount)}',
@@ -122,16 +122,17 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
   }
 }
 
-/// معاملات الشراء والبيع المرتبطة بحركات المخزون تُعدَّل من شاشة المخازن
+/// معاملات الشراء والبيع المرتبطة بالمخزون أو الفواتير تُعدَّل من شاشتها
 /// حتى لا تختلف الكميات عن المبالغ.
-void _stockTxNotice(BuildContext context) => ScaffoldMessenger.of(context)
-    .showSnackBar(
-      const SnackBar(
-        content: Text(
-          'هذه المعاملة مرتبطة بحركة مخزون؛ عدّلها أو احذفها من شاشة المخازن',
-        ),
-      ),
-    );
+void _stockTxNotice(
+  BuildContext context,
+) => ScaffoldMessenger.of(context).showSnackBar(
+  const SnackBar(
+    content: Text(
+      'هذه المعاملة مرتبطة بفاتورة أو حركة مخزون؛ عدّلها أو احذفها من شاشتها',
+    ),
+  ),
+);
 
 Future<void> showTransactionForm(
   BuildContext context, {

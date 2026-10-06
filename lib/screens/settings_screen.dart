@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/invoice.dart';
 import '../state/app_state.dart';
+import '../utils/format.dart' as fmt;
 import '../widgets/common.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -9,7 +11,7 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final s = context.read<AppState>();
+    final s = context.watch<AppState>();
     void done(String msg) =>
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(msg)));
@@ -19,13 +21,23 @@ class SettingsScreen extends StatelessWidget {
       children: [
         const PageHeader(title: 'الإعدادات'),
         Card(
+          child: ListTile(
+            leading: const Icon(Icons.storefront_outlined),
+            title: const Text('بيانات المنشأة'),
+            subtitle: Text('${s.company.name} • تظهر في رأس كل فاتورة PDF'),
+            trailing: const Icon(Icons.chevron_left),
+            onTap: () => _editCompany(context, s),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
           child: Column(
             children: [
               ListTile(
                 leading: const Icon(Icons.auto_awesome_outlined),
                 title: const Text('تحميل بيانات تجريبية'),
                 subtitle: const Text(
-                  'يضيف شركاء وعمالاً ومخازن وأصنافاً ومعاملات لآخر 6 أشهر للعرض',
+                  'يضيف شركاء وعمالاً ومخازن وأصنافاً وفواتير ومعاملات لآخر 6 أشهر للعرض',
                 ),
                 onTap: () async {
                   await s.seedDemoData();
@@ -40,7 +52,7 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 title: const Text('حذف كل البيانات'),
                 subtitle: const Text(
-                  'يحذف جميع الشركاء والعمال والمخازن والأصناف والمعاملات',
+                  'يحذف جميع الشركاء والعمال والمخازن والأصناف والفواتير والمعاملات',
                 ),
                 onTap: () async {
                   if (await confirmDelete(context, 'كل البيانات')) {
@@ -55,4 +67,57 @@ class SettingsScreen extends StatelessWidget {
       ],
     );
   }
+}
+
+Future<void> _editCompany(BuildContext context, AppState s) {
+  final c = s.company;
+  final key = GlobalKey<FormState>();
+  final name = TextEditingController(text: c.name);
+  final phone = TextEditingController(text: c.phone);
+  final address = TextEditingController(text: c.address);
+  final taxNumber = TextEditingController(text: c.taxNumber);
+  final tax = TextEditingController(text: fmt.number(c.defaultTaxPercent));
+
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'بيانات المنشأة',
+    fields: (_) => [
+      TextFormField(
+        controller: name,
+        decoration: const InputDecoration(labelText: 'اسم المنشأة'),
+        validator: requiredText,
+      ),
+      TextFormField(
+        controller: phone,
+        decoration: const InputDecoration(labelText: 'الهاتف'),
+        keyboardType: TextInputType.phone,
+      ),
+      TextFormField(
+        controller: address,
+        decoration: const InputDecoration(labelText: 'العنوان'),
+      ),
+      TextFormField(
+        controller: taxNumber,
+        decoration: const InputDecoration(labelText: 'الرقم الضريبي'),
+      ),
+      TextFormField(
+        controller: tax,
+        decoration: const InputDecoration(
+          labelText: 'نسبة الضريبة الافتراضية للفواتير %',
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(max: 100, required: false),
+      ),
+    ],
+    onSave: () => s.saveCompany(
+      CompanyInfo(
+        name: name.text.trim(),
+        phone: phone.text.trim(),
+        address: address.text.trim(),
+        taxNumber: taxNumber.text.trim(),
+        defaultTaxPercent: fmt.parseNumber(tax.text) ?? 0,
+      ),
+    ),
+  );
 }

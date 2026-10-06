@@ -138,7 +138,7 @@ void main() {
       final saleTx = s.transactions.firstWhere(
         (t) => t.category == TxCategory.sales,
       );
-      expect(s.isStockTransaction(saleTx.id), isTrue);
+      expect(s.isLinkedTransaction(saleTx.id), isTrue);
 
       // تعديل الكمية يحدّث المبلغ، والحذف يحذف المعاملة.
       await s.saveMove(
