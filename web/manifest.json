@@ -1,11 +1,11 @@
 {
-    "name": "medaba",
-    "short_name": "medaba",
+    "name": "مدبّر لإدارة الأعمال",
+    "short_name": "مدبّر",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "لوحة تحكم لإدارة الشركاء والعمال والمخازن والفواتير",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

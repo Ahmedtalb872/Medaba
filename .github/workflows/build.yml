@@ -61,3 +61,42 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/Medaba.dmg
+
+  web:
+    name: Deploy web to Vercel
+    needs: test
+    runs-on: ubuntu-latest
+    # النشر لا يعمل من فروع مستودعات أخرى (لا تصل إليها الأسرار).
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      # فرع main ينشر للرابط الأساسي، وغيره ينشر رابط معاينة.
+      VERCEL_PROD: ${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
+      VERCEL_SCOPE: ${{ vars.VERCEL_SCOPE && format('--scope={0}', vars.VERCEL_SCOPE) || '' }}
+    steps:
+      - name: Check Vercel token
+        if: env.VERCEL_TOKEN == ''
+        run: echo "::warning::أضف السر VERCEL_TOKEN في إعدادات المستودع لتفعيل النشر على Vercel."
+      - uses: actions/checkout@v4
+        if: env.VERCEL_TOKEN != ''
+      - uses: subosito/flutter-action@v2
+        if: env.VERCEL_TOKEN != ''
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Build web
+        if: env.VERCEL_TOKEN != ''
+        run: |
+          flutter pub get
+          flutter build web --release --dart-define=DEMO=${{ vars.DEMO_DATA || 'true' }}
+      - name: Deploy
+        if: env.VERCEL_TOKEN != ''
+        working-directory: build/web
+        run: |
+          npm install --global vercel@latest
+          vercel project add medaba --token "$VERCEL_TOKEN" $VERCEL_SCOPE || true
+          vercel link --yes --project medaba --token "$VERCEL_TOKEN" $VERCEL_SCOPE
+          URL=$(vercel deploy --yes $VERCEL_PROD --token "$VERCEL_TOKEN" $VERCEL_SCOPE)
+          echo "### 🌐 $URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deployed: $URL"

@@ -64,6 +64,23 @@ flutter run -d windows     # ويندوز (أو macos / linux)
 flutter test               # الاختبارات
 ```
 
+## الموقع على Vercel
+
+يُبنى الموقع ويُرفع إلى Vercel تلقائياً من GitHub Actions بعد نجاح الاختبارات:
+- التحديث على فرع **main** يُنشر على الرابط الأساسي (Production).
+- أي فرع أو Pull Request آخر يُنشر على **رابط معاينة** منفصل.
+- الرابط يظهر في صفحة التشغيل في تبويب **Actions** (ملخص المهمة **Deploy web to Vercel**).
+
+**الإعداد لمرة واحدة:**
+1. في Vercel: **Account Settings ← Tokens ← Create Token**، وانسخ المفتاح.
+2. في GitHub: **Settings ← Secrets and variables ← Actions ← New repository secret**،
+   الاسم `VERCEL_TOKEN` والقيمة هي المفتاح.
+3. أعد تشغيل آخر **Build** من تبويب **Actions** (Re-run all jobs) أو ادفع أي تحديث.
+
+يُنشأ مشروع باسم `medaba` في حسابك تلقائياً. إعدادات اختيارية (Variables بجانب Secrets):
+- `DEMO_DATA`: `true` (الافتراضي) ليبدأ الموقع ببيانات تجريبية، أو `false` لنسخة فارغة للاستخدام الفعلي.
+- `VERCEL_SCOPE`: اسم الفريق إذا كان المشروع ضمن فريق في Vercel وليس الحساب الشخصي.
+
 ## تطبيق ماك (macOS)
 
 يُبنى تطبيق ماك تلقائياً على GitHub Actions (`.github/workflows/build.yml`) مع كل تحديث، بعد نجاح الفحص والاختبارات.
