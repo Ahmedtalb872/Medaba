@@ -67,10 +67,10 @@ flutter:
   uses-material-design: true
 
   fonts:
-    - family: Cairo
+    - family: Rubik
       fonts:
-        - asset: assets/fonts/Cairo-Regular.ttf
-        - asset: assets/fonts/Cairo-Bold.ttf
+        - asset: assets/fonts/Rubik-Regular.ttf
+        - asset: assets/fonts/Rubik-Bold.ttf
           weight: 700
 
   # To add assets to your application, add an assets section, like this:

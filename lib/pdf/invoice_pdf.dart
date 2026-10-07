@@ -18,11 +18,18 @@ const _gold = PdfColor.fromInt(0xFFE0A526);
 
 pw.ThemeData? _theme;
 
-/// يحمّل خط القاهرة مرة واحدة؛ الخطوط الافتراضية في PDF لا تدعم العربية.
-Future<pw.ThemeData> _loadTheme() async => _theme ??= pw.ThemeData.withFont(
-  base: pw.Font.ttf(await rootBundle.load('assets/fonts/Cairo-Regular.ttf')),
-  bold: pw.Font.ttf(await rootBundle.load('assets/fonts/Cairo-Bold.ttf')),
-);
+/// يحمّل خط Rubik مرة واحدة؛ الخطوط الافتراضية في PDF لا تدعم العربية.
+/// مسافة الكلمات في Rubik ضيقة، فنوسّعها قليلاً لتتضح الكلمات العربية.
+Future<pw.ThemeData> _loadTheme() async {
+  if (_theme != null) return _theme!;
+  final theme = pw.ThemeData.withFont(
+    base: pw.Font.ttf(await rootBundle.load('assets/fonts/Rubik-Regular.ttf')),
+    bold: pw.Font.ttf(await rootBundle.load('assets/fonts/Rubik-Bold.ttf')),
+  );
+  return _theme = theme.copyWith(
+    defaultTextStyle: theme.defaultTextStyle.copyWith(wordSpacing: 1.6),
+  );
+}
 
 /// يبني ملف PDF للفاتورة بتصميم عربي من اليمين لليسار.
 Future<Uint8List> buildInvoicePdf({
