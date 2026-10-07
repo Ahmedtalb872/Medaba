@@ -16,7 +16,7 @@ class DashboardScreen extends StatelessWidget {
     final s = context.watch<AppState>();
     final thisMonth = Period.month(DateTime.now());
     final report = s.profitReport(thisMonth);
-    final recent = s.transactions.take(6).toList();
+    final recent = s.transactions.take(5).toList();
     final lowStock = s.lowStockProducts;
 
     final chart = SectionCard(
@@ -30,7 +30,7 @@ class DashboardScreen extends StatelessWidget {
           ? const EmptyState(message: 'أضف شركاء لعرض التوزيع')
           : Column(
               children: [
-                for (final (i, e) in report.partners.indexed)
+                for (final e in report.partners)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 7),
                     child: Column(
@@ -38,17 +38,11 @@ class DashboardScreen extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            CircleAvatar(
-                              radius: 5,
-                              backgroundColor: AppColors.seriesAt(i),
-                            ),
-                            const SizedBox(width: 8),
                             Expanded(child: Text(e.name)),
                             Text(
                               fmt.money(e.amount),
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontWeight: FontWeight.bold,
-                                color: AppColors.seriesAt(i),
                               ),
                             ),
                           ],
@@ -56,10 +50,7 @@ class DashboardScreen extends StatelessWidget {
                         const SizedBox(height: 6),
                         LinearProgressIndicator(
                           value: (e.percent / 100).clamp(0, 1),
-                          minHeight: 8,
-                          color: AppColors.seriesAt(i),
-                          backgroundColor: AppColors.seriesAt(i)
-                              .withValues(alpha: 0.15),
+                          minHeight: 6,
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ],
@@ -72,11 +63,12 @@ class DashboardScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _HeroBanner(
-          netProfit: report.netProfit,
-          onAdd: () => showTransactionForm(context),
+        PageHeader(
+          title: 'لوحة التحكم',
+          subtitle: 'ملخص شهر ${fmt.month(DateTime.now())}',
+          actionLabel: 'معاملة جديدة',
+          onAction: () => showTransactionForm(context),
         ),
-        const SizedBox(height: 16),
         StatGrid(
           children: [
             StatCard(
@@ -103,30 +95,6 @@ class DashboardScreen extends StatelessWidget {
               icon: Icons.savings_outlined,
               colors: AppColors.cash,
             ),
-            StatCard(
-              label: 'قيمة المخزون',
-              value: fmt.money(s.stockValue()),
-              icon: Icons.warehouse_outlined,
-              colors: AppColors.stock,
-            ),
-            StatCard(
-              label: 'أصناف تحت الحد الأدنى',
-              value: '${lowStock.length}',
-              icon: Icons.inventory_2_outlined,
-              colors: lowStock.isEmpty ? AppColors.ok : AppColors.loss,
-            ),
-            StatCard(
-              label: 'العمال النشطون',
-              value: '${s.workers.where((w) => w.active).length}',
-              icon: Icons.engineering_outlined,
-              colors: AppColors.workers,
-            ),
-            StatCard(
-              label: 'الرواتب الشهرية',
-              value: fmt.money(s.monthlyPayroll),
-              icon: Icons.payments_outlined,
-              colors: AppColors.payroll,
-            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -146,29 +114,18 @@ class DashboardScreen extends StatelessWidget {
         ),
         if (lowStock.isNotEmpty) ...[
           const SizedBox(height: 16),
-          SectionCard(
-            title: 'تنبيه: أصناف قاربت على النفاد',
-            trailing: const Icon(
-              Icons.warning_amber_rounded,
-              color: Color(0xFFDC2626),
-            ),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final p in lowStock)
-                  Chip(
-                    avatar: const Icon(Icons.inventory_2_outlined, size: 18),
-                    label: Text(
-                      '${p.name}: ${fmt.number(s.stockOf(p.id))} ${p.unit} '
-                      '(الحد ${fmt.number(p.minQty)})',
-                    ),
-                    backgroundColor: AppColors.loss.first.withValues(
-                      alpha: 0.15,
-                    ),
-                    side: BorderSide.none,
-                  ),
-              ],
+          Card(
+            child: ListTile(
+              leading: Icon(
+                Icons.warning_amber_rounded,
+                color: AppColors.expense.last,
+              ),
+              title: Text('أصناف قاربت على النفاد: ${lowStock.length}'),
+              subtitle: Text(
+                lowStock
+                    .map((p) => '${p.name} (${fmt.number(s.stockOf(p.id))})')
+                    .join('، '),
+              ),
             ),
           ),
         ],
@@ -182,23 +139,13 @@ class DashboardScreen extends StatelessWidget {
                     for (final t in recent)
                       ListTile(
                         contentPadding: EdgeInsets.zero,
-                        leading: Container(
-                          width: 42,
-                          height: 42,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: AppColors.gradient(
-                              t.type == TxType.income
-                                  ? AppColors.income
-                                  : AppColors.expense,
-                            ),
-                          ),
-                          child: Icon(
-                            t.type == TxType.income
-                                ? Icons.arrow_downward
-                                : Icons.arrow_upward,
-                            color: Colors.white,
-                          ),
+                        leading: Icon(
+                          t.type == TxType.income
+                              ? Icons.south_west
+                              : Icons.north_east,
+                          color: t.type == TxType.income
+                              ? AppColors.income.last
+                              : AppColors.expense.last,
                         ),
                         title: Text(t.note.isEmpty ? t.category.label : t.note),
                         subtitle: Text(
@@ -218,71 +165,6 @@ class DashboardScreen extends StatelessWidget {
                 ),
         ),
       ],
-    );
-  }
-}
-
-/// شريط ترحيبي متدرج الألوان أعلى لوحة التحكم.
-class _HeroBanner extends StatelessWidget {
-  final double netProfit;
-  final VoidCallback onAdd;
-  const _HeroBanner({required this.netProfit, required this.onAdd});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: AppColors.gradient(AppColors.sidebar.reversed.toList()),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.seed.withValues(alpha: 0.30),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 16,
-        runSpacing: 16,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'لوحة التحكم',
-                style: t.headlineSmall?.copyWith(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'ملخص أعمال شهر ${fmt.month(DateTime.now())} • '
-                'صافي الربح ${fmt.money(netProfit)}',
-                style: t.bodyLarge?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.85),
-                ),
-              ),
-            ],
-          ),
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.gold,
-              foregroundColor: AppColors.sidebar.first,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            ),
-            onPressed: onAdd,
-            icon: const Icon(Icons.add),
-            label: const Text('معاملة جديدة'),
-          ),
-        ],
-      ),
     );
   }
 }

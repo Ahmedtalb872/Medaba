@@ -53,13 +53,7 @@ class _HomeShellState extends State<HomeShell> {
         body: Row(
           children: [
             Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: AppColors.sidebar,
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
-              ),
+              decoration: BoxDecoration(color: AppColors.sidebar.last),
               child: NavigationRail(
                 extended: extended,
                 backgroundColor: Colors.transparent,
@@ -117,9 +111,7 @@ class _HomeShellState extends State<HomeShell> {
         title: Text(_dests[_index].label),
         foregroundColor: Colors.white,
         flexibleSpace: Container(
-          decoration: BoxDecoration(
-            gradient: AppColors.gradient(AppColors.sidebar),
-          ),
+          decoration: BoxDecoration(color: AppColors.sidebar.last),
         ),
       ),
       drawer: Theme(

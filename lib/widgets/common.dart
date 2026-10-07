@@ -59,7 +59,7 @@ class PageHeader extends StatelessWidget {
   }
 }
 
-/// بطاقة مؤشر رقمي (KPI): سطح فاتح، شريط لوني علوي، أيقونة دائرية ورقم كبير.
+/// بطاقة مؤشر رقمي (KPI): أيقونة صغيرة ملونة، عنوان، ورقم.
 class StatCard extends StatelessWidget {
   final String label;
   final String value;
@@ -78,70 +78,37 @@ class StatCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final tone = dark ? colors.first : colors.last;
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: Theme.of(context).cardTheme.color ?? cs.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: tone.withValues(alpha: 0.25)),
-        boxShadow: [
-          BoxShadow(
-            color: tone.withValues(alpha: 0.10),
-            blurRadius: 14,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            height: 5,
-            decoration: BoxDecoration(gradient: AppColors.gradient(colors)),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: AppColors.gradient(colors),
-                      ),
-                      child: Icon(icon, color: Colors.white, size: 20),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        label,
-                        style: TextStyle(
-                          color: cs.onSurfaceVariant,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: AlignmentDirectional.centerStart,
+                Icon(icon, color: tone, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
                   child: Text(
-                    value,
-                    style: Theme.of(context).textTheme.headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.bold, color: tone),
+                    label,
+                    style: TextStyle(color: cs.onSurfaceVariant),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
-          ),
-        ],
+            const SizedBox(height: 8),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                value,
+                style: Theme.of(context).textTheme.titleLarge
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -160,7 +127,7 @@ class StatGrid extends StatelessWidget {
             ? 4
             : c.maxWidth > 700
             ? 3
-            : c.maxWidth > 420
+            : c.maxWidth > 320
             ? 2
             : 1;
         const gap = 12.0;
@@ -216,11 +183,7 @@ class IncomeExpenseChart extends StatelessWidget {
         width: 16,
         height: math.max(2, h * v / maxV),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: c,
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
+          color: c.last,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
         ),
       ),
@@ -243,24 +206,31 @@ class IncomeExpenseChart extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
+              // كل شهر يأخذ حصة متساوية من العرض حتى لا يتجاوز المخطط الشاشات الضيقة.
               for (final e in data)
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        bar(e.income, AppColors.income),
-                        const SizedBox(width: 4),
-                        bar(e.expenses, AppColors.expense),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      fmt.month(e.month),
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          bar(e.income, AppColors.income),
+                          const SizedBox(width: 4),
+                          bar(e.expenses, AppColors.expense),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          fmt.month(e.month),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
             ],
           ),
