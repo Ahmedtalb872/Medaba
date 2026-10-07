@@ -56,22 +56,29 @@ class _HomeShellState extends State<HomeShell> {
         body: Row(
           children: [
             Container(
-              decoration: BoxDecoration(color: AppColors.sidebar.last),
+              decoration: const BoxDecoration(
+                color: AppColors.navBackground,
+                border: BorderDirectional(
+                  end: BorderSide(color: AppColors.navBorder),
+                ),
+              ),
               child: NavigationRail(
                 extended: extended,
                 minExtendedWidth: 200,
                 backgroundColor: Colors.transparent,
-                indicatorColor: AppColors.gold.withValues(alpha: 0.28),
-                selectedIconTheme: const IconThemeData(color: AppColors.gold),
-                unselectedIconTheme: IconThemeData(
-                  color: Colors.white.withValues(alpha: 0.65),
+                indicatorColor: AppColors.navSelected,
+                selectedIconTheme: const IconThemeData(
+                  color: AppColors.navText,
+                ),
+                unselectedIconTheme: const IconThemeData(
+                  color: AppColors.navMuted,
                 ),
                 selectedLabelTextStyle: label?.copyWith(
-                  color: Colors.white,
+                  color: AppColors.navText,
                   fontWeight: FontWeight.bold,
                 ),
                 unselectedLabelTextStyle: label?.copyWith(
-                  color: Colors.white.withValues(alpha: 0.70),
+                  color: AppColors.navMuted,
                 ),
                 selectedIndex: _index,
                 onDestinationSelected: (i) => setState(() => _index = i),
@@ -86,7 +93,7 @@ class _HomeShellState extends State<HomeShell> {
                         const Text(
                           appName,
                           style: TextStyle(
-                            color: Colors.white,
+                            color: AppColors.navText,
                             fontSize: 22,
                             fontWeight: FontWeight.bold,
                           ),
@@ -121,20 +128,20 @@ class _HomeShellState extends State<HomeShell> {
       drawer: Theme(
         data: Theme.of(context).copyWith(
           navigationDrawerTheme: NavigationDrawerThemeData(
-            backgroundColor: AppColors.sidebar.first,
-            indicatorColor: AppColors.gold.withValues(alpha: 0.28),
+            backgroundColor: AppColors.navBackground,
+            indicatorColor: AppColors.navSelected,
             iconTheme: WidgetStateProperty.resolveWith(
               (s) => IconThemeData(
                 color: s.contains(WidgetState.selected)
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.65),
+                    ? AppColors.navText
+                    : AppColors.navMuted,
               ),
             ),
             labelTextStyle: WidgetStateProperty.resolveWith(
               (s) => label?.copyWith(
                 color: s.contains(WidgetState.selected)
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: 0.75),
+                    ? AppColors.navText
+                    : AppColors.navMuted,
                 fontWeight: s.contains(WidgetState.selected)
                     ? FontWeight.bold
                     : null,
@@ -160,7 +167,7 @@ class _HomeShellState extends State<HomeShell> {
                       '$appName - إدارة الأعمال',
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.white,
+                        color: AppColors.navText,
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
