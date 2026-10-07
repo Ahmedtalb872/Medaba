@@ -43,6 +43,8 @@ class MedabaApp extends StatelessWidget {
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
         theme: _theme(Brightness.light),
         darkTheme: _theme(Brightness.dark),
+        // الواجهة فاتحة دائماً (خلفية بلون الرمل) حتى لو كان الجهاز في الوضع الليلي.
+        themeMode: ThemeMode.light,
         home: const HomeShell(),
       ),
     );
