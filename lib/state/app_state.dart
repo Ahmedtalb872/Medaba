@@ -541,25 +541,25 @@ class AppState extends ChangeNotifier {
     final p1 = Partner(
       id: newId(),
       name: 'أحمد علي',
-      phone: '0500000001',
+      phone: '22 45 67 01',
       sharePercent: 50,
-      capital: 100000,
+      capital: 1500000,
       joinedAt: DateTime(now.year - 1),
     );
     final p2 = Partner(
       id: newId(),
       name: 'محمد حسن',
-      phone: '0500000002',
+      phone: '36 45 67 02',
       sharePercent: 30,
-      capital: 60000,
+      capital: 900000,
       joinedAt: DateTime(now.year - 1),
     );
     final p3 = Partner(
       id: newId(),
       name: 'خالد سعيد',
-      phone: '0500000003',
+      phone: '46 45 67 03',
       sharePercent: 20,
-      capital: 40000,
+      capital: 600000,
       joinedAt: DateTime(now.year - 1),
     );
     final workers = [
@@ -567,21 +567,21 @@ class AppState extends ChangeNotifier {
         id: newId(),
         name: 'سالم يوسف',
         jobTitle: 'مدير عمليات',
-        monthlySalary: 8000,
+        monthlySalary: 30000,
         hiredAt: DateTime(now.year - 1),
       ),
       Worker(
         id: newId(),
         name: 'يوسف إبراهيم',
         jobTitle: 'أمين مخزن',
-        monthlySalary: 6000,
+        monthlySalary: 22000,
         hiredAt: DateTime(now.year - 1),
       ),
       Worker(
         id: newId(),
         name: 'عمر فاروق',
         jobTitle: 'فني',
-        monthlySalary: 4500,
+        monthlySalary: 16000,
         hiredAt: DateTime(now.year - 1, 3),
       ),
     ];
@@ -594,14 +594,14 @@ class AppState extends ChangeNotifier {
         Transaction(
           id: newId(),
           category: TxCategory.sales,
-          amount: 60000 + i * 4000.0,
+          amount: 600000 + i * 40000.0,
           date: d,
           note: 'مبيعات الشهر',
         ),
         Transaction(
           id: newId(),
           category: TxCategory.rent,
-          amount: 7000,
+          amount: 60000,
           date: d,
           note: 'إيجار المقر',
         ),
@@ -620,7 +620,7 @@ class AppState extends ChangeNotifier {
       Transaction(
         id: newId(),
         category: TxCategory.withdrawal,
-        amount: 10000,
+        amount: 100000,
         date: DateTime(now.year, now.month, 1),
         note: 'سحب أرباح',
         personId: p1.id,
@@ -630,12 +630,12 @@ class AppState extends ChangeNotifier {
     final main = Warehouse(
       id: newId(),
       name: 'المخزن الرئيسي',
-      location: 'المنطقة الصناعية',
+      location: 'نواكشوط - المنطقة الصناعية',
     );
     final branch = Warehouse(
       id: newId(),
       name: 'مخزن الفرع',
-      location: 'وسط المدينة',
+      location: 'نواذيبو - وسط المدينة',
     );
     _warehouses.addAll([main, branch]);
 
@@ -645,8 +645,8 @@ class AppState extends ChangeNotifier {
         name: 'أسمنت',
         code: 'C-01',
         unit: 'كيس',
-        costPrice: 18,
-        salePrice: 24,
+        costPrice: 230,
+        salePrice: 280,
         minQty: 100,
       ),
       Product(
@@ -654,8 +654,8 @@ class AppState extends ChangeNotifier {
         name: 'حديد تسليح 12مم',
         code: 'S-12',
         unit: 'طن',
-        costPrice: 2600,
-        salePrice: 2950,
+        costPrice: 34000,
+        salePrice: 38500,
         minQty: 5,
       ),
       Product(
@@ -663,8 +663,8 @@ class AppState extends ChangeNotifier {
         name: 'بلاط سيراميك',
         code: 'T-60',
         unit: 'متر',
-        costPrice: 32,
-        salePrice: 45,
+        costPrice: 320,
+        salePrice: 420,
         minQty: 200,
       ),
       Product(
@@ -672,8 +672,8 @@ class AppState extends ChangeNotifier {
         name: 'دهان أبيض',
         code: 'P-W',
         unit: 'جالون',
-        costPrice: 55,
-        salePrice: 75,
+        costPrice: 950,
+        salePrice: 1200,
         minQty: 40,
       ),
       Product(
@@ -681,8 +681,8 @@ class AppState extends ChangeNotifier {
         name: 'أنابيب PVC',
         code: 'PVC-4',
         unit: 'قطعة',
-        costPrice: 22,
-        salePrice: 30,
+        costPrice: 260,
+        salePrice: 340,
         minQty: 50,
       ),
     ];
@@ -724,7 +724,7 @@ class AppState extends ChangeNotifier {
         number: nextInvoiceNumber(InvoiceType.purchase),
         date: thisMonth,
         partyName: 'مؤسسة الحديد المتحدة',
-        partyPhone: '0112223333',
+        partyPhone: '45 25 10 10',
         warehouseId: main.id,
         lines: [
           InvoiceLine(
@@ -738,7 +738,7 @@ class AppState extends ChangeNotifier {
             unitPrice: items[4].costPrice,
           ),
         ],
-        taxPercent: 15,
+        taxPercent: 16,
       ),
     );
     await saveInvoice(
@@ -748,7 +748,7 @@ class AppState extends ChangeNotifier {
         number: nextInvoiceNumber(InvoiceType.sale),
         date: DateTime(now.year, now.month, 3),
         partyName: 'شركة البناء الحديث',
-        partyPhone: '0551234567',
+        partyPhone: '22 12 34 56',
         warehouseId: main.id,
         lines: [
           InvoiceLine(
@@ -767,8 +767,8 @@ class AppState extends ChangeNotifier {
             unitPrice: items[3].salePrice,
           ),
         ],
-        discount: 500,
-        taxPercent: 15,
+        discount: 5000,
+        taxPercent: 16,
         notes: 'التسليم في موقع العميل',
       ),
     );
@@ -787,16 +787,16 @@ class AppState extends ChangeNotifier {
             unitPrice: items[4].salePrice,
           ),
         ],
-        taxPercent: 15,
+        taxPercent: 16,
       ),
     );
     if (_company.phone.isEmpty) {
       _company = const CompanyInfo(
         name: 'مؤسسة مدبّر لمواد البناء',
-        phone: '0500000000',
-        address: 'الرياض - المنطقة الصناعية',
-        taxNumber: '300000000000003',
-        defaultTaxPercent: 15,
+        phone: '45 25 00 00',
+        address: 'نواكشوط - تفرغ زينة',
+        taxNumber: '00123456',
+        defaultTaxPercent: 16,
       );
       await _storage.writeList(_kCompany, [_company.toJson()]);
     }

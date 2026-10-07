@@ -8,11 +8,12 @@ import '../models/inventory.dart';
 import '../models/invoice.dart';
 import '../utils/format.dart' as fmt;
 
-const _primary = PdfColor.fromInt(0xFF312E81);
-const _accent = PdfColor.fromInt(0xFF4F46E5);
-const _soft = PdfColor.fromInt(0xFFEEF2FF);
-const _border = PdfColor.fromInt(0xFFD4D4E8);
+const _primary = PdfColor.fromInt(0xFF0B4D38);
+const _accent = PdfColor.fromInt(0xFF0B6E4F);
+const _soft = PdfColor.fromInt(0xFFF6F2E9);
+const _border = PdfColor.fromInt(0xFFE3D9C3);
 const _muted = PdfColor.fromInt(0xFF6B7280);
+const _gold = PdfColor.fromInt(0xFFE0A526);
 
 pw.ThemeData? _theme;
 
@@ -83,19 +84,10 @@ pw.Widget _header(Invoice inv, CompanyInfo c) => pw.Container(
                 fontWeight: pw.FontWeight.bold,
               ),
             ),
-            for (final line in [
-              c.address,
-              if (c.phone.isNotEmpty) 'هاتف: ${c.phone}',
-              if (c.taxNumber.isNotEmpty) 'الرقم الضريبي: ${c.taxNumber}',
-            ])
-              if (line.isNotEmpty)
-                pw.Text(
-                  line,
-                  style: const pw.TextStyle(
-                    color: PdfColors.white,
-                    fontSize: 10,
-                  ),
-                ),
+            if (c.address.isNotEmpty) _headerLine('', c.address),
+            if (c.phone.isNotEmpty) _headerLine('هاتف: ', c.phone, ltr: true),
+            if (c.taxNumber.isNotEmpty)
+              _headerLine('الرقم الضريبي: ', c.taxNumber, ltr: true),
           ],
         ),
       ),
@@ -105,7 +97,7 @@ pw.Widget _header(Invoice inv, CompanyInfo c) => pw.Container(
           pw.Text(
             inv.type.label,
             style: pw.TextStyle(
-              color: PdfColors.white,
+              color: _gold,
               fontSize: 22,
               fontWeight: pw.FontWeight.bold,
             ),
@@ -124,19 +116,41 @@ pw.Widget _header(Invoice inv, CompanyInfo c) => pw.Container(
   ),
 );
 
-pw.Widget _partyBox(Invoice inv, String warehouseName) {
-  pw.Widget field(String label, String value) => pw.Expanded(
-    child: pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(label, style: const pw.TextStyle(color: _muted, fontSize: 9)),
-        pw.Text(
-          value.isEmpty ? '-' : value,
-          style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
-        ),
-      ],
-    ),
+/// سطر في رأس الفاتورة. الأرقام (الهاتف، الرقم الضريبي) تُعرض من اليسار لليمين
+/// حتى لا تنقلب مجموعات الأرقام المفصولة بمسافات داخل النص العربي.
+pw.Widget _headerLine(String label, String value, {bool ltr = false}) {
+  const style = pw.TextStyle(color: PdfColors.white, fontSize: 10);
+  return pw.Row(
+    mainAxisSize: pw.MainAxisSize.min,
+    children: [
+      if (label.isNotEmpty) pw.Text(label, style: style),
+      pw.Text(
+        value,
+        style: style,
+        textDirection: ltr ? pw.TextDirection.ltr : null,
+      ),
+    ],
   );
+}
+
+pw.Widget _partyBox(Invoice inv, String warehouseName) {
+  pw.Widget field(String label, String value, {bool ltr = false}) =>
+      pw.Expanded(
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              label,
+              style: const pw.TextStyle(color: _muted, fontSize: 9),
+            ),
+            pw.Text(
+              value.isEmpty ? '-' : value,
+              style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold),
+              textDirection: ltr ? pw.TextDirection.ltr : null,
+            ),
+          ],
+        ),
+      );
   return pw.Container(
     padding: const pw.EdgeInsets.symmetric(horizontal: 14, vertical: 10),
     decoration: pw.BoxDecoration(
@@ -147,7 +161,7 @@ pw.Widget _partyBox(Invoice inv, String warehouseName) {
     child: pw.Row(
       children: [
         field(inv.type.partyLabel, inv.partyName),
-        field('الهاتف', inv.partyPhone),
+        field('الهاتف', inv.partyPhone, ltr: true),
         field('المخزن', warehouseName),
       ],
     ),

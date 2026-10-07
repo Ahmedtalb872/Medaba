@@ -63,8 +63,8 @@ class _HomeShellState extends State<HomeShell> {
               child: NavigationRail(
                 extended: extended,
                 backgroundColor: Colors.transparent,
-                indicatorColor: Colors.white.withValues(alpha: 0.18),
-                selectedIconTheme: const IconThemeData(color: Colors.white),
+                indicatorColor: AppColors.gold.withValues(alpha: 0.28),
+                selectedIconTheme: const IconThemeData(color: AppColors.gold),
                 unselectedIconTheme: IconThemeData(
                   color: Colors.white.withValues(alpha: 0.65),
                 ),
@@ -126,7 +126,7 @@ class _HomeShellState extends State<HomeShell> {
         data: Theme.of(context).copyWith(
           navigationDrawerTheme: NavigationDrawerThemeData(
             backgroundColor: AppColors.sidebar.first,
-            indicatorColor: Colors.white.withValues(alpha: 0.18),
+            indicatorColor: AppColors.gold.withValues(alpha: 0.28),
             iconTheme: WidgetStateProperty.resolveWith(
               (s) => IconThemeData(
                 color: s.contains(WidgetState.selected)
@@ -193,9 +193,9 @@ class _Logo extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(10),
     decoration: BoxDecoration(
-      gradient: AppColors.gradient(AppColors.people),
+      color: AppColors.gold,
       borderRadius: BorderRadius.circular(14),
     ),
-    child: const Icon(Icons.business, color: Colors.white, size: 26),
+    child: const Icon(Icons.business, color: Color(0xFF07291F), size: 26),
   );
 }

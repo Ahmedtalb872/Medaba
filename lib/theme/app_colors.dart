@@ -1,39 +1,37 @@
 import 'package:flutter/material.dart';
 
-/// لوحة ألوان التطبيق. كل مؤشر له تدرّج لوني خاص به.
+/// لوحة ألوان التطبيق، مستوحاة من علم موريتانيا: أخضر عميق وذهبي وأحمر
+/// على خلفية بلون الرمل. كل مؤشر له لونان (فاتح، داكن).
 abstract final class AppColors {
-  static const seed = Color(0xFF4F46E5);
-  static const lightBackground = Color(0xFFF4F6FB);
-  static const darkBackground = Color(0xFF0F1222);
+  static const seed = Color(0xFF0B6E4F);
+  static const gold = Color(0xFFE0A526);
+  static const lightBackground = Color(0xFFF6F2E9);
+  static const darkBackground = Color(0xFF0C1713);
 
-  static const income = [Color(0xFF34D399), Color(0xFF059669)];
-  static const expense = [Color(0xFFFB7185), Color(0xFFE11D48)];
-  static const profit = [Color(0xFF818CF8), Color(0xFF6D28D9)];
-  static const loss = [Color(0xFFF87171), Color(0xFFB91C1C)];
-  static const cash = [Color(0xFF22D3EE), Color(0xFF0E7490)];
-  static const capital = [Color(0xFF60A5FA), Color(0xFF1D4ED8)];
-  static const people = [Color(0xFFE879F9), Color(0xFF9333EA)];
-  static const workers = [Color(0xFFFBBF24), Color(0xFFEA580C)];
-  static const payroll = [Color(0xFFF472B6), Color(0xFFBE185D)];
-  static const stock = [Color(0xFF2DD4BF), Color(0xFF0F766E)];
-  static const ok = [Color(0xFFA3E635), Color(0xFF4D7C0F)];
+  static const income = [Color(0xFF2FB37E), Color(0xFF0B6E4F)];
+  static const expense = [Color(0xFFE5484D), Color(0xFFB4232A)];
+  static const profit = [Color(0xFFF2C14E), Color(0xFFB7791F)];
+  static const loss = [Color(0xFFE5484D), Color(0xFF8E1B1F)];
+  static const cash = [Color(0xFF2BA3A0), Color(0xFF136F6C)];
+  static const capital = [Color(0xFF4F7FC4), Color(0xFF274C86)];
+  static const people = [Color(0xFF9A7BD1), Color(0xFF5B3E96)];
+  static const workers = [Color(0xFFF08A3C), Color(0xFFB45309)];
+  static const payroll = [Color(0xFFC08457), Color(0xFF7C4A24)];
+  static const stock = [Color(0xFF7FA650), Color(0xFF4A6B26)];
+  static const ok = [Color(0xFF2FB37E), Color(0xFF0B6E4F)];
 
   /// خلفية القائمة الجانبية.
-  static const sidebar = [
-    Color(0xFF1E1B4B),
-    Color(0xFF312E81),
-    Color(0xFF4338CA),
-  ];
+  static const sidebar = [Color(0xFF07291F), Color(0xFF0B4D38)];
 
   /// ألوان متتالية لتمييز الأشخاص في أشرطة التوزيع.
   static const series = [
-    Color(0xFF8B5CF6),
-    Color(0xFF06B6D4),
-    Color(0xFFF59E0B),
-    Color(0xFFEC4899),
-    Color(0xFF10B981),
-    Color(0xFF3B82F6),
-    Color(0xFFEF4444),
+    Color(0xFF0B6E4F),
+    Color(0xFFE0A526),
+    Color(0xFFB4232A),
+    Color(0xFF136F6C),
+    Color(0xFF5B3E96),
+    Color(0xFFB45309),
+    Color(0xFF274C86),
   ];
 
   static Color seriesAt(int i) => series[i % series.length];

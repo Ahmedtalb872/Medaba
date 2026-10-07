@@ -39,7 +39,7 @@ class WorkersScreen extends StatelessWidget {
           cells: (w) => [
             Text(w.name),
             Text(w.jobTitle),
-            Text(w.phone),
+            Text(w.phone, textDirection: TextDirection.ltr),
             Text(fmt.money(w.monthlySalary)),
             Text(fmt.date(w.hiredAt)),
             Chip(

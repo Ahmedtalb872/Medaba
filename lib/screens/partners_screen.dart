@@ -44,7 +44,7 @@ class PartnersScreen extends StatelessWidget {
             final sh = shareOf[p.id];
             return [
               Text(p.name),
-              Text(p.phone),
+              Text(p.phone, textDirection: TextDirection.ltr),
               Text(fmt.percent(p.sharePercent)),
               Text(fmt.money(p.capital)),
               Text(fmt.money(sh?.amount ?? 0)),

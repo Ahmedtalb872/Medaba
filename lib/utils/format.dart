@@ -1,7 +1,7 @@
 import 'package:intl/intl.dart';
 
-/// رمز العملة المعروض. غيّره حسب بلد الزبون.
-const currencySymbol = 'ر.س';
+/// العملة: الأوقية الموريتانية (MRU).
+const currencySymbol = 'أوقية';
 
 final _money = NumberFormat('#,##0.##', 'en');
 final _date = DateFormat('yyyy/MM/dd', 'en_US');

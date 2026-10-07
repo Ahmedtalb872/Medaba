@@ -59,7 +59,7 @@ class PageHeader extends StatelessWidget {
   }
 }
 
-/// بطاقة مؤشر رقمي (KPI) بخلفية متدرجة الألوان.
+/// بطاقة مؤشر رقمي (KPI): سطح فاتح، شريط لوني علوي، أيقونة دائرية ورقم كبير.
 class StatCard extends StatelessWidget {
   final String label;
   final String value;
@@ -75,69 +75,67 @@ class StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final tone = dark ? colors.first : colors.last;
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        gradient: AppColors.gradient(colors),
-        borderRadius: BorderRadius.circular(20),
+        color: Theme.of(context).cardTheme.color ?? cs.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: tone.withValues(alpha: 0.25)),
         boxShadow: [
           BoxShadow(
-            color: colors.last.withValues(alpha: 0.30),
-            blurRadius: 16,
-            offset: const Offset(0, 6),
+            color: tone.withValues(alpha: 0.10),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // أيقونة زخرفية كبيرة شفافة في الزاوية.
-          PositionedDirectional(
-            end: -14,
-            bottom: -18,
-            child: Icon(
-              icon,
-              size: 96,
-              color: Colors.white.withValues(alpha: 0.13),
-            ),
+          Container(
+            height: 5,
+            decoration: BoxDecoration(gradient: AppColors.gradient(colors)),
           ),
           Padding(
-            padding: const EdgeInsets.all(18),
-            child: Row(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.22),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Icon(icon, color: Colors.white),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
+                Row(
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: AppColors.gradient(colors),
+                      ),
+                      child: Icon(icon, color: Colors.white, size: 20),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
                         label,
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.88),
+                          color: cs.onSurfaceVariant,
+                          fontWeight: FontWeight.w600,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 4),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: AlignmentDirectional.centerStart,
-                        child: Text(
-                          value,
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                        ),
-                      ),
-                    ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    value,
+                    style: Theme.of(context).textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold, color: tone),
                   ),
                 ),
               ],

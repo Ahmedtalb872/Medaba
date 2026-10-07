@@ -273,8 +273,8 @@ class _HeroBanner extends StatelessWidget {
           ),
           FilledButton.icon(
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: AppColors.seed,
+              backgroundColor: AppColors.gold,
+              foregroundColor: AppColors.sidebar.first,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             ),
             onPressed: onAdd,
