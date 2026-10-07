@@ -90,6 +90,7 @@ jobs:
         run: |
           flutter pub get
           flutter build web --release --dart-define=DEMO=${{ vars.DEMO_DATA || 'true' }}
+          python3 tool/cache_bust.py build/web "${GITHUB_SHA::8}"
       - name: Deploy
         if: env.VERCEL_TOKEN != ''
         working-directory: build/web
@@ -121,6 +122,8 @@ jobs:
           flutter build web --release \
             --base-href "/${{ github.event.repository.name }}/" \
             --dart-define=DEMO=${{ vars.DEMO_DATA || 'true' }}
+          # رقم نسخة في روابط الملفات حتى يحمّل المتصفح النسخة الجديدة فوراً.
+          python3 tool/cache_bust.py build/web "${GITHUB_SHA::8}"
           # يمنع GitHub Pages من معالجة الملفات بـ Jekyll، ويدعم الروابط العميقة.
           touch build/web/.nojekyll
           cp build/web/index.html build/web/404.html
