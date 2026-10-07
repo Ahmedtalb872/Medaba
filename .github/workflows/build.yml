@@ -100,3 +100,38 @@ jobs:
           URL=$(vercel deploy --yes $VERCEL_PROD --token "$VERCEL_TOKEN" $VERCEL_SCOPE)
           echo "### 🌐 $URL" >> "$GITHUB_STEP_SUMMARY"
           echo "Deployed: $URL"
+
+  pages:
+    name: Deploy web to GitHub Pages
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Build web
+        run: |
+          flutter pub get
+          flutter build web --release \
+            --base-href "/${{ github.event.repository.name }}/" \
+            --dart-define=DEMO=${{ vars.DEMO_DATA || 'true' }}
+          # يمنع GitHub Pages من معالجة الملفات بـ Jekyll، ويدعم الروابط العميقة.
+          touch build/web/.nojekyll
+          cp build/web/index.html build/web/404.html
+      - name: Publish to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: build/web
+          force_orphan: true
+          commit_message: Deploy web app
+      - name: Summary
+        run: |
+          OWNER="${{ github.repository_owner }}"
+          echo "### 🌐 https://${OWNER,,}.github.io/${{ github.event.repository.name }}/" >> "$GITHUB_STEP_SUMMARY"

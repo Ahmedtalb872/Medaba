@@ -64,6 +64,13 @@ flutter run -d windows     # ويندوز (أو macos / linux)
 flutter test               # الاختبارات
 ```
 
+## الموقع على GitHub Pages
+
+يُنشر الموقع تلقائياً بعد نجاح الاختبارات على:
+**https://ahmedtalb872.github.io/Medaba/**
+
+لا يحتاج أي إعداد. إذا لم يعمل الرابط بعد أول نشر: **Settings ← Pages ← Source: Deploy from a branch ← gh-pages / (root) ← Save**.
+
 ## الموقع على Vercel
 
 يُبنى الموقع ويُرفع إلى Vercel تلقائياً من GitHub Actions بعد نجاح الاختبارات:
