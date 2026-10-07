@@ -79,17 +79,48 @@ class _StockTab extends StatefulWidget {
   State<_StockTab> createState() => _StockTabState();
 }
 
+enum _StockFilter {
+  all('الكل'),
+  available('المتوفر'),
+  out('نفد');
+
+  final String label;
+  const _StockFilter(this.label);
+}
+
+typedef _StockRow = ({
+  Product product,
+  double received,
+  double issued,
+  double qty,
+});
+
 class _StockTabState extends State<_StockTab> {
   String? _warehouseId;
+  _StockFilter _filter = _StockFilter.all;
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<AppState>();
     if (s.warehouseById(_warehouseId) == null) _warehouseId = null;
-    final rows = [
-      for (final p in s.products)
-        (product: p, qty: s.stockOf(p.id, warehouseId: _warehouseId)),
-    ];
+    _StockRow row(Product p) {
+      final f = s.stockFlow(p.id, warehouseId: _warehouseId);
+      return (
+        product: p,
+        received: f.received,
+        issued: f.issued,
+        qty: f.received - f.issued,
+      );
+    }
+
+    bool matches(_StockRow r, _StockFilter f) => switch (f) {
+      _StockFilter.all => true,
+      _StockFilter.available => r.qty > 0,
+      _StockFilter.out => r.qty <= 0,
+    };
+
+    final rows = [for (final p in s.products) row(p)];
+    final shown = rows.where((r) => matches(r, _filter)).toList();
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -146,28 +177,43 @@ class _StockTabState extends State<_StockTab> {
           ],
         ),
         const SizedBox(height: 12),
-        DataTableCard<({Product product, double qty})>(
+        SegmentedButton<_StockFilter>(
+          segments: [
+            for (final f in _StockFilter.values)
+              ButtonSegment(
+                value: f,
+                label: Text(
+                  '${f.label} (${rows.where((r) => matches(r, f)).length})',
+                ),
+              ),
+          ],
+          selected: {_filter},
+          onSelectionChanged: (v) => setState(() => _filter = v.first),
+        ),
+        const SizedBox(height: 12),
+        DataTableCard<_StockRow>(
           columns: const [
             'الصنف',
             'الكود',
-            'الكمية',
+            'الكمية الأصلية',
+            'الخارج',
+            'المتوفر',
             'الوحدة',
             'سعر التكلفة',
             'سعر البيع',
-            'القيمة',
+            'قيمة المتوفر',
             'الحالة',
           ],
-          items: rows,
+          items: shown,
           emptyMessage: 'أضف أصنافاً من تبويب "الأصناف"',
           cells: (r) {
             final p = r.product;
             return [
               Text(p.name),
               Text(p.code),
-              Text(
-                fmt.number(r.qty),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
+              Text(fmt.number(r.received)),
+              Text(fmt.number(r.issued)),
+              _Available(qty: r.qty, received: r.received),
               Text(p.unit),
               Text(fmt.money(p.costPrice)),
               Text(fmt.money(p.salePrice)),
@@ -177,6 +223,42 @@ class _StockTabState extends State<_StockTab> {
           },
         ),
       ],
+    );
+  }
+}
+
+/// الكمية المتوفرة مع شريط يبيّن نسبتها من الكمية الأصلية.
+class _Available extends StatelessWidget {
+  final double qty;
+  final double received;
+  const _Available({required this.qty, required this.received});
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = received <= 0 ? 0.0 : (qty / received).clamp(0.0, 1.0);
+    final color = ratio > 0.25 ? AppColors.income.last : AppColors.expense.last;
+    return SizedBox(
+      width: 96,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            fmt.number(qty),
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: ratio,
+              minHeight: 5,
+              color: color,
+              backgroundColor: color.withValues(alpha: 0.15),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

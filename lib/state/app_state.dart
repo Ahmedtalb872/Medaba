@@ -407,6 +407,26 @@ class AppState extends ChangeNotifier {
       )
       .fold(0, (s, m) => s + m.effectOn(warehouseId));
 
+  /// ما دخل المخزن من الصنف (الكمية الأصلية) وما خرج منه.
+  /// المتوفر = [received] − [issued] = [stockOf].
+  /// في كل المخازن معاً لا يُحسب التحويل بينها دخولاً ولا خروجاً.
+  ({double received, double issued}) stockFlow(
+    String productId, {
+    String? warehouseId,
+  }) {
+    var received = 0.0, issued = 0.0;
+    for (final m in _moves) {
+      if (m.productId != productId) continue;
+      final e = m.effectOn(warehouseId);
+      if (e > 0) {
+        received += e;
+      } else {
+        issued -= e;
+      }
+    }
+    return (received: received, issued: issued);
+  }
+
   /// قيمة المخزون بسعر التكلفة.
   double stockValue({String? warehouseId}) => _products.fold(
     0,

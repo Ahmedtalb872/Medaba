@@ -129,6 +129,23 @@ void main() {
       expect(s.stockValue(), 950);
     });
 
+    test('original quantity, issued and available', () async {
+      await s.saveMove(move(MoveType.stockIn, 100));
+      await s.saveMove(move(MoveType.transfer, 30, to: 'w2'));
+      await s.saveMove(move(MoveType.stockOut, 5, wh: 'w2'));
+
+      // المخزن الأول: دخل 100 وخرج 30 بالتحويل.
+      final a = s.stockFlow('p', warehouseId: 'w1');
+      expect((a.received, a.issued), (100, 30));
+      // المخزن الثاني: دخله 30 بالتحويل وخرج 5.
+      final b = s.stockFlow('p', warehouseId: 'w2');
+      expect((b.received, b.issued), (30, 5));
+      // كل المخازن: التحويل الداخلي لا يُحسب.
+      final all = s.stockFlow('p');
+      expect((all.received, all.issued), (100, 5));
+      expect(all.received - all.issued, s.stockOf('p'));
+    });
+
     test('purchase and sale create linked transactions', () async {
       await s.saveMove(move(MoveType.purchase, 10, id: 'm1', price: 10));
       await s.saveMove(move(MoveType.sale, 4, id: 'm2', price: 15));
