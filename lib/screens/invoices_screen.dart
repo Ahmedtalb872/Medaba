@@ -556,7 +556,8 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
               const SizedBox(height: 12),
               totals,
             ],
-            const SizedBox(height: 80),
+            // مساحة تحت المحتوى حتى لا يغطي زر الحفظ العائم آخر سطر.
+            const SizedBox(height: 120),
           ],
         ),
       ),
