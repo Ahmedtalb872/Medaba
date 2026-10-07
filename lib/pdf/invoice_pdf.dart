@@ -174,16 +174,25 @@ pw.Widget _linesTable(Invoice inv, Product? Function(String) productOf) {
   // عمود الصور يظهر فقط إذا كان لأحد أصناف الفاتورة صورة.
   final withImages = products.any((p) => p?.image != null);
 
+  const imageSize = 64.0;
   pw.Widget thumb(Product? p) => p?.image == null
-      ? pw.SizedBox(width: 34, height: 34)
-      : pw.ClipRRect(
-          horizontalRadius: 4,
-          verticalRadius: 4,
-          child: pw.Image(
-            pw.MemoryImage(productImageBytes(p!.image!)),
-            width: 34,
-            height: 34,
-            fit: pw.BoxFit.cover,
+      ? pw.SizedBox(width: imageSize, height: imageSize)
+      : pw.Container(
+          padding: const pw.EdgeInsets.all(2),
+          decoration: pw.BoxDecoration(
+            color: PdfColors.white,
+            border: pw.Border.all(color: _border),
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+          ),
+          child: pw.ClipRRect(
+            horizontalRadius: 6,
+            verticalRadius: 6,
+            child: pw.Image(
+              pw.MemoryImage(productImageBytes(p!.image!)),
+              width: imageSize,
+              height: imageSize,
+              fit: pw.BoxFit.cover,
+            ),
           ),
         );
 
@@ -212,7 +221,7 @@ pw.Widget _linesTable(Invoice inv, Product? Function(String) productOf) {
   ];
   final widths = <pw.TableColumnWidth>[
     const pw.FixedColumnWidth(24),
-    if (withImages) const pw.FixedColumnWidth(46),
+    if (withImages) const pw.FixedColumnWidth(imageSize + 16),
     const pw.FlexColumnWidth(3),
     const pw.FlexColumnWidth(1.2),
     const pw.FlexColumnWidth(1),

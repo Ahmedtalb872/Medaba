@@ -5,7 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:image/image.dart' as img;
 
 /// أقصى طول لضلع صورة الصنف بعد التصغير.
-const productImageMaxSide = 320;
+const productImageMaxSide = 480;
 
 /// يصغّر الصورة ويحوّلها إلى JPEG بترميز base64 لتُحفظ مع الصنف.
 /// يُرجع null إذا لم تكن البيانات صورة صالحة.
