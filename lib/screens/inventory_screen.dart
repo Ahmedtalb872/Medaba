@@ -7,7 +7,9 @@ import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
 import '../widgets/common.dart';
+import '../utils/product_image.dart';
 import '../widgets/data_table_card.dart';
+import '../widgets/product_thumb.dart';
 
 /// إدارة المخازن: الأرصدة، الحركات، الأصناف، والمخازن.
 class InventoryScreen extends StatelessWidget {
@@ -480,6 +482,7 @@ class _ProductsTab extends StatelessWidget {
         ),
         DataTableCard<Product>(
           columns: const [
+            'الصورة',
             'الصنف',
             'الكود',
             'الوحدة',
@@ -491,6 +494,11 @@ class _ProductsTab extends StatelessWidget {
           items: s.products,
           emptyMessage: 'لم تتم إضافة أصناف بعد',
           cells: (p) => [
+            ProductThumb(
+              product: p,
+              size: 40,
+              onTap: () => uploadProductImage(context, p),
+            ),
             Text(p.name),
             Text(p.code),
             Text(p.unit),
@@ -529,12 +537,40 @@ Future<void> showProductForm(BuildContext context, {Product? existing}) {
   final sale = TextEditingController(text: num(existing?.salePrice));
   final min = TextEditingController(text: num(existing?.minQty));
   const decimal = TextInputType.numberWithOptions(decimal: true);
+  var image = existing?.image;
 
   return showFormDialog(
     context: context,
     formKey: key,
     title: existing == null ? 'إضافة صنف' : 'تعديل الصنف',
-    fields: (_) => [
+    fields: (setState) => [
+      Row(
+        children: [
+          ProductThumb(
+            product: Product(id: '', name: '', image: image),
+            size: 64,
+          ),
+          const SizedBox(width: 12),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.photo_outlined),
+            label: Text(image == null ? 'رفع صورة' : 'تغيير الصورة'),
+            onPressed: () async {
+              try {
+                final picked = await pickProductImage();
+                if (picked != null) setState(() => image = picked);
+              } on FormatException catch (e) {
+                if (context.mounted) _snack(context, e.message);
+              }
+            },
+          ),
+          if (image != null)
+            IconButton(
+              tooltip: 'إزالة الصورة',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () => setState(() => image = null),
+            ),
+        ],
+      ),
       TextFormField(
         controller: name,
         decoration: const InputDecoration(labelText: 'اسم الصنف'),
@@ -583,6 +619,7 @@ Future<void> showProductForm(BuildContext context, {Product? existing}) {
         costPrice: fmt.parseNumber(cost.text)!,
         salePrice: fmt.parseNumber(sale.text)!,
         minQty: fmt.parseNumber(min.text) ?? 0,
+        image: image,
       ),
     ),
   );

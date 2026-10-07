@@ -7,6 +7,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../models/inventory.dart';
 import '../models/invoice.dart';
 import '../utils/format.dart' as fmt;
+import '../utils/product_image.dart';
 
 const _primary = PdfColor.fromInt(0xFF0B4D38);
 const _accent = PdfColor.fromInt(0xFF0B6E4F);
@@ -169,8 +170,26 @@ pw.Widget _partyBox(Invoice inv, String warehouseName) {
 }
 
 pw.Widget _linesTable(Invoice inv, Product? Function(String) productOf) {
-  const headers = [
+  final products = [for (final l in inv.lines) productOf(l.productId)];
+  // عمود الصور يظهر فقط إذا كان لأحد أصناف الفاتورة صورة.
+  final withImages = products.any((p) => p?.image != null);
+
+  pw.Widget thumb(Product? p) => p?.image == null
+      ? pw.SizedBox(width: 34, height: 34)
+      : pw.ClipRRect(
+          horizontalRadius: 4,
+          verticalRadius: 4,
+          child: pw.Image(
+            pw.MemoryImage(productImageBytes(p!.image!)),
+            width: 34,
+            height: 34,
+            fit: pw.BoxFit.cover,
+          ),
+        );
+
+  final headers = [
     '#',
+    if (withImages) 'الصورة',
     'الصنف',
     'الكود',
     'الكمية',
@@ -180,19 +199,28 @@ pw.Widget _linesTable(Invoice inv, Product? Function(String) productOf) {
   ];
   final rows = [
     for (final (i, l) in inv.lines.indexed)
-      () {
-        final p = productOf(l.productId);
-        return [
-          '${i + 1}',
-          p?.name ?? '-',
-          p?.code ?? '',
-          fmt.number(l.qty),
-          p?.unit ?? '',
-          fmt.money(l.unitPrice),
-          fmt.money(l.total),
-        ];
-      }(),
+      [
+        '${i + 1}',
+        if (withImages) thumb(products[i]),
+        products[i]?.name ?? '-',
+        products[i]?.code ?? '',
+        fmt.number(l.qty),
+        products[i]?.unit ?? '',
+        fmt.money(l.unitPrice),
+        fmt.money(l.total),
+      ],
   ];
+  final widths = <pw.TableColumnWidth>[
+    const pw.FixedColumnWidth(24),
+    if (withImages) const pw.FixedColumnWidth(46),
+    const pw.FlexColumnWidth(3),
+    const pw.FlexColumnWidth(1.2),
+    const pw.FlexColumnWidth(1),
+    const pw.FlexColumnWidth(1),
+    const pw.FlexColumnWidth(1.6),
+    const pw.FlexColumnWidth(1.8),
+  ];
+  final nameColumn = withImages ? 2 : 1;
   return pw.TableHelper.fromTextArray(
     headers: headers,
     data: rows,
@@ -211,16 +239,8 @@ pw.Widget _linesTable(Invoice inv, Product? Function(String) productOf) {
     cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
     headerAlignment: pw.Alignment.center,
     cellAlignment: pw.Alignment.center,
-    cellAlignments: {1: pw.Alignment.centerRight},
-    columnWidths: {
-      0: const pw.FixedColumnWidth(24),
-      1: const pw.FlexColumnWidth(3),
-      2: const pw.FlexColumnWidth(1.2),
-      3: const pw.FlexColumnWidth(1),
-      4: const pw.FlexColumnWidth(1),
-      5: const pw.FlexColumnWidth(1.6),
-      6: const pw.FlexColumnWidth(1.8),
-    },
+    cellAlignments: {nameColumn: pw.Alignment.centerRight},
+    columnWidths: widths.asMap(),
   );
 }
 

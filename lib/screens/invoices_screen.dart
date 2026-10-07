@@ -13,6 +13,7 @@ import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
 import '../widgets/common.dart';
 import '../widgets/data_table_card.dart';
+import '../widgets/product_thumb.dart';
 
 class InvoicesScreen extends StatefulWidget {
   const InvoicesScreen({super.key});
@@ -405,6 +406,8 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
 
   @override
   Widget build(BuildContext context) {
+    // إعادة الرسم عند تغيّر البيانات (مثل رفع صورة صنف من هذه الصفحة).
+    context.watch<AppState>();
     final inv = _draft();
     final wide = MediaQuery.sizeOf(context).width >= 900;
     const decimal = TextInputType.numberWithOptions(decimal: true);
@@ -462,7 +465,17 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
         label: const Text('إضافة صنف'),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              'اضغط على صورة الصنف لرفعها أو تغييرها قبل حفظ الفاتورة',
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
           for (final (i, l) in _lines.indexed) _lineRow(i, l, decimal),
           if (_lines.isEmpty) const EmptyState(message: 'أضف أصناف الفاتورة'),
         ],
@@ -572,6 +585,12 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
         runSpacing: 8,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
+          ProductThumb(
+            product: product,
+            onTap: product == null
+                ? null
+                : () => uploadProductImage(context, product),
+          ),
           SizedBox(
             width: 220,
             child: DropdownButtonFormField<String>(

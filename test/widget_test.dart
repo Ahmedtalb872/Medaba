@@ -3,6 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:medaba/data/storage.dart';
 import 'package:medaba/main.dart';
 import 'package:medaba/models/invoice.dart';
+import 'package:medaba/utils/product_image.dart';
+
+import 'product_image_test.dart' show pngOf;
+
 import 'package:medaba/state/app_state.dart';
 
 void main() {
@@ -86,6 +90,10 @@ void main() {
     await tester.pumpWidget(MedabaApp(state: state));
     await tester.pumpAndSettle();
 
+    // صورة للصنف الأول تظهر في سطر الفاتورة.
+    await state.saveProduct(
+      state.products.first.withImage(encodeProductImage(pngOf(60, 60))),
+    );
     await tester.tap(find.text('الفواتير').first);
     await tester.pumpAndSettle();
     final before = state.invoices.length;
@@ -100,6 +108,11 @@ void main() {
     );
     await tester.enterText(find.widgetWithText(TextFormField, 'الكمية'), '2');
     await tester.pumpAndSettle();
+    expect(find.byType(Image), findsWidgets);
+    expect(
+      find.text('اضغط على صورة الصنف لرفعها أو تغييرها قبل حفظ الفاتورة'),
+      findsOneWidget,
+    );
     await tester.tap(find.text('حفظ الفاتورة'));
     await tester.pumpAndSettle();
 

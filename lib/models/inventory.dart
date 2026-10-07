@@ -46,6 +46,9 @@ class Product {
   /// الحد الأدنى للكمية؛ عند الوصول إليه يظهر تنبيه نقص المخزون.
   final double minQty;
 
+  /// صورة الصنف (JPEG مصغّرة بترميز base64)، أو null إن لم تُرفع صورة.
+  final String? image;
+
   const Product({
     required this.id,
     required this.name,
@@ -54,7 +57,19 @@ class Product {
     this.costPrice = 0,
     this.salePrice = 0,
     this.minQty = 0,
+    this.image,
   });
+
+  Product withImage(String? image) => Product(
+    id: id,
+    name: name,
+    code: code,
+    unit: unit,
+    costPrice: costPrice,
+    salePrice: salePrice,
+    minQty: minQty,
+    image: image,
+  );
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -64,6 +79,7 @@ class Product {
     'costPrice': costPrice,
     'salePrice': salePrice,
     'minQty': minQty,
+    'image': image,
   };
 
   factory Product.fromJson(Map<String, dynamic> j) => Product(
@@ -74,6 +90,7 @@ class Product {
     costPrice: (j['costPrice'] as num?)?.toDouble() ?? 0,
     salePrice: (j['salePrice'] as num?)?.toDouble() ?? 0,
     minQty: (j['minQty'] as num?)?.toDouble() ?? 0,
+    image: j['image'] as String?,
   );
 }
 
