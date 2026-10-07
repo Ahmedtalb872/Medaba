@@ -18,6 +18,11 @@ class DashboardScreen extends StatelessWidget {
     final report = s.profitReport(thisMonth);
     final recent = s.transactions.take(5).toList();
     final lowStock = s.lowStockProducts;
+    final now = DateTime.now();
+    // شحنات تحتاج متابعة: متأخرة، أو تصل خلال أسبوع.
+    final shipments = s.activeShipments
+        .where((x) => x.isDelayed(now) || x.daysToArrival(now) <= 7)
+        .toList();
 
     final chart = SectionCard(
       title: 'الإيرادات والمصروفات (آخر 6 أشهر)',
@@ -124,6 +129,26 @@ class DashboardScreen extends StatelessWidget {
               subtitle: Text(
                 lowStock
                     .map((p) => '${p.name} (${fmt.number(s.stockOf(p.id))})')
+                    .join('، '),
+              ),
+            ),
+          ),
+        ],
+        if (shipments.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Card(
+            child: ListTile(
+              leading: Icon(
+                Icons.directions_boat_outlined,
+                color: AppColors.capital.last,
+              ),
+              title: Text(
+                'شحنات بحرية تحتاج متابعة: ${shipments.length}'
+                '${s.delayedShipments(now) == 0 ? '' : ' (متأخرة: ${s.delayedShipments(now)})'}',
+              ),
+              subtitle: Text(
+                shipments
+                    .map((x) => '${x.contents} - ${x.status.label}')
                     .join('، '),
               ),
             ),

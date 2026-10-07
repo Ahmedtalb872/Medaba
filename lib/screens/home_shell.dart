@@ -9,6 +9,7 @@ import 'invoices_screen.dart';
 import 'partners_screen.dart';
 import 'profits_screen.dart';
 import 'settings_screen.dart';
+import 'shipments_screen.dart';
 import 'transactions_screen.dart';
 import 'workers_screen.dart';
 
@@ -26,6 +27,7 @@ const _dests = [
   _Dest('المخازن', Icons.warehouse_outlined, InventoryScreen()),
   _Dest('الفواتير', Icons.request_quote_outlined, InvoicesScreen()),
   _Dest('الديون', Icons.account_balance_wallet_outlined, DebtsScreen()),
+  _Dest('الشحنات البحرية', Icons.directions_boat_outlined, ShipmentsScreen()),
   _Dest('المعاملات', Icons.receipt_long_outlined, TransactionsScreen()),
   _Dest('توزيع الأرباح', Icons.pie_chart_outline, ProfitsScreen()),
   _Dest('الإعدادات', Icons.settings_outlined, SettingsScreen()),

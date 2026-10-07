@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../data/storage.dart';
 import '../models/debt.dart';
+import '../models/shipment.dart';
 import '../models/inventory.dart';
 import '../models/invoice.dart';
 import '../models/models.dart';
@@ -66,6 +67,7 @@ class AppState extends ChangeNotifier {
   static const _kInvoices = 'invoices';
   static const _kCompany = 'company';
   static const _kDebts = 'debts';
+  static const _kShipments = 'shipments';
 
   final Storage _storage;
   AppState(this._storage);
@@ -78,6 +80,7 @@ class AppState extends ChangeNotifier {
   List<StockMove> _moves = [];
   List<Invoice> _invoices = [];
   List<Debt> _debts = [];
+  List<Shipment> _shipments = [];
   CompanyInfo _company = const CompanyInfo();
   bool loaded = false;
 
@@ -94,6 +97,20 @@ class AppState extends ChangeNotifier {
       return b.date.compareTo(a.date);
     }),
   );
+
+  /// الشحنات: غير المستلمة أولاً بحسب أقرب وصول، ثم المستلمة من الأحدث.
+  List<Shipment> get shipments => List.unmodifiable(
+    [..._shipments]..sort((a, b) {
+      if (a.isReceived != b.isReceived) return a.isReceived ? 1 : -1;
+      return a.isReceived
+          ? b.expectedArrival.compareTo(a.expectedArrival)
+          : a.expectedArrival.compareTo(b.expectedArrival);
+    }),
+  );
+
+  /// أسماء شركات الشحن المستخدمة، مرتبة أبجدياً.
+  List<String> get shippingCompanies =>
+      {for (final x in _shipments) x.company}.toList()..sort();
 
   /// الفواتير مرتبة من الأحدث للأقدم.
   List<Invoice> get invoices => List.unmodifiable(
@@ -126,6 +143,7 @@ class AppState extends ChangeNotifier {
     _moves = await _read(_kMoves, StockMove.fromJson);
     _invoices = await _read(_kInvoices, Invoice.fromJson);
     _debts = await _read(_kDebts, Debt.fromJson);
+    _shipments = await _read(_kShipments, Shipment.fromJson);
     final company = await _storage.readList(_kCompany);
     if (company.isNotEmpty) _company = CompanyInfo.fromJson(company.first);
     loaded = true;
@@ -155,9 +173,15 @@ class AppState extends ChangeNotifier {
   Future<void> _saveDebts() =>
       _storage.writeList(_kDebts, _debts.map((e) => e.toJson()).toList());
 
+  Future<void> _saveShipments() => _storage.writeList(
+    _kShipments,
+    _shipments.map((e) => e.toJson()).toList(),
+  );
+
   Future<void> _saveAll() => Future.wait([
     _saveInvoices(),
     _saveDebts(),
+    _saveShipments(),
     _savePartners(),
     _saveWorkers(),
     _saveTx(),
@@ -593,6 +617,55 @@ class AppState extends ChangeNotifier {
   int overdueDebts(DateTime now) =>
       _debts.where((d) => d.isOverdue(now)).length;
 
+  // ---------- الشحنات البحرية ----------
+
+  Shipment? shipmentById(String id) =>
+      _shipments.where((x) => x.id == id).firstOrNull;
+
+  /// يحفظ الشحنة. يرمي [StateError] إذا كان الوصول المتوقع قبل الإبحار.
+  Future<void> saveShipment(Shipment x) async {
+    if (x.expectedArrival.isBefore(x.departureDate)) {
+      throw StateError('تاريخ الوصول المتوقع قبل تاريخ الإبحار');
+    }
+    _upsert(_shipments, x, (e) => e.id);
+    notifyListeners();
+    await _saveShipments();
+  }
+
+  Future<void> deleteShipment(String id) async {
+    _shipments.removeWhere((x) => x.id == id);
+    notifyListeners();
+    await _saveShipments();
+  }
+
+  /// ينقل الشحنة إلى مرحلة أخرى، ويسجّل تاريخ الاستلام عند اكتمالها.
+  Future<void> setShipmentStatus(
+    String id,
+    ShipmentStatus status, {
+    DateTime? on,
+  }) async {
+    final x = shipmentById(id);
+    if (x == null) return;
+    final received = status == ShipmentStatus.received;
+    final updated = Shipment.fromJson({
+      ...x.toJson(),
+      'status': status.name,
+      'receivedDate': received
+          ? (on ?? DateTime.now()).toIso8601String()
+          : null,
+    });
+    _upsert(_shipments, updated, (e) => e.id);
+    notifyListeners();
+    await _saveShipments();
+  }
+
+  /// الشحنات التي لم تُستلم بعد.
+  List<Shipment> get activeShipments =>
+      _shipments.where((x) => !x.isReceived).toList();
+
+  int delayedShipments(DateTime now) =>
+      _shipments.where((x) => x.isDelayed(now)).length;
+
   // ---------- بيانات تجريبية ----------
 
   /// يملأ التطبيق ببيانات تجريبية للعرض على الزبون.
@@ -890,6 +963,65 @@ class AppState extends ChangeNotifier {
         ],
       ),
     ]);
+    const lineA = 'شركة الأطلسي للشحن البحري';
+    const lineB = 'شركة المتوسط للملاحة';
+    _shipments.addAll([
+      Shipment(
+        id: newId(),
+        company: lineA,
+        billOfLading: 'ATL-2410-551',
+        containerNumber: 'ATLU 482193-0',
+        contents: 'حديد تسليح 12 مم - 25 طن',
+        originPort: 'الدار البيضاء',
+        departureDate: DateTime(now.year, now.month, now.day - 6),
+        expectedArrival: DateTime(now.year, now.month, now.day + 4),
+        goodsValue: 640000,
+        freightCost: 85000,
+      ),
+      Shipment(
+        id: newId(),
+        company: lineB,
+        billOfLading: 'MED-77120',
+        containerNumber: 'MEDU 330571-4',
+        contents: 'بلاط سيراميك - 1,800 متر',
+        originPort: 'فالنسيا',
+        departureDate: DateTime(now.year, now.month, now.day - 20),
+        expectedArrival: DateTime(now.year, now.month, now.day - 3),
+        status: ShipmentStatus.customs,
+        goodsValue: 410000,
+        freightCost: 120000,
+        customsCost: 95000,
+        note: 'بانتظار شهادة المطابقة',
+      ),
+      Shipment(
+        id: newId(),
+        company: lineA,
+        billOfLading: 'ATL-2409-318',
+        containerNumber: 'ATLU 401877-2',
+        contents: 'أسمنت أبيض - 900 كيس',
+        originPort: 'لاس بالماس',
+        departureDate: DateTime(now.year, now.month - 1, 2),
+        expectedArrival: DateTime(now.year, now.month - 1, 9),
+        receivedDate: DateTime(now.year, now.month - 1, 14),
+        status: ShipmentStatus.received,
+        goodsValue: 270000,
+        freightCost: 60000,
+        customsCost: 48000,
+      ),
+      Shipment(
+        id: newId(),
+        company: lineB,
+        billOfLading: 'MED-77302',
+        containerNumber: 'MEDU 338840-9',
+        contents: 'أدوات صحية وخلاطات',
+        originPort: 'إسطنبول',
+        departureDate: DateTime(now.year, now.month, now.day - 25),
+        expectedArrival: DateTime(now.year, now.month, now.day - 2),
+        goodsValue: 380000,
+        freightCost: 140000,
+        note: 'تأخير بسبب ازدحام ميناء الترانزيت',
+      ),
+    ]);
     if (_company.phone.isEmpty) {
       _company = const CompanyInfo(
         name: 'مؤسسة مدبّر لمواد البناء',
@@ -914,6 +1046,7 @@ class AppState extends ChangeNotifier {
     _moves.clear();
     _invoices.clear();
     _debts.clear();
+    _shipments.clear();
     notifyListeners();
     await _saveAll();
   }
