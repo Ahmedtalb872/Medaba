@@ -60,7 +60,20 @@ Future<Uint8List> buildInvoicePdf({
         pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Expanded(child: _notes(invoice)),
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  // حسابات الدفع تخص فواتير البيع فقط (العميل يدفع لنا).
+                  if (invoice.type == InvoiceType.sale &&
+                      company.paymentAccounts.isNotEmpty) ...[
+                    _payment(company.paymentAccounts),
+                    pw.SizedBox(height: 12),
+                  ],
+                  _notes(invoice),
+                ],
+              ),
+            ),
             pw.SizedBox(width: 24),
             pw.SizedBox(width: 230, child: _totals(invoice)),
           ],
@@ -315,6 +328,62 @@ pw.Widget _totals(Invoice inv) {
     ),
   );
 }
+
+pw.Widget _payment(List<PaymentAccount> accounts) => pw.Container(
+  padding: const pw.EdgeInsets.all(12),
+  decoration: pw.BoxDecoration(
+    color: _soft,
+    border: pw.Border.all(color: _border),
+    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
+  ),
+  child: pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Text(
+        'طرق الدفع',
+        style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: _primary),
+      ),
+      pw.SizedBox(height: 8),
+      pw.Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final a in accounts)
+            pw.Container(
+              width: 112,
+              padding: const pw.EdgeInsets.symmetric(
+                horizontal: 10,
+                vertical: 6,
+              ),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.white,
+                border: pw.Border.all(color: _border),
+                borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    a.name,
+                    textDirection: pw.TextDirection.ltr,
+                    style: const pw.TextStyle(fontSize: 9, color: _muted),
+                  ),
+                  pw.Text(
+                    a.number,
+                    textDirection: pw.TextDirection.ltr,
+                    style: pw.TextStyle(
+                      fontSize: 12,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    ],
+  ),
+);
 
 pw.Widget _notes(Invoice inv) => inv.notes.isEmpty
     ? pw.SizedBox()

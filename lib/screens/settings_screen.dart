@@ -24,7 +24,7 @@ class SettingsScreen extends StatelessWidget {
           child: ListTile(
             leading: const Icon(Icons.storefront_outlined),
             title: const Text('بيانات المنشأة'),
-            subtitle: Text('${s.company.name} • تظهر في رأس كل فاتورة PDF'),
+            subtitle: Text('${s.company.name} • رأس الفاتورة وحسابات الدفع'),
             trailing: const Icon(Icons.chevron_left),
             onTap: () => _editCompany(context, s),
           ),
@@ -77,12 +77,19 @@ Future<void> _editCompany(BuildContext context, AppState s) {
   final address = TextEditingController(text: c.address);
   final taxNumber = TextEditingController(text: c.taxNumber);
   final tax = TextEditingController(text: fmt.number(c.defaultTaxPercent));
+  final accounts = [
+    for (final a in c.paymentAccounts)
+      (
+        name: TextEditingController(text: a.name),
+        number: TextEditingController(text: a.number),
+      ),
+  ];
 
   return showFormDialog(
     context: context,
     formKey: key,
     title: 'بيانات المنشأة',
-    fields: (_) => [
+    fields: (setState) => [
       TextFormField(
         controller: name,
         decoration: const InputDecoration(labelText: 'اسم المنشأة'),
@@ -109,6 +116,53 @@ Future<void> _editCompany(BuildContext context, AppState s) {
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         validator: numberValidator(max: 100, required: false),
       ),
+      const Text(
+        'حسابات الدفع (تظهر أسفل فواتير البيع)',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      for (final (i, a) in accounts.indexed)
+        Row(
+          key: ObjectKey(a),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: a.name,
+                decoration: const InputDecoration(
+                  labelText: 'التطبيق أو البنك',
+                ),
+                validator: requiredText,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextFormField(
+                controller: a.number,
+                decoration: const InputDecoration(labelText: 'رقم الحساب'),
+                textDirection: TextDirection.ltr,
+                validator: requiredText,
+              ),
+            ),
+            IconButton(
+              tooltip: 'حذف الحساب',
+              icon: const Icon(Icons.remove_circle_outline),
+              onPressed: () => setState(() => accounts.removeAt(i)),
+            ),
+          ],
+        ),
+      Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: TextButton.icon(
+          onPressed: () => setState(
+            () => accounts.add((
+              name: TextEditingController(),
+              number: TextEditingController(),
+            )),
+          ),
+          icon: const Icon(Icons.add),
+          label: const Text('إضافة حساب دفع'),
+        ),
+      ),
     ],
     onSave: () => s.saveCompany(
       CompanyInfo(
@@ -117,6 +171,10 @@ Future<void> _editCompany(BuildContext context, AppState s) {
         address: address.text.trim(),
         taxNumber: taxNumber.text.trim(),
         defaultTaxPercent: fmt.parseNumber(tax.text) ?? 0,
+        paymentAccounts: [
+          for (final a in accounts)
+            PaymentAccount(a.name.text.trim(), a.number.text.trim()),
+        ],
       ),
     ),
   );

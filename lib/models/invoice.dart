@@ -133,6 +133,20 @@ class Invoice {
 }
 
 /// بيانات المنشأة التي تظهر في رأس الفاتورة.
+/// حساب دفع للمنشأة (تطبيق بنكي أو حساب) يظهر في فواتير البيع.
+class PaymentAccount {
+  /// اسم التطبيق أو البنك، مثل Bankily أو Masrvi.
+  final String name;
+  final String number;
+
+  const PaymentAccount(this.name, this.number);
+
+  Map<String, dynamic> toJson() => {'name': name, 'number': number};
+
+  factory PaymentAccount.fromJson(Map<String, dynamic> j) =>
+      PaymentAccount(j['name'] as String? ?? '', j['number'] as String? ?? '');
+}
+
 class CompanyInfo {
   final String name;
   final String phone;
@@ -142,12 +156,24 @@ class CompanyInfo {
   /// نسبة الضريبة الافتراضية للفواتير الجديدة.
   final double defaultTaxPercent;
 
+  /// حسابات الدفع التي تظهر أسفل فواتير البيع.
+  final List<PaymentAccount> paymentAccounts;
+
+  /// حسابات المدير، وتُستخدم حتى يغيّرها من الإعدادات.
+  static const defaultPaymentAccounts = [
+    PaymentAccount('Click', '36933636'),
+    PaymentAccount('Masrvi', '36933636'),
+    PaymentAccount('Sedad', '36933636'),
+    PaymentAccount('BPM', '10020364'),
+  ];
+
   const CompanyInfo({
     this.name = 'مدبّر',
     this.phone = '',
     this.address = '',
     this.taxNumber = '',
     this.defaultTaxPercent = 0,
+    this.paymentAccounts = defaultPaymentAccounts,
   });
 
   Map<String, dynamic> toJson() => {
@@ -156,6 +182,7 @@ class CompanyInfo {
     'address': address,
     'taxNumber': taxNumber,
     'defaultTaxPercent': defaultTaxPercent,
+    'paymentAccounts': [for (final a in paymentAccounts) a.toJson()],
   };
 
   factory CompanyInfo.fromJson(Map<String, dynamic> j) => CompanyInfo(
@@ -164,5 +191,12 @@ class CompanyInfo {
     address: j['address'] as String? ?? '',
     taxNumber: j['taxNumber'] as String? ?? '',
     defaultTaxPercent: (j['defaultTaxPercent'] as num?)?.toDouble() ?? 0,
+    // البيانات المحفوظة قبل إضافة الحسابات تأخذ الحسابات الافتراضية.
+    paymentAccounts: j['paymentAccounts'] == null
+        ? defaultPaymentAccounts
+        : [
+            for (final a in j['paymentAccounts'] as List)
+              PaymentAccount.fromJson(a as Map<String, dynamic>),
+          ],
   );
 }

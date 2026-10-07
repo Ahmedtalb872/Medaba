@@ -174,4 +174,34 @@ void main() {
     expect(b.company.name, 'Y');
     expect(b.company.phone, '1');
   });
+
+  test('payment accounts default, persist and can be changed', () async {
+    // البيانات المحفوظة قبل إضافة الحسابات تأخذ حسابات المدير.
+    final old = CompanyInfo.fromJson({'name': 'Z'});
+    expect(old.paymentAccounts.map((a) => '${a.name} ${a.number}'), [
+      'Click 36933636',
+      'Masrvi 36933636',
+      'Sedad 36933636',
+      'BPM 10020364',
+    ]);
+
+    final storage = MemoryStorage();
+    final a = AppState(storage);
+    await a.saveCompany(
+      const CompanyInfo(
+        name: 'Y',
+        paymentAccounts: [PaymentAccount('Bankily', '22000000')],
+      ),
+    );
+    final b = AppState(storage);
+    await b.load();
+    expect(b.company.paymentAccounts.single.name, 'Bankily');
+    expect(b.company.paymentAccounts.single.number, '22000000');
+
+    // قائمة فارغة تبقى فارغة (لا تعود الافتراضية).
+    await b.saveCompany(const CompanyInfo(name: 'Y', paymentAccounts: []));
+    final c = AppState(storage);
+    await c.load();
+    expect(c.company.paymentAccounts, isEmpty);
+  });
 }
