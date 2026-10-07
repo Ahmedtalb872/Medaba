@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../data/storage.dart';
+import '../models/debt.dart';
 import '../models/inventory.dart';
 import '../models/invoice.dart';
 import '../models/models.dart';
@@ -64,6 +65,7 @@ class AppState extends ChangeNotifier {
   static const _kMoves = 'stock_moves';
   static const _kInvoices = 'invoices';
   static const _kCompany = 'company';
+  static const _kDebts = 'debts';
 
   final Storage _storage;
   AppState(this._storage);
@@ -75,6 +77,7 @@ class AppState extends ChangeNotifier {
   List<Product> _products = [];
   List<StockMove> _moves = [];
   List<Invoice> _invoices = [];
+  List<Debt> _debts = [];
   CompanyInfo _company = const CompanyInfo();
   bool loaded = false;
 
@@ -83,6 +86,14 @@ class AppState extends ChangeNotifier {
   List<Warehouse> get warehouses => List.unmodifiable(_warehouses);
   List<Product> get products => List.unmodifiable(_products);
   CompanyInfo get company => _company;
+
+  /// الديون: غير المسددة أولاً، ثم الأحدث.
+  List<Debt> get debts => List.unmodifiable(
+    [..._debts]..sort((a, b) {
+      if (a.isSettled != b.isSettled) return a.isSettled ? 1 : -1;
+      return b.date.compareTo(a.date);
+    }),
+  );
 
   /// الفواتير مرتبة من الأحدث للأقدم.
   List<Invoice> get invoices => List.unmodifiable(
@@ -114,6 +125,7 @@ class AppState extends ChangeNotifier {
     _products = await _read(_kProducts, Product.fromJson);
     _moves = await _read(_kMoves, StockMove.fromJson);
     _invoices = await _read(_kInvoices, Invoice.fromJson);
+    _debts = await _read(_kDebts, Debt.fromJson);
     final company = await _storage.readList(_kCompany);
     if (company.isNotEmpty) _company = CompanyInfo.fromJson(company.first);
     loaded = true;
@@ -140,8 +152,12 @@ class AppState extends ChangeNotifier {
   Future<void> _saveInvoices() =>
       _storage.writeList(_kInvoices, _invoices.map((e) => e.toJson()).toList());
 
+  Future<void> _saveDebts() =>
+      _storage.writeList(_kDebts, _debts.map((e) => e.toJson()).toList());
+
   Future<void> _saveAll() => Future.wait([
     _saveInvoices(),
+    _saveDebts(),
     _savePartners(),
     _saveWorkers(),
     _saveTx(),
@@ -533,6 +549,50 @@ class AppState extends ChangeNotifier {
     await _storage.writeList(_kCompany, [c.toJson()]);
   }
 
+  // ---------- الديون ----------
+
+  Debt? debtById(String id) => _debts.where((d) => d.id == id).firstOrNull;
+
+  /// يحفظ الدين. يرمي [StateError] إذا صار المبلغ أقل مما سُدِّد منه.
+  Future<void> saveDebt(Debt d) async {
+    if (d.amount + 0.0001 < d.paid) {
+      throw StateError('المبلغ أقل من المسدَّد (${fmt.number(d.paid)})');
+    }
+    _upsert(_debts, d, (e) => e.id);
+    notifyListeners();
+    await _saveDebts();
+  }
+
+  Future<void> deleteDebt(String id) async {
+    _debts.removeWhere((d) => d.id == id);
+    notifyListeners();
+    await _saveDebts();
+  }
+
+  /// يسجّل دفعة. يرمي [StateError] إذا تجاوزت الدفعة المتبقي.
+  Future<void> addDebtPayment(String debtId, DebtPayment payment) async {
+    final d = debtById(debtId);
+    if (d == null) return;
+    if (payment.amount > d.remaining + 0.0001) {
+      throw StateError('المتبقي ${fmt.number(d.remaining)} فقط');
+    }
+    _upsert(
+      _debts,
+      d.copyWith(payments: [...d.payments, payment]),
+      (e) => e.id,
+    );
+    notifyListeners();
+    await _saveDebts();
+  }
+
+  /// مجموع المتبقي من الديون في اتجاه معيّن.
+  double debtsRemaining(DebtDirection direction) => _debts
+      .where((d) => d.direction == direction)
+      .fold(0, (s, d) => s + d.remaining);
+
+  int overdueDebts(DateTime now) =>
+      _debts.where((d) => d.isOverdue(now)).length;
+
   // ---------- بيانات تجريبية ----------
 
   /// يملأ التطبيق ببيانات تجريبية للعرض على الزبون.
@@ -790,6 +850,46 @@ class AppState extends ChangeNotifier {
         taxPercent: 16,
       ),
     );
+    _debts.addAll([
+      Debt(
+        id: newId(),
+        direction: DebtDirection.theyOwe,
+        personName: 'سيدي محمد',
+        phone: '22 33 44 55',
+        amount: 85000,
+        date: DateTime(now.year, now.month - 1, 12),
+        dueDate: DateTime(now.year, now.month, 1),
+        note: 'أسمنت وحديد بالآجل',
+        payments: [
+          DebtPayment(
+            amount: 30000,
+            date: DateTime(now.year, now.month - 1, 25),
+          ),
+        ],
+      ),
+      Debt(
+        id: newId(),
+        direction: DebtDirection.theyOwe,
+        personName: 'مقاولات الأمل',
+        phone: '36 10 20 30',
+        amount: 140000,
+        date: DateTime(now.year, now.month, 2),
+        dueDate: DateTime(now.year, now.month + 1, 2),
+      ),
+      Debt(
+        id: newId(),
+        direction: DebtDirection.weOwe,
+        personName: 'مؤسسة الحديد المتحدة',
+        phone: '45 25 10 10',
+        amount: 120000,
+        date: DateTime(now.year, now.month, 2),
+        dueDate: DateTime(now.year, now.month + 1, 15),
+        note: 'باقي فاتورة الحديد',
+        payments: [
+          DebtPayment(amount: 50000, date: DateTime(now.year, now.month, 4)),
+        ],
+      ),
+    ]);
     if (_company.phone.isEmpty) {
       _company = const CompanyInfo(
         name: 'مؤسسة مدبّر لمواد البناء',
@@ -813,6 +913,7 @@ class AppState extends ChangeNotifier {
     _products.clear();
     _moves.clear();
     _invoices.clear();
+    _debts.clear();
     notifyListeners();
     await _saveAll();
   }

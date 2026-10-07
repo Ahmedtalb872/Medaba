@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
 import 'dashboard_screen.dart';
+import 'debts_screen.dart';
 import 'inventory_screen.dart';
 import 'invoices_screen.dart';
 import 'partners_screen.dart';
@@ -24,6 +25,7 @@ const _dests = [
   _Dest('العمال', Icons.engineering_outlined, WorkersScreen()),
   _Dest('المخازن', Icons.warehouse_outlined, InventoryScreen()),
   _Dest('الفواتير', Icons.request_quote_outlined, InvoicesScreen()),
+  _Dest('الديون', Icons.account_balance_wallet_outlined, DebtsScreen()),
   _Dest('المعاملات', Icons.receipt_long_outlined, TransactionsScreen()),
   _Dest('توزيع الأرباح', Icons.pie_chart_outline, ProfitsScreen()),
   _Dest('الإعدادات', Icons.settings_outlined, SettingsScreen()),
@@ -48,7 +50,8 @@ class _HomeShellState extends State<HomeShell> {
     final label = Theme.of(context).textTheme.labelLarge;
 
     if (width >= 800) {
-      final extended = width >= 1100;
+      // اسم كل خيار يظهر بجانب أيقونته دائماً على الشاشات العريضة.
+      const extended = true;
       return Scaffold(
         body: Row(
           children: [
@@ -56,6 +59,7 @@ class _HomeShellState extends State<HomeShell> {
               decoration: BoxDecoration(color: AppColors.sidebar.last),
               child: NavigationRail(
                 extended: extended,
+                minExtendedWidth: 200,
                 backgroundColor: Colors.transparent,
                 indicatorColor: AppColors.gold.withValues(alpha: 0.28),
                 selectedIconTheme: const IconThemeData(color: AppColors.gold),
