@@ -41,6 +41,12 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
+  <!--
+    معاينة فواتير PDF على الويب تستخدم مكتبة pdf.js. نسختها المضمَّنة في مجلد pdfjs
+    (نسخة legacy تعمل على المتصفحات الأقدم مثل Safari القديم) بدل تحميلها من unpkg.com،
+    حتى لا تتوقف المعاينة إذا كان ذلك الموقع محجوباً أو بطيئاً.
+  -->
+  <script>window.dartPdfJsBaseUrl = new URL('pdfjs/', document.baseURI).href;</script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

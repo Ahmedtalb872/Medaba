@@ -257,6 +257,16 @@ class InvoicePdfPage extends StatelessWidget {
         canDebug: false,
         allowPrinting: false,
         allowSharing: false,
+        onError: (context, error) => const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Text(
+              'تعذّر عرض المعاينة في هذا المتصفح.\n'
+              'استخدم زر «تنزيل PDF» أو «طباعة» في الأعلى.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
       ),
     );
   }
