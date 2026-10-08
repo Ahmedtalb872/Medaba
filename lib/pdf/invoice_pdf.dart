@@ -8,6 +8,9 @@ import '../models/inventory.dart';
 import '../models/invoice.dart';
 import '../utils/format.dart' as fmt;
 import '../utils/product_image.dart';
+import 'invoice_strings.dart';
+
+export 'invoice_strings.dart' show InvoiceLanguage;
 
 // ألوان التصميم: رأس أزرق فاتح، رأس جدول أزرق، وبطاقات بيضاء بحواف ناعمة.
 const _ink = PdfColor.fromInt(0xFF111827);
@@ -93,10 +96,15 @@ Future<Uint8List> buildInvoicePdf({
 
   /// الدين المتبقي الآن (بعد أي تسديدات)؛ افتراضياً دين الفاتورة عند إصدارها.
   double? remainingDebt,
+
+  /// لغة نصوص الفاتورة؛ العربية افتراضياً.
+  InvoiceLanguage language = InvoiceLanguage.ar,
 }) async {
+  final t = language.strings;
+  final rtl = language.rtl;
   final debt = remainingDebt ?? invoice.debt;
   final doc = pw.Document(
-    title: '${invoice.type.label} ${invoice.number}',
+    title: '${t.title(invoice.type)} ${invoice.number}',
     author: company.name,
     theme: await _loadTheme(),
   );
@@ -109,25 +117,25 @@ Future<Uint8List> buildInvoicePdf({
   doc.addPage(
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
-      textDirection: pw.TextDirection.rtl,
+      textDirection: rtl ? pw.TextDirection.rtl : pw.TextDirection.ltr,
       margin: const pw.EdgeInsets.fromLTRB(24, 24, 24, 18),
-      footer: (ctx) => _footer(ctx, invoice, company),
+      footer: (ctx) => _footer(ctx, t, invoice, company),
       build: (_) => [
-        _headerCard(invoice, company, generated),
+        _headerCard(t, invoice, company, generated),
         pw.SizedBox(height: 8),
-        _statsCard(invoice, warehouseName, debt),
+        _statsCard(t, rtl, invoice, warehouseName, debt),
         pw.SizedBox(height: 8),
-        _linesCard(invoice, productOf),
+        _linesCard(t, rtl, invoice, productOf),
         pw.SizedBox(height: 8),
-        pw.Inseparable(child: _summaryCard(invoice, debt)),
+        pw.Inseparable(child: _summaryCard(t, invoice, debt)),
         if (invoice.notes.isNotEmpty) ...[
           pw.SizedBox(height: 8),
-          pw.Inseparable(child: _notesCard(invoice.notes)),
+          pw.Inseparable(child: _notesCard(t, invoice.notes)),
         ],
         if (accounts.isNotEmpty) ...[
           pw.SizedBox(height: 8),
           // العنوان والبطاقات معاً حتى لا يبقى العنوان وحده آخر الصفحة.
-          pw.Inseparable(child: _accountsCard(accounts, invoice)),
+          pw.Inseparable(child: _accountsCard(t, accounts, invoice)),
         ],
       ],
     ),
@@ -138,6 +146,13 @@ Future<Uint8List> buildInvoicePdf({
 // ---------- عناصر مشتركة ----------
 
 /// الأرقام والرموز اللاتينية تُعرض من اليسار لليمين داخل النص العربي.
+final _arabic = RegExp(r'[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]');
+
+/// بيانات المستخدم (الأسماء، الأصناف، الوحدات) قد تكون عربية حتى في فاتورة
+/// فرنسية أو إنجليزية؛ مكتبة pdf لا تصل الحروف العربية إلا في اتجاه RTL.
+pw.TextDirection? _dir(String text) =>
+    _arabic.hasMatch(text) ? pw.TextDirection.rtl : null;
+
 pw.Widget _ltr(String text, pw.TextStyle style) =>
     pw.Text(text, style: style, textDirection: pw.TextDirection.ltr);
 
@@ -207,7 +222,12 @@ pw.Widget _badge(String text, _Tone tone, {double? width}) => pw.Container(
 
 // ---------- الرأس ----------
 
-pw.Widget _headerCard(Invoice inv, CompanyInfo c, DateTime generated) {
+pw.Widget _headerCard(
+  InvoiceStrings t,
+  Invoice inv,
+  CompanyInfo c,
+  DateTime generated,
+) {
   const label = pw.TextStyle(fontSize: 10, color: _muted);
   final value = pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold);
 
@@ -231,7 +251,7 @@ pw.Widget _headerCard(Invoice inv, CompanyInfo c, DateTime generated) {
         pw.SizedBox(width: 6),
         pw.Text(k, style: label),
         pw.Spacer(),
-        ltr ? _ltr(v, value) : pw.Text(v, style: value),
+        ltr ? _ltr(v, value) : pw.Text(v, style: value, textDirection: _dir(v)),
       ],
     ),
   );
@@ -240,9 +260,7 @@ pw.Widget _headerCard(Invoice inv, CompanyInfo c, DateTime generated) {
   final time =
       '${generated.hour.toString().padLeft(2, '0')}:'
       '${generated.minute.toString().padLeft(2, '0')}';
-  final title = inv.type == InvoiceType.sale
-      ? 'فاتورة مبيعات'
-      : 'فاتورة مشتريات';
+  final title = t.title(inv.type);
 
   return pw.Container(
     padding: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -281,6 +299,7 @@ pw.Widget _headerCard(Invoice inv, CompanyInfo c, DateTime generated) {
             children: [
               pw.Text(
                 c.name,
+                textDirection: _dir(c.name),
                 style: pw.TextStyle(
                   fontSize: 21,
                   fontWeight: pw.FontWeight.bold,
@@ -297,15 +316,24 @@ pw.Widget _headerCard(Invoice inv, CompanyInfo c, DateTime generated) {
               ),
               pw.SizedBox(height: 6),
               if (c.address.isNotEmpty)
-                pw.Text(
-                  'المقر : ${c.address}',
-                  style: const pw.TextStyle(fontSize: 11, color: _muted),
+                pw.Row(
+                  children: [
+                    pw.Text(
+                      '${t.address} : ',
+                      style: const pw.TextStyle(fontSize: 11, color: _muted),
+                    ),
+                    pw.Text(
+                      c.address,
+                      textDirection: _dir(c.address),
+                      style: const pw.TextStyle(fontSize: 11, color: _muted),
+                    ),
+                  ],
                 ),
               if (c.phone.isNotEmpty)
                 pw.Row(
                   children: [
                     pw.Text(
-                      'الهاتف : ',
+                      '${t.phone} : ',
                       style: const pw.TextStyle(fontSize: 11, color: _muted),
                     ),
                     _ltr(
@@ -327,18 +355,18 @@ pw.Widget _headerCard(Invoice inv, CompanyInfo c, DateTime generated) {
           ),
           child: pw.Column(
             children: [
-              detail(_Icons.invoice, 'رقم الفاتورة', inv.number, ltr: true),
-              detail(_Icons.calendar, 'التاريخ', fmt.date(inv.date), ltr: true),
+              detail(_Icons.invoice, t.invoiceNumber, inv.number, ltr: true),
+              detail(_Icons.calendar, t.date, fmt.date(inv.date), ltr: true),
               detail(
                 _Icons.person,
-                inv.type.partyLabel,
+                t.party(inv.type),
                 inv.partyName.isEmpty ? '-' : inv.partyName,
               ),
               if (inv.partyPhone.isNotEmpty)
-                detail(_Icons.phone, 'الهاتف', inv.partyPhone, ltr: true),
+                detail(_Icons.phone, t.phone, inv.partyPhone, ltr: true),
               detail(
                 _Icons.clock,
-                'أُنشئت في',
+                t.createdAt,
                 '${fmt.date(generated)}  $time',
                 ltr: true,
                 last: true,
@@ -353,7 +381,13 @@ pw.Widget _headerCard(Invoice inv, CompanyInfo c, DateTime generated) {
 
 // ---------- مربعات الملخص السريع ----------
 
-pw.Widget _statsCard(Invoice inv, String warehouseName, double debt) {
+pw.Widget _statsCard(
+  InvoiceStrings t,
+  bool rtl,
+  Invoice inv,
+  String warehouseName,
+  double debt,
+) {
   pw.Widget tile(
     pw.IconData icon,
     String label,
@@ -400,10 +434,13 @@ pw.Widget _statsCard(Invoice inv, String warehouseName, double debt) {
                 // القيمة في سطر واحد، تُصغَّر إن طالت.
                 pw.FittedBox(
                   fit: pw.BoxFit.scaleDown,
-                  alignment: pw.Alignment.centerRight,
+                  alignment: rtl
+                      ? pw.Alignment.centerRight
+                      : pw.Alignment.centerLeft,
                   child: pw.Text(
                     value,
                     maxLines: 1,
+                    textDirection: _dir(value),
                     style: pw.TextStyle(
                       fontSize: 13,
                       fontWeight: pw.FontWeight.bold,
@@ -423,22 +460,22 @@ pw.Widget _statsCard(Invoice inv, String warehouseName, double debt) {
   return _card(
     pw.Row(
       children: [
-        tile(_Icons.store, 'المخزن', warehouseName),
+        tile(_Icons.store, t.warehouse, warehouseName),
         pw.SizedBox(width: 8),
-        tile(_Icons.box, 'عدد الأصناف', '${inv.lines.length}'),
+        tile(_Icons.box, t.itemCount, '${inv.lines.length}'),
         pw.SizedBox(width: 8),
         tile(
           _Icons.money,
-          'الإجمالي',
-          fmt.money(inv.total),
+          t.total,
+          t.money(inv.total),
           tone: _toneBlue,
           filledIcon: true,
         ),
         pw.SizedBox(width: 8),
         tile(
           hasDebt ? _Icons.alert : _Icons.check,
-          'الدين',
-          fmt.money(debt),
+          t.debt,
+          t.money(debt),
           tone: hasDebt ? _toneRed : _toneGreen,
           filledIcon: true,
         ),
@@ -449,8 +486,15 @@ pw.Widget _statsCard(Invoice inv, String warehouseName, double debt) {
 
 // ---------- جدول الأصناف ----------
 
-pw.Widget _linesCard(Invoice inv, Product? Function(String) productOf) {
+pw.Widget _linesCard(
+  InvoiceStrings t,
+  bool rtl,
+  Invoice inv,
+  Product? Function(String) productOf,
+) {
   const headStyle = pw.TextStyle(fontSize: 10.5, color: PdfColors.white);
+  // الأعمدة بترتيب القراءة: الصنف، الكمية، سعر الفرد، الإجمالي، الرقم.
+  List<T> inOrder<T>(List<T> cells) => rtl ? cells.reversed.toList() : cells;
   const sep = pw.BorderSide(color: _line);
 
   pw.Widget head(String t) => pw.Padding(
@@ -468,6 +512,7 @@ pw.Widget _linesCard(Invoice inv, Product? Function(String) productOf) {
     child: pw.Center(
       child: pw.Text(
         t,
+        textDirection: _dir(t),
         style: pw.TextStyle(
           fontSize: bold ? 11.5 : 10.5,
           fontWeight: bold ? pw.FontWeight.bold : null,
@@ -513,7 +558,7 @@ pw.Widget _linesCard(Invoice inv, Product? Function(String) productOf) {
                     pw.SizedBox(width: 6),
                   ],
                   _badge(
-                    inv.type == InvoiceType.sale ? 'بيع' : 'شراء',
+                    t.kind(inv.type),
                     inv.type == InvoiceType.sale ? _toneGreen : _toneAmber,
                   ),
                 ],
@@ -521,14 +566,24 @@ pw.Widget _linesCard(Invoice inv, Product? Function(String) productOf) {
               pw.SizedBox(height: 5),
               pw.Text(
                 p?.name ?? '-',
+                textDirection: _dir(p?.name ?? ''),
                 style: pw.TextStyle(
                   fontSize: 12,
                   fontWeight: pw.FontWeight.bold,
                 ),
               ),
-              pw.Text(
-                '${fmt.number(l.qty)} ${p?.unit ?? ''} × ${fmt.money(l.unitPrice)}',
-                style: const pw.TextStyle(fontSize: 9, color: _muted),
+              pw.Row(
+                children: [
+                  pw.Text(
+                    '${fmt.number(l.qty)} ${p?.unit ?? ''}',
+                    textDirection: _dir(p?.unit ?? ''),
+                    style: const pw.TextStyle(fontSize: 9, color: _muted),
+                  ),
+                  pw.Text(
+                    ' × ${t.money(l.unitPrice)}',
+                    style: const pw.TextStyle(fontSize: 9, color: _muted),
+                  ),
+                ],
               ),
             ],
           ),
@@ -551,41 +606,38 @@ pw.Widget _linesCard(Invoice inv, Product? Function(String) productOf) {
           horizontalInside: sep,
         ),
         // جدول pdf لا يدعم الاتجاه من اليمين لليسار؛ الأعمدة تُرتَّب دائماً من
-        // اليسار، فنمرّرها معكوسة ليظهر الصنف يميناً والرقم يساراً.
-        columnWidths: const {
-          0: pw.FlexColumnWidth(0.5),
-          1: pw.FlexColumnWidth(1.8),
-          2: pw.FlexColumnWidth(1.5),
-          3: pw.FlexColumnWidth(1.3),
-          4: pw.FlexColumnWidth(4.2),
+        // اليسار، فنعكسها في العربية ليظهر الصنف يميناً والرقم يساراً.
+        columnWidths: {
+          for (final (i, w) in inOrder(const [4.2, 1.3, 1.5, 1.8, 0.5]).indexed)
+            i: pw.FlexColumnWidth(w),
         },
         children: [
           pw.TableRow(
             decoration: const pw.BoxDecoration(
               gradient: pw.LinearGradient(colors: [_blueLight, _blueDark]),
             ),
-            children: [
+            children: inOrder([
+              head(t.item),
+              head(t.quantity),
+              head(t.unitPrice),
+              head(t.lineTotal),
               head('#'),
-              head('الإجمالي'),
-              head('سعر الفرد'),
-              head('الكمية'),
-              head('الصنف'),
-            ],
+            ]),
           ),
           for (final (i, l) in inv.lines.indexed)
             pw.TableRow(
               decoration: pw.BoxDecoration(
                 color: i.isOdd ? _rowTint : PdfColors.white,
               ),
-              children: [
-                value('${i + 1}', bold: true),
-                value(fmt.money(l.total), bold: true),
-                value(fmt.money(l.unitPrice)),
+              children: inOrder([
+                description(productOf(l.productId), l),
                 value(
                   '${fmt.number(l.qty)} ${productOf(l.productId)?.unit ?? ''}',
                 ),
-                description(productOf(l.productId), l),
-              ],
+                value(t.money(l.unitPrice)),
+                value(t.money(l.total), bold: true),
+                value('${i + 1}', bold: true),
+              ]),
             ),
         ],
       ),
@@ -595,7 +647,7 @@ pw.Widget _linesCard(Invoice inv, Product? Function(String) productOf) {
 
 // ---------- الملخص ----------
 
-pw.Widget _summaryCard(Invoice inv, double debt) {
+pw.Widget _summaryCard(InvoiceStrings t, Invoice inv, double debt) {
   // ثلاثة أعمدة: النوع (شارة)، البيان، المبلغ.
   pw.Widget line(
     pw.Widget type,
@@ -665,7 +717,7 @@ pw.Widget _summaryCard(Invoice inv, double debt) {
     pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
       children: [
-        _sectionTitle(_Icons.chart, 'الإجماليات / الملخص'),
+        _sectionTitle(_Icons.chart, t.summary),
         pw.SizedBox(height: 8),
         pw.Container(
           decoration: pw.BoxDecoration(
@@ -679,42 +731,37 @@ pw.Widget _summaryCard(Invoice inv, double debt) {
             child: pw.Column(
               children: [
                 line(
-                  head('النوع'),
-                  head('البيان'),
-                  head('المبلغ'),
+                  head(t.type),
+                  head(t.description),
+                  head(t.amount),
                   color: _panelHead,
                 ),
                 row(
                   _toneBlue,
-                  'المجموع',
-                  'مجموع الأصناف (${inv.lines.length})',
-                  fmt.money(inv.subtotal),
+                  t.subtotalBadge,
+                  t.subtotalLabel(inv.lines.length),
+                  t.money(inv.subtotal),
                 ),
                 if (inv.discount > 0)
                   row(
                     _toneAmber,
-                    'خصم',
-                    'الخصم',
-                    '- ${fmt.money(inv.discount)}',
+                    t.discountBadge,
+                    t.discount,
+                    '- ${t.money(inv.discount)}',
                   ),
                 row(
                   _toneBlue,
-                  'الإجمالي',
-                  'الإجمالي المستحق',
-                  fmt.money(inv.total),
+                  t.totalBadge,
+                  t.totalDue,
+                  t.money(inv.total),
                   strong: true,
                 ),
-                row(
-                  _toneGreen,
-                  'مدفوع',
-                  'المدفوع',
-                  fmt.money(inv.total - debt),
-                ),
+                row(_toneGreen, t.paidBadge, t.paid, t.money(inv.total - debt)),
                 row(
                   debtTone,
-                  'دين',
-                  hasDebt ? 'الدين المتبقي' : 'الدين المتبقي (لا يوجد)',
-                  fmt.money(debt),
+                  t.debtBadge,
+                  hasDebt ? t.remainingDebt : t.noDebt,
+                  t.money(debt),
                   strong: true,
                   color: debtTone.fg,
                 ),
@@ -727,16 +774,20 @@ pw.Widget _summaryCard(Invoice inv, double debt) {
   );
 }
 
-pw.Widget _notesCard(String notes) => _card(
+pw.Widget _notesCard(InvoiceStrings t, String notes) => _card(
   pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
     children: [
       pw.Text(
-        'ملاحظات',
+        t.notes,
         style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
       ),
       pw.SizedBox(height: 3),
-      pw.Text(notes, style: const pw.TextStyle(fontSize: 10)),
+      pw.Text(
+        notes,
+        textDirection: _dir(notes),
+        style: const pw.TextStyle(fontSize: 10),
+      ),
     ],
   ),
   padding: const pw.EdgeInsets.all(12),
@@ -744,7 +795,11 @@ pw.Widget _notesCard(String notes) => _card(
 
 // ---------- حسابات الدفع ----------
 
-pw.Widget _accountsCard(List<PaymentAccount> accounts, Invoice inv) {
+pw.Widget _accountsCard(
+  InvoiceStrings t,
+  List<PaymentAccount> accounts,
+  Invoice inv,
+) {
   final mono = pw.TextStyle(font: pw.Font.courier(), fontSize: 11);
   const label = pw.TextStyle(fontSize: 9.5, color: _muted);
 
@@ -809,9 +864,9 @@ pw.Widget _accountsCard(List<PaymentAccount> accounts, Invoice inv) {
           ),
           pw.SizedBox(height: 6),
           pw.Container(height: 1, color: _line),
-          field('رقم الحساب', _ltr(a.number, mono)),
+          field(t.accountNumber, _ltr(a.number, mono)),
           field(
-            'مرجع الدفع',
+            t.paymentReference,
             _ltr(inv.number, const pw.TextStyle(fontSize: 10.5)),
             last: true,
           ),
@@ -825,7 +880,7 @@ pw.Widget _accountsCard(List<PaymentAccount> accounts, Invoice inv) {
     pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        _sectionTitle(_Icons.card, 'طرق الدفع والحسابات البنكية'),
+        _sectionTitle(_Icons.card, t.paymentMethods),
         pw.SizedBox(height: 8),
         pw.Wrap(
           spacing: 10,
@@ -839,14 +894,32 @@ pw.Widget _accountsCard(List<PaymentAccount> accounts, Invoice inv) {
 
 // ---------- التذييل ----------
 
-pw.Widget _footer(pw.Context ctx, Invoice inv, CompanyInfo c) => pw.Padding(
+pw.Widget _footer(
+  pw.Context ctx,
+  InvoiceStrings t,
+  Invoice inv,
+  CompanyInfo c,
+) => pw.Padding(
   padding: const pw.EdgeInsets.only(top: 10),
   child: pw.Row(
     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
     children: [
-      pw.Text(
-        '© ${DateTime.now().year} ${c.name} - شكرًا لتعاملكم معنا',
-        style: const pw.TextStyle(fontSize: 9, color: _muted),
+      pw.Row(
+        children: [
+          pw.Text(
+            '© ${DateTime.now().year} ',
+            style: const pw.TextStyle(fontSize: 9, color: _muted),
+          ),
+          pw.Text(
+            c.name,
+            textDirection: _dir(c.name),
+            style: const pw.TextStyle(fontSize: 9, color: _muted),
+          ),
+          pw.Text(
+            ' - ${t.thanks}',
+            style: const pw.TextStyle(fontSize: 9, color: _muted),
+          ),
+        ],
       ),
       pw.Row(
         children: [
@@ -859,7 +932,7 @@ pw.Widget _footer(pw.Context ctx, Invoice inv, CompanyInfo c) => pw.Padding(
             ),
           ),
           pw.Text(
-            '  •  صفحة ${ctx.pageNumber} من ${ctx.pagesCount}',
+            '  •  ${t.page(ctx.pageNumber, ctx.pagesCount)}',
             style: const pw.TextStyle(fontSize: 9, color: _muted),
           ),
         ],

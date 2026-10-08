@@ -270,6 +270,25 @@ void main() {
     expect(bytes.length, greaterThan(5000));
   });
 
+  test('invoice PDF builds in Arabic, French and English', () async {
+    await s.saveInvoice(
+      sale('i1', const [InvoiceLine(productId: 'a', qty: 3, unitPrice: 20)]),
+    );
+    for (final lang in InvoiceLanguage.values) {
+      final bytes = await buildInvoicePdf(
+        invoice: s.invoiceById('i1')!,
+        company: s.company,
+        productOf: s.productById,
+        warehouseName: 'المخزن',
+        language: lang,
+      );
+      expect(String.fromCharCodes(bytes.take(5)), '%PDF-', reason: lang.name);
+    }
+    expect(InvoiceLanguage.fr.strings.money(1500), '1,500 MRU');
+    expect(InvoiceLanguage.ar.strings.title(InvoiceType.sale), 'فاتورة مبيعات');
+    expect(InvoiceLanguage.en.strings.party(InvoiceType.purchase), 'Supplier');
+  });
+
   test('company info persists', () async {
     await s.saveCompany(const CompanyInfo(name: 'X'));
     final storage = MemoryStorage();

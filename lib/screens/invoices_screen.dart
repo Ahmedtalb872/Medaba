@@ -204,7 +204,7 @@ Future<void> openInvoicePdf(BuildContext context, Invoice invoice) {
 }
 
 /// معاينة الفاتورة كملف PDF مع أزرار الطباعة والتنزيل/المشاركة.
-class InvoicePdfPage extends StatelessWidget {
+class InvoicePdfPage extends StatefulWidget {
   final Invoice invoice;
   final CompanyInfo company;
   final Product? Function(String) productOf;
@@ -220,14 +220,29 @@ class InvoicePdfPage extends StatelessWidget {
     this.remainingDebt = 0,
   });
 
-  String get fileName => '${invoice.number}.pdf';
+  @override
+  State<InvoicePdfPage> createState() => _InvoicePdfPageState();
+}
+
+class _InvoicePdfPageState extends State<InvoicePdfPage> {
+  /// آخر لغة اختارها المستخدم، تبقى للفاتورة التالية خلال الجلسة.
+  static InvoiceLanguage _lastLanguage = InvoiceLanguage.ar;
+  InvoiceLanguage _language = _lastLanguage;
+
+  Invoice get invoice => widget.invoice;
+
+  /// اسم الملف يحمل رمز اللغة لغير العربية، مثل S-0001-fr.pdf.
+  String get fileName => _language == InvoiceLanguage.ar
+      ? '${invoice.number}.pdf'
+      : '${invoice.number}-${_language.name}.pdf';
 
   Future<Uint8List> _build() => buildInvoicePdf(
     invoice: invoice,
-    company: company,
-    productOf: productOf,
-    warehouseName: warehouseName,
-    remainingDebt: remainingDebt,
+    company: widget.company,
+    productOf: widget.productOf,
+    warehouseName: widget.warehouseName,
+    remainingDebt: widget.remainingDebt,
+    language: _language,
   );
 
   @override
@@ -235,6 +250,32 @@ class InvoicePdfPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text('${invoice.type.label} ${invoice.number}'),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(56),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: Row(
+              children: [
+                const Icon(Icons.translate, size: 20),
+                const SizedBox(width: 8),
+                const Text('لغة الفاتورة'),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SegmentedButton<InvoiceLanguage>(
+                    showSelectedIcon: false,
+                    segments: [
+                      for (final l in InvoiceLanguage.values)
+                        ButtonSegment(value: l, label: Text(l.label)),
+                    ],
+                    selected: {_language},
+                    onSelectionChanged: (v) =>
+                        setState(() => _language = _lastLanguage = v.first),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         actions: [
           IconButton(
             tooltip: 'طباعة',
@@ -254,6 +295,8 @@ class InvoicePdfPage extends StatelessWidget {
         ],
       ),
       body: PdfPreview(
+        // مفتاح باللغة حتى تُعاد المعاينة عند تغييرها.
+        key: ValueKey(_language),
         build: (_) => _build(),
         pdfFileName: fileName,
         canChangeOrientation: false,
