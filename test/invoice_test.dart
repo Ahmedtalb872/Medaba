@@ -38,7 +38,6 @@ void main() {
     String id,
     List<InvoiceLine> lines, {
     double discount = 0,
-    double tax = 0,
     String? txId,
   }) => Invoice(
     id: id,
@@ -49,33 +48,28 @@ void main() {
     warehouseId: 'w',
     lines: lines,
     discount: discount,
-    taxPercent: tax,
     txId: txId ?? s.invoiceById(id)?.txId,
   );
 
-  test('totals apply discount then tax', () {
-    final inv = sale(
-      'x',
-      const [InvoiceLine(productId: 'a', qty: 10, unitPrice: 20)],
-      discount: 100,
-      tax: 15,
-    );
+  test('total is the subtotal minus discount, with no tax', () {
+    final inv = sale('x', const [
+      InvoiceLine(productId: 'a', qty: 10, unitPrice: 20),
+    ], discount: 100);
     expect(inv.subtotal, 200);
-    expect(inv.afterDiscount, 100);
-    expect(inv.tax, 15);
-    expect(inv.total, 115);
+    expect(inv.total, 100);
+    // فواتير قديمة محفوظة بضريبة تُقرأ بدونها.
+    final old = Invoice.fromJson({...inv.toJson(), 'taxPercent': 16});
+    expect(old.total, 100);
   });
 
   test('sale invoice moves stock and records income', () async {
     await s.saveInvoice(
-      sale('i1', const [
-        InvoiceLine(productId: 'a', qty: 10, unitPrice: 20),
-      ], tax: 15),
+      sale('i1', const [InvoiceLine(productId: 'a', qty: 10, unitPrice: 20)]),
     );
     final inv = s.invoiceById('i1')!;
     expect(inv.number, 'S-0001');
     expect(s.stockOf('a'), 40);
-    expect(s.totalIncome(), 230);
+    expect(s.totalIncome(), 200);
     expect(s.isLinkedTransaction(inv.txId!), isTrue);
     expect(s.nextInvoiceNumber(InvoiceType.sale), 'S-0002');
     expect(s.nextInvoiceNumber(InvoiceType.purchase), 'P-0001');
@@ -207,19 +201,64 @@ void main() {
       'name': 'مؤسسة مدبّر لمواد البناء',
       'phone': '0500000000',
       'address': 'الرياض - المنطقة الصناعية',
-      'taxNumber': '300000000000003',
     });
     expect(c.name, 'طيبة للتجارة العامة');
     expect(c.address, 'انواكشوط - تفرغ زينة');
-    expect((c.phone, c.taxNumber), ('', ''));
+    expect(c.phone, '');
+  });
+
+  test('saved invoices with tax are brought in line on load', () async {
+    final storage = MemoryStorage();
+    final a = AppState(storage);
+    await a.load();
+    await a.saveWarehouse(const Warehouse(id: 'w', name: 'Main'));
+    await a.saveProduct(const Product(id: 'a', name: 'A'));
+    await a.saveMove(
+      StockMove(
+        id: 'open',
+        type: MoveType.stockIn,
+        productId: 'a',
+        warehouseId: 'w',
+        qty: 10,
+        date: d,
+      ),
+    );
+    const lines = [InvoiceLine(productId: 'a', qty: 1, unitPrice: 100)];
+    await a.saveInvoice(
+      Invoice(
+        id: 'i',
+        type: InvoiceType.sale,
+        number: 'S-0001',
+        date: d,
+        partyName: 'C',
+        warehouseId: 'w',
+        lines: lines,
+        debt: 100,
+      ),
+    );
+    // كما حفظتها نسخة سابقة: ضريبة 16% ومعاملة ودين بالإجمالي القديم 116.
+    storage.data['invoices'] = [
+      {...storage.data['invoices']!.single, 'taxPercent': 16, 'debt': 116},
+    ];
+    storage.data['transactions'] = [
+      {...storage.data['transactions']!.single, 'amount': 116},
+    ];
+    storage.data['debts'] = [
+      {...storage.data['debts']!.single, 'amount': 116},
+    ];
+
+    final b = AppState(storage);
+    await b.load();
+    expect(b.invoiceById('i')!.total, 100);
+    expect(b.invoiceById('i')!.debt, 100);
+    expect(b.totalIncome(), 100);
+    expect(b.debtForInvoice('i')!.amount, 100);
   });
 
   test('builds an Arabic invoice PDF', () async {
-    await s.saveCompany(const CompanyInfo(name: 'شركة', taxNumber: '123'));
+    await s.saveCompany(const CompanyInfo(name: 'شركة'));
     await s.saveInvoice(
-      sale('i1', const [
-        InvoiceLine(productId: 'a', qty: 3, unitPrice: 20),
-      ], tax: 15),
+      sale('i1', const [InvoiceLine(productId: 'a', qty: 3, unitPrice: 20)]),
     );
     final bytes = await buildInvoicePdf(
       invoice: s.invoiceById('i1')!,
@@ -232,7 +271,7 @@ void main() {
   });
 
   test('company info persists', () async {
-    await s.saveCompany(const CompanyInfo(name: 'X', defaultTaxPercent: 15));
+    await s.saveCompany(const CompanyInfo(name: 'X'));
     final storage = MemoryStorage();
     final a = AppState(storage);
     await a.saveCompany(const CompanyInfo(name: 'Y', phone: '1'));

@@ -266,8 +266,6 @@ pw.Widget _headerCard(
                     if (c.address.isNotEmpty) companyLine('المقر', c.address),
                     if (c.phone.isNotEmpty)
                       companyLine('الهاتف', c.phone, ltr: true),
-                    if (c.taxNumber.isNotEmpty)
-                      companyLine('الرقم الضريبي', c.taxNumber, ltr: true),
                   ],
                 ),
               ),
@@ -563,13 +561,6 @@ pw.Widget _summaryCard(Invoice inv, double debt) {
             ),
             if (inv.discount > 0)
               row(_amber, 'خصم', 'الخصم', '- ${fmt.money(inv.discount)}'),
-            if (inv.taxPercent > 0)
-              row(
-                _green,
-                'ضريبة',
-                'ضريبة القيمة المضافة (${fmt.percent(inv.taxPercent)})',
-                fmt.money(inv.tax),
-              ),
             row(
               _sky,
               'الإجمالي',

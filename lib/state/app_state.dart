@@ -148,6 +148,45 @@ class AppState extends ChangeNotifier {
     if (company.isNotEmpty) _company = CompanyInfo.fromJson(company.first);
     loaded = true;
     notifyListeners();
+    await _dropOldInvoiceTax();
+  }
+
+  /// أُزيلت الضريبة من النظام: الفواتير المحفوظة بضريبة تُقرأ بدونها، فنحدّث
+  /// مبلغ معاملتها المالية ونقصر دينها على الإجمالي الجديد حتى تبقى الحسابات متطابقة.
+  Future<void> _dropOldInvoiceTax() async {
+    var changed = false;
+    for (final inv in [..._invoices]) {
+      final i = _transactions.indexWhere((t) => t.id == inv.txId);
+      if (i != -1 && (_transactions[i].amount - inv.total).abs() > 0.0001) {
+        _transactions[i] = Transaction.fromJson({
+          ..._transactions[i].toJson(),
+          'amount': inv.total,
+        });
+        changed = true;
+      }
+      if (inv.debt > inv.total + 0.0001) {
+        _upsert(
+          _invoices,
+          Invoice.fromJson({...inv.toJson(), 'debt': inv.total}),
+          (e) => e.id,
+        );
+        final d = debtForInvoice(inv.id);
+        if (d != null) {
+          _upsert(
+            _debts,
+            Debt.fromJson({
+              ...d.toJson(),
+              'amount': inv.total < d.paid ? d.paid : inv.total,
+            }),
+            (e) => e.id,
+          );
+        }
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    notifyListeners();
+    await Future.wait([_saveTx(), _saveInvoices(), _saveDebts()]);
   }
 
   // ---------- عمليات الحفظ ----------
@@ -944,7 +983,6 @@ class AppState extends ChangeNotifier {
             unitPrice: items[4].costPrice,
           ),
         ],
-        taxPercent: 16,
       ),
     );
     await saveInvoice(
@@ -974,7 +1012,6 @@ class AppState extends ChangeNotifier {
           ),
         ],
         discount: 5000,
-        taxPercent: 16,
         notes: 'التسليم في موقع العميل',
       ),
     );
@@ -993,7 +1030,6 @@ class AppState extends ChangeNotifier {
             unitPrice: items[4].salePrice,
           ),
         ],
-        taxPercent: 16,
       ),
     );
     _debts.addAll([
@@ -1096,11 +1132,7 @@ class AppState extends ChangeNotifier {
       ),
     ]);
     if (_company.phone.isEmpty) {
-      _company = const CompanyInfo(
-        phone: '45 25 00 00',
-        taxNumber: '00123456',
-        defaultTaxPercent: 16,
-      );
+      _company = const CompanyInfo(phone: '45 25 00 00');
       await _storage.writeList(_kCompany, [_company.toJson()]);
     }
 

@@ -312,7 +312,6 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
   late final TextEditingController _party;
   late final TextEditingController _phone;
   late final TextEditingController _discount;
-  late final TextEditingController _tax;
   late final TextEditingController _notes;
 
   /// الدفع بالدين: ما يُدفع الآن، والباقي يُسجَّل ديناً.
@@ -334,9 +333,6 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
     _phone = TextEditingController(text: e?.partyPhone);
     _discount = TextEditingController(
       text: e == null || e.discount == 0 ? '' : fmt.number(e.discount),
-    );
-    _tax = TextEditingController(
-      text: fmt.number(e?.taxPercent ?? s.company.defaultTaxPercent),
     );
     _notes = TextEditingController(text: e?.notes);
     _onDebt = (e?.debt ?? 0) > 0;
@@ -361,7 +357,7 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
 
   @override
   void dispose() {
-    for (final c in [_party, _phone, _discount, _tax, _notes, _paidNow]) {
+    for (final c in [_party, _phone, _discount, _notes, _paidNow]) {
       c.dispose();
     }
     for (final l in _lines) {
@@ -405,7 +401,6 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
         ),
     ],
     discount: fmt.parseNumber(_discount.text) ?? 0,
-    taxPercent: fmt.parseNumber(_tax.text) ?? 0,
     notes: _notes.text.trim(),
     txId: widget.existing?.txId,
   );
@@ -530,16 +525,6 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
           ),
           const SizedBox(height: 12),
           TextFormField(
-            controller: _tax,
-            decoration: const InputDecoration(
-              labelText: 'ضريبة القيمة المضافة %',
-            ),
-            keyboardType: decimal,
-            validator: numberValidator(max: 100, required: false),
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
             controller: _notes,
             decoration: const InputDecoration(labelText: 'ملاحظات'),
             maxLines: 2,
@@ -585,7 +570,6 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
           const SizedBox(height: 12),
           _totalRow('المجموع', inv.subtotal),
           if (inv.discount > 0) _totalRow('الخصم', -inv.discount),
-          if (inv.taxPercent > 0) _totalRow('الضريبة', inv.tax),
           const Divider(),
           _totalRow('الإجمالي المستحق', inv.total, strong: true),
           _totalRow('المدفوع', inv.total - inv.debt),

@@ -55,9 +55,6 @@ class Invoice {
   final String warehouseId;
   final List<InvoiceLine> lines;
   final double discount;
-
-  /// نسبة ضريبة القيمة المضافة (0 - 100).
-  final double taxPercent;
   final String notes;
 
   /// المعاملة المالية المرتبطة.
@@ -77,7 +74,6 @@ class Invoice {
     required this.warehouseId,
     required this.lines,
     this.discount = 0,
-    this.taxPercent = 0,
     this.notes = '',
     this.txId,
     this.debt = 0,
@@ -85,8 +81,9 @@ class Invoice {
 
   double get subtotal => lines.fold(0, (s, l) => s + l.total);
   double get afterDiscount => subtotal - discount;
-  double get tax => afterDiscount * taxPercent / 100;
-  double get total => afterDiscount + tax;
+
+  /// لا ضريبة في النظام: الإجمالي هو المجموع بعد الخصم.
+  double get total => afterDiscount;
 
   Invoice withTx(String txId) => Invoice(
     id: id,
@@ -98,7 +95,6 @@ class Invoice {
     warehouseId: warehouseId,
     lines: lines,
     discount: discount,
-    taxPercent: taxPercent,
     notes: notes,
     txId: txId,
     debt: debt,
@@ -114,7 +110,6 @@ class Invoice {
     'warehouseId': warehouseId,
     'lines': [for (final l in lines) l.toJson()],
     'discount': discount,
-    'taxPercent': taxPercent,
     'notes': notes,
     'txId': txId,
     'debt': debt,
@@ -133,7 +128,6 @@ class Invoice {
         InvoiceLine.fromJson(l as Map<String, dynamic>),
     ],
     discount: (j['discount'] as num?)?.toDouble() ?? 0,
-    taxPercent: (j['taxPercent'] as num?)?.toDouble() ?? 0,
     notes: j['notes'] as String? ?? '',
     txId: j['txId'] as String?,
     debt: (j['debt'] as num?)?.toDouble() ?? 0,
@@ -159,10 +153,6 @@ class CompanyInfo {
   final String name;
   final String phone;
   final String address;
-  final String taxNumber;
-
-  /// نسبة الضريبة الافتراضية للفواتير الجديدة.
-  final double defaultTaxPercent;
 
   /// حسابات الدفع التي تظهر أسفل فواتير البيع.
   final List<PaymentAccount> paymentAccounts;
@@ -185,16 +175,13 @@ class CompanyInfo {
     'الرياض - المنطقة الصناعية',
   };
 
-  /// هاتف ورقم ضريبي تجريبيان من نسخة قديمة؛ يُمسحان ليكتب المدير بياناته.
+  /// هاتف تجريبي من نسخة قديمة؛ يُمسح ليكتب المدير بياناته.
   static const _oldPhones = {'0500000000'};
-  static const _oldTaxNumbers = {'300000000000003'};
 
   const CompanyInfo({
     this.name = defaultName,
     this.phone = '',
     this.address = defaultAddress,
-    this.taxNumber = '',
-    this.defaultTaxPercent = 0,
     this.paymentAccounts = defaultPaymentAccounts,
   });
 
@@ -202,8 +189,6 @@ class CompanyInfo {
     'name': name,
     'phone': phone,
     'address': address,
-    'taxNumber': taxNumber,
-    'defaultTaxPercent': defaultTaxPercent,
     'paymentAccounts': [for (final a in paymentAccounts) a.toJson()],
   };
 
@@ -220,11 +205,6 @@ class CompanyInfo {
       final a? when !_oldAddresses.contains(a) => a,
       _ => defaultAddress,
     },
-    taxNumber: switch (j['taxNumber'] as String?) {
-      final t? when !_oldTaxNumbers.contains(t) => t,
-      _ => '',
-    },
-    defaultTaxPercent: (j['defaultTaxPercent'] as num?)?.toDouble() ?? 0,
     // البيانات المحفوظة قبل إضافة الحسابات تأخذ الحسابات الافتراضية.
     paymentAccounts: j['paymentAccounts'] == null
         ? defaultPaymentAccounts

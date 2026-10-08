@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../models/invoice.dart';
 import '../state/app_state.dart';
-import '../utils/format.dart' as fmt;
 import '../widgets/common.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -75,8 +74,6 @@ Future<void> _editCompany(BuildContext context, AppState s) {
   final name = TextEditingController(text: c.name);
   final phone = TextEditingController(text: c.phone);
   final address = TextEditingController(text: c.address);
-  final taxNumber = TextEditingController(text: c.taxNumber);
-  final tax = TextEditingController(text: fmt.number(c.defaultTaxPercent));
   final accounts = [
     for (final a in c.paymentAccounts)
       (
@@ -103,18 +100,6 @@ Future<void> _editCompany(BuildContext context, AppState s) {
       TextFormField(
         controller: address,
         decoration: const InputDecoration(labelText: 'العنوان'),
-      ),
-      TextFormField(
-        controller: taxNumber,
-        decoration: const InputDecoration(labelText: 'الرقم الضريبي'),
-      ),
-      TextFormField(
-        controller: tax,
-        decoration: const InputDecoration(
-          labelText: 'نسبة الضريبة الافتراضية للفواتير %',
-        ),
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        validator: numberValidator(max: 100, required: false),
       ),
       const Text(
         'حسابات الدفع (تظهر أسفل فواتير البيع)',
@@ -169,8 +154,6 @@ Future<void> _editCompany(BuildContext context, AppState s) {
         name: name.text.trim(),
         phone: phone.text.trim(),
         address: address.text.trim(),
-        taxNumber: taxNumber.text.trim(),
-        defaultTaxPercent: fmt.parseNumber(tax.text) ?? 0,
         paymentAccounts: [
           for (final a in accounts)
             PaymentAccount(a.name.text.trim(), a.number.text.trim()),
