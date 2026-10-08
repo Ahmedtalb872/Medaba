@@ -175,6 +175,22 @@ void main() {
     expect(b.company.phone, '1');
   });
 
+  test('company name and address default to the client', () {
+    const fresh = CompanyInfo();
+    expect(fresh.name, 'طيبة للتجارة العامة');
+    expect(fresh.address, 'انواكشوط - تفرغ زينة');
+    // البيانات التجريبية القديمة تأخذ اسم المؤسسة وعنوانها.
+    final old = CompanyInfo.fromJson({
+      'name': 'مؤسسة مدبّر لمواد البناء',
+      'address': 'نواكشوط - تفرغ زينة',
+    });
+    expect(old.name, CompanyInfo.defaultName);
+    expect(old.address, CompanyInfo.defaultAddress);
+    // ما يكتبه المستخدم بنفسه يبقى كما هو.
+    final own = CompanyInfo.fromJson({'name': 'X', 'address': ''});
+    expect((own.name, own.address), ('X', ''));
+  });
+
   test('payment accounts default, persist and can be changed', () async {
     // البيانات المحفوظة قبل إضافة الحسابات تأخذ حسابات المدير.
     final old = CompanyInfo.fromJson({'name': 'Z'});

@@ -167,10 +167,17 @@ class CompanyInfo {
     PaymentAccount('BPM', '10020364'),
   ];
 
+  static const defaultName = 'طيبة للتجارة العامة';
+  static const defaultAddress = 'انواكشوط - تفرغ زينة';
+
+  /// أسماء وعناوين مؤقتة من النسخ السابقة تُستبدل ببيانات المؤسسة.
+  static const _oldNames = {'مدبّر', 'مؤسسة مدبّر لمواد البناء'};
+  static const _oldAddresses = {'نواكشوط - تفرغ زينة'};
+
   const CompanyInfo({
-    this.name = 'مدبّر',
+    this.name = defaultName,
     this.phone = '',
-    this.address = '',
+    this.address = defaultAddress,
     this.taxNumber = '',
     this.defaultTaxPercent = 0,
     this.paymentAccounts = defaultPaymentAccounts,
@@ -186,9 +193,15 @@ class CompanyInfo {
   };
 
   factory CompanyInfo.fromJson(Map<String, dynamic> j) => CompanyInfo(
-    name: j['name'] as String? ?? 'مدبّر',
+    name: switch (j['name'] as String?) {
+      final n? when !_oldNames.contains(n) => n,
+      _ => defaultName,
+    },
     phone: j['phone'] as String? ?? '',
-    address: j['address'] as String? ?? '',
+    address: switch (j['address'] as String?) {
+      final a? when !_oldAddresses.contains(a) => a,
+      _ => defaultAddress,
+    },
     taxNumber: j['taxNumber'] as String? ?? '',
     defaultTaxPercent: (j['defaultTaxPercent'] as num?)?.toDouble() ?? 0,
     // البيانات المحفوظة قبل إضافة الحسابات تأخذ الحسابات الافتراضية.

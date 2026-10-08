@@ -200,7 +200,7 @@ pw.Widget _headerCard(
 
   final initial = c.name.trim().isEmpty ? 'م' : c.name.trim()[0];
   final details = [
-    if (c.address.isNotEmpty) c.address,
+    if (c.address.isNotEmpty) 'المقر: ${c.address}',
     if (c.taxNumber.isNotEmpty) 'الرقم الضريبي ${c.taxNumber}',
   ].join(' • ');
 

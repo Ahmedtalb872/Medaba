@@ -1044,9 +1044,7 @@ class AppState extends ChangeNotifier {
     ]);
     if (_company.phone.isEmpty) {
       _company = const CompanyInfo(
-        name: 'مؤسسة مدبّر لمواد البناء',
         phone: '45 25 00 00',
-        address: 'نواكشوط - تفرغ زينة',
         taxNumber: '00123456',
         defaultTaxPercent: 16,
       );
