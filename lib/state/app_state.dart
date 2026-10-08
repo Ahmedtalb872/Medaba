@@ -505,6 +505,16 @@ class AppState extends ChangeNotifier {
   /// يرمي [StateError] إذا كانت الفاتورة فارغة أو الكمية المباعة أكبر من المتاح.
   Future<void> saveInvoice(Invoice inv) async {
     if (inv.lines.isEmpty) throw StateError('أضف صنفاً واحداً على الأقل');
+    if (inv.debt < 0 || inv.debt > inv.total + 0.0001) {
+      throw StateError('مبلغ الدين يجب أن يكون بين 0 وإجمالي الفاتورة');
+    }
+    final linked = debtForInvoice(inv.id);
+    if (linked != null && linked.paid > inv.debt + 0.0001) {
+      throw StateError(
+        'سُدِّد ${fmt.number(linked.paid)} من دين هذه الفاتورة، '
+        'فلا يمكن أن يقل الدين عن ذلك',
+      );
+    }
     if (inv.type == InvoiceType.sale) {
       final needed = <String, double>{};
       for (final l in inv.lines) {
@@ -559,9 +569,38 @@ class AppState extends ChangeNotifier {
     _upsert(_transactions, tx, (e) => e.id);
     _upsert(_invoices, inv.withTx(tx.id), (e) => e.id);
 
+    // الدين المرتبط بالفاتورة: يُنشأ أو يُحدَّث أو يُحذف حسب مبلغه.
+    if (inv.debt > 0.0001) {
+      final sale = inv.type == InvoiceType.sale;
+      _upsert(
+        _debts,
+        Debt(
+          id: linked?.id ?? newId(),
+          direction: sale ? DebtDirection.theyOwe : DebtDirection.weOwe,
+          personName: inv.partyName.isNotEmpty
+              ? inv.partyName
+              : (sale ? 'عميل' : 'مورد'),
+          phone: inv.partyPhone,
+          amount: inv.debt,
+          date: inv.date,
+          dueDate: linked?.dueDate,
+          note: '${inv.type.label} ${inv.number}',
+          payments: linked?.payments ?? const [],
+          invoiceId: inv.id,
+        ),
+        (e) => e.id,
+      );
+    } else if (linked != null) {
+      _debts.remove(linked);
+    }
+
     notifyListeners();
-    await Future.wait([_saveInvoices(), _saveMoves(), _saveTx()]);
+    await Future.wait([_saveInvoices(), _saveMoves(), _saveTx(), _saveDebts()]);
   }
+
+  /// الدين المرتبط بفاتورة، إن وُجد.
+  Debt? debtForInvoice(String invoiceId) =>
+      _debts.where((d) => d.invoiceId == invoiceId).firstOrNull;
 
   /// يحذف الفاتورة مع حركات المخزون والمعاملة المالية المرتبطة بها.
   /// حذف فاتورة شراء يُرفض إذا كانت كمياتها قد بيعت أو حُوّلت.
@@ -583,8 +622,9 @@ class AppState extends ChangeNotifier {
     _invoices.removeWhere((e) => e.id == id);
     _moves.removeWhere((m) => m.invoiceId == id);
     if (inv.txId != null) _transactions.removeWhere((t) => t.id == inv.txId);
+    _debts.removeWhere((d) => d.invoiceId == id);
     notifyListeners();
-    await Future.wait([_saveInvoices(), _saveMoves(), _saveTx()]);
+    await Future.wait([_saveInvoices(), _saveMoves(), _saveTx(), _saveDebts()]);
   }
 
   Future<void> saveCompany(CompanyInfo c) async {
@@ -599,6 +639,12 @@ class AppState extends ChangeNotifier {
 
   /// يحفظ الدين. يرمي [StateError] إذا صار المبلغ أقل مما سُدِّد منه.
   Future<void> saveDebt(Debt d) async {
+    final inv = invoiceById(d.invoiceId);
+    if (inv != null && (d.amount - inv.debt).abs() > 0.0001) {
+      throw StateError(
+        'مبلغ هذا الدين يُعدَّل من ${inv.type.label} ${inv.number}',
+      );
+    }
     if (d.amount + 0.0001 < d.paid) {
       throw StateError('المبلغ أقل من المسدَّد (${fmt.number(d.paid)})');
     }
@@ -607,7 +653,14 @@ class AppState extends ChangeNotifier {
     await _saveDebts();
   }
 
+  /// يرمي [StateError] لدين مرتبط بفاتورة؛ يُلغى من الفاتورة نفسها.
   Future<void> deleteDebt(String id) async {
+    final inv = invoiceById(debtById(id)?.invoiceId);
+    if (inv != null) {
+      throw StateError(
+        'هذا الدين من ${inv.type.label} ${inv.number}؛ احذفه من الفاتورة',
+      );
+    }
     _debts.removeWhere((d) => d.id == id);
     notifyListeners();
     await _saveDebts();

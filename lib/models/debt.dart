@@ -52,6 +52,9 @@ class Debt {
   final String note;
   final List<DebtPayment> payments;
 
+  /// الفاتورة التي أنشأت هذا الدين؛ مبلغه يُعدَّل من الفاتورة فقط.
+  final String? invoiceId;
+
   const Debt({
     required this.id,
     required this.direction,
@@ -62,6 +65,7 @@ class Debt {
     this.dueDate,
     this.note = '',
     this.payments = const [],
+    this.invoiceId,
   });
 
   double get paid => payments.fold(0, (s, p) => s + p.amount);
@@ -84,6 +88,7 @@ class Debt {
     dueDate: dueDate,
     note: note,
     payments: payments ?? this.payments,
+    invoiceId: invoiceId,
   );
 
   Map<String, dynamic> toJson() => {
@@ -96,6 +101,7 @@ class Debt {
     'dueDate': dueDate?.toIso8601String(),
     'note': note,
     'payments': [for (final p in payments) p.toJson()],
+    'invoiceId': invoiceId,
   };
 
   factory Debt.fromJson(Map<String, dynamic> j) => Debt(
@@ -111,5 +117,6 @@ class Debt {
       for (final p in j['payments'] as List? ?? const [])
         DebtPayment.fromJson(p as Map<String, dynamic>),
     ],
+    invoiceId: j['invoiceId'] as String?,
   );
 }

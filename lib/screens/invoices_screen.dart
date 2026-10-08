@@ -197,6 +197,7 @@ Future<void> openInvoicePdf(BuildContext context, Invoice invoice) {
         company: s.company,
         productOf: s.productById,
         warehouseName: s.warehouseById(invoice.warehouseId)?.name ?? '-',
+        remainingDebt: s.debtForInvoice(invoice.id)?.remaining ?? 0,
       ),
     ),
   );
@@ -208,6 +209,7 @@ class InvoicePdfPage extends StatelessWidget {
   final CompanyInfo company;
   final Product? Function(String) productOf;
   final String warehouseName;
+  final double remainingDebt;
 
   const InvoicePdfPage({
     super.key,
@@ -215,6 +217,7 @@ class InvoicePdfPage extends StatelessWidget {
     required this.company,
     required this.productOf,
     required this.warehouseName,
+    this.remainingDebt = 0,
   });
 
   String get fileName => '${invoice.number}.pdf';
@@ -224,6 +227,7 @@ class InvoicePdfPage extends StatelessWidget {
     company: company,
     productOf: productOf,
     warehouseName: warehouseName,
+    remainingDebt: remainingDebt,
   );
 
   @override
@@ -310,6 +314,10 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
   late final TextEditingController _discount;
   late final TextEditingController _tax;
   late final TextEditingController _notes;
+
+  /// الدفع بالدين: ما يُدفع الآن، والباقي يُسجَّل ديناً.
+  late bool _onDebt;
+  late final TextEditingController _paidNow;
   final List<_LineDraft> _lines = [];
   bool _saving = false;
 
@@ -331,6 +339,11 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
       text: fmt.number(e?.taxPercent ?? s.company.defaultTaxPercent),
     );
     _notes = TextEditingController(text: e?.notes);
+    _onDebt = (e?.debt ?? 0) > 0;
+    final paid = e == null ? 0.0 : e.total - e.debt;
+    _paidNow = TextEditingController(
+      text: _onDebt && paid > 0 ? fmt.number(paid) : '',
+    );
     if (e != null) {
       for (final l in e.lines) {
         _lines.add(
@@ -348,7 +361,7 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
 
   @override
   void dispose() {
-    for (final c in [_party, _phone, _discount, _tax, _notes]) {
+    for (final c in [_party, _phone, _discount, _tax, _notes, _paidNow]) {
       c.dispose();
     }
     for (final l in _lines) {
@@ -367,7 +380,15 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
     setState(() => _lines.add(_LineDraft(id, price: _defaultPrice(id))));
   }
 
-  Invoice _draft() => Invoice(
+  Invoice _draft() {
+    final inv = _draftWithoutDebt();
+    if (!_onDebt) return inv;
+    final paid = fmt.parseNumber(_paidNow.text) ?? 0;
+    final debt = (inv.total - paid).clamp(0.0, inv.total);
+    return Invoice.fromJson({...inv.toJson(), 'debt': debt});
+  }
+
+  Invoice _draftWithoutDebt() => Invoice(
     id: widget.existing?.id ?? newId(),
     type: widget.type,
     number: _number,
@@ -433,6 +454,10 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
             TextFormField(
               controller: _party,
               decoration: InputDecoration(labelText: widget.type.partyLabel),
+              // الدين يُسجَّل باسم العميل أو المورد.
+              validator: (v) => _onDebt && (v ?? '').trim().isEmpty
+                  ? 'اكتب الاسم لتسجيل الدين'
+                  : null,
             ),
           ),
           _field(
@@ -519,12 +544,57 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
             decoration: const InputDecoration(labelText: 'ملاحظات'),
             maxLines: 2,
           ),
+          const SizedBox(height: 16),
+          const Align(
+            alignment: AlignmentDirectional.centerStart,
+            child: Text(
+              'طريقة الدفع',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<bool>(
+            expandedInsets: EdgeInsets.zero,
+            segments: const [
+              ButtonSegment(
+                value: false,
+                icon: Icon(Icons.payments_outlined),
+                label: Text('مدفوعة كاملة'),
+              ),
+              ButtonSegment(
+                value: true,
+                icon: Icon(Icons.account_balance_wallet_outlined),
+                label: Text('دين'),
+              ),
+            ],
+            selected: {_onDebt},
+            onSelectionChanged: (v) => setState(() => _onDebt = v.first),
+          ),
+          if (_onDebt) ...[
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _paidNow,
+              decoration: const InputDecoration(
+                labelText: 'المدفوع الآن (اتركه فارغاً إن لم يُدفع شيء)',
+              ),
+              keyboardType: decimal,
+              validator: numberValidator(required: false, max: inv.total),
+              onChanged: (_) => setState(() {}),
+            ),
+          ],
           const SizedBox(height: 12),
           _totalRow('المجموع', inv.subtotal),
           if (inv.discount > 0) _totalRow('الخصم', -inv.discount),
           if (inv.taxPercent > 0) _totalRow('الضريبة', inv.tax),
           const Divider(),
           _totalRow('الإجمالي المستحق', inv.total, strong: true),
+          _totalRow('المدفوع', inv.total - inv.debt),
+          _totalRow(
+            'الدين',
+            inv.debt,
+            strong: true,
+            color: inv.debt > 0 ? AppColors.expense.last : null,
+          ),
         ],
       ),
     );
@@ -673,10 +743,16 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
     );
   }
 
-  Widget _totalRow(String label, double value, {bool strong = false}) {
+  Widget _totalRow(
+    String label,
+    double value, {
+    bool strong = false,
+    Color? color,
+  }) {
     final style = TextStyle(
       fontWeight: strong ? FontWeight.bold : null,
       fontSize: strong ? 18 : null,
+      color: color,
     );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),

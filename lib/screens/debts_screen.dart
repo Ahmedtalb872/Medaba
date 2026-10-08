@@ -121,7 +121,11 @@ class _DebtsScreenState extends State<DebtsScreen> {
           onEdit: (d) => showDebtForm(context, existing: d),
           onDelete: (d) async {
             if (await confirmDelete(context, 'دين ${d.personName}')) {
-              await s.deleteDebt(d.id);
+              try {
+                await s.deleteDebt(d.id);
+              } on StateError catch (e) {
+                if (context.mounted) _snack(context, e.message);
+              }
             }
           },
         ),
@@ -205,7 +209,14 @@ Future<void> showDebtForm(BuildContext context, {Debt? existing}) {
       ),
       TextFormField(
         controller: amount,
-        decoration: const InputDecoration(labelText: 'مبلغ الدين'),
+        // مبلغ دين الفاتورة يُعدَّل من الفاتورة نفسها.
+        enabled: existing?.invoiceId == null,
+        decoration: InputDecoration(
+          labelText: 'مبلغ الدين',
+          helperText: existing?.invoiceId == null
+              ? null
+              : 'مرتبط بفاتورة؛ يُعدَّل المبلغ من الفاتورة',
+        ),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         validator: numberValidator(min: 0.01),
       ),
@@ -247,6 +258,7 @@ Future<void> showDebtForm(BuildContext context, {Debt? existing}) {
             dueDate: due,
             note: note.text.trim(),
             payments: existing?.payments ?? const [],
+            invoiceId: existing?.invoiceId,
           ),
         );
       } on StateError catch (e) {

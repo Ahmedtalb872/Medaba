@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:medaba/data/storage.dart';
 import 'package:medaba/models/inventory.dart';
+import 'package:medaba/models/debt.dart';
 import 'package:medaba/models/invoice.dart';
 import 'package:medaba/pdf/invoice_pdf.dart';
 import 'package:medaba/state/app_state.dart';
@@ -145,6 +146,72 @@ void main() {
     );
     expect(() => s.deleteInvoice('p1'), throwsStateError);
     expect(s.stockOf('b'), 4);
+  });
+
+  test('invoice debt creates, updates and removes a linked debt', () async {
+    const lines = [InvoiceLine(productId: 'a', qty: 5, unitPrice: 20)];
+    Invoice withDebt(double debt) =>
+        Invoice.fromJson({...sale('i1', lines).toJson(), 'debt': debt});
+
+    await s.saveInvoice(withDebt(60));
+    final d = s.debtForInvoice('i1')!;
+    expect(d.amount, 60);
+    expect(d.direction, DebtDirection.theyOwe);
+    expect(d.personName, 'Client');
+    expect(d.note, contains(s.invoiceById('i1')!.number));
+
+    // تعديل الفاتورة يحدّث الدين نفسه ويُبقي تسديداته.
+    await s.addDebtPayment(d.id, DebtPayment(amount: 10, date: d.date));
+    await s.saveInvoice(withDebt(40));
+    final updated = s.debtForInvoice('i1')!;
+    expect((updated.id, updated.amount, updated.paid), (d.id, 40, 10));
+
+    // لا يقل الدين عمّا سُدِّد، ولا يزيد عن الإجمالي.
+    expect(() => s.saveInvoice(withDebt(5)), throwsStateError);
+    expect(() => s.saveInvoice(withDebt(101)), throwsStateError);
+    // مبلغه لا يُعدَّل ولا يُحذف من شاشة الديون.
+    expect(
+      () => s.saveDebt(
+        Debt(
+          id: d.id,
+          direction: d.direction,
+          personName: 'X',
+          amount: 99,
+          date: d.date,
+          payments: updated.payments,
+          invoiceId: 'i1',
+        ),
+      ),
+      throwsStateError,
+    );
+    expect(() => s.deleteDebt(d.id), throwsStateError);
+
+    // حذف الفاتورة يحذف دينها.
+    await s.deleteInvoice('i1');
+    expect(s.debtForInvoice('i1'), isNull);
+    expect(s.debts, isEmpty);
+  });
+
+  test('paying an invoice in full removes its debt', () async {
+    const lines = [InvoiceLine(productId: 'a', qty: 1, unitPrice: 20)];
+    await s.saveInvoice(
+      Invoice.fromJson({...sale('i2', lines).toJson(), 'debt': 20}),
+    );
+    expect(s.debtForInvoice('i2'), isNotNull);
+    await s.saveInvoice(sale('i2', lines));
+    expect(s.debtForInvoice('i2'), isNull);
+  });
+
+  test('old demo company data is replaced', () {
+    final c = CompanyInfo.fromJson({
+      'name': 'مؤسسة مدبّر لمواد البناء',
+      'phone': '0500000000',
+      'address': 'الرياض - المنطقة الصناعية',
+      'taxNumber': '300000000000003',
+    });
+    expect(c.name, 'طيبة للتجارة العامة');
+    expect(c.address, 'انواكشوط - تفرغ زينة');
+    expect((c.phone, c.taxNumber), ('', ''));
   });
 
   test('builds an Arabic invoice PDF', () async {

@@ -63,6 +63,10 @@ class Invoice {
   /// المعاملة المالية المرتبطة.
   final String? txId;
 
+  /// المبلغ المؤجَّل (دين) عند إصدار الفاتورة؛ 0 إذا دُفعت كاملة.
+  /// يُسجَّل ديناً مرتبطاً بالفاتورة في شاشة الديون.
+  final double debt;
+
   const Invoice({
     required this.id,
     required this.type,
@@ -76,6 +80,7 @@ class Invoice {
     this.taxPercent = 0,
     this.notes = '',
     this.txId,
+    this.debt = 0,
   });
 
   double get subtotal => lines.fold(0, (s, l) => s + l.total);
@@ -96,6 +101,7 @@ class Invoice {
     taxPercent: taxPercent,
     notes: notes,
     txId: txId,
+    debt: debt,
   );
 
   Map<String, dynamic> toJson() => {
@@ -111,6 +117,7 @@ class Invoice {
     'taxPercent': taxPercent,
     'notes': notes,
     'txId': txId,
+    'debt': debt,
   };
 
   factory Invoice.fromJson(Map<String, dynamic> j) => Invoice(
@@ -129,6 +136,7 @@ class Invoice {
     taxPercent: (j['taxPercent'] as num?)?.toDouble() ?? 0,
     notes: j['notes'] as String? ?? '',
     txId: j['txId'] as String?,
+    debt: (j['debt'] as num?)?.toDouble() ?? 0,
   );
 }
 
@@ -172,7 +180,14 @@ class CompanyInfo {
 
   /// أسماء وعناوين مؤقتة من النسخ السابقة تُستبدل ببيانات المؤسسة.
   static const _oldNames = {'مدبّر', 'مؤسسة مدبّر لمواد البناء'};
-  static const _oldAddresses = {'نواكشوط - تفرغ زينة'};
+  static const _oldAddresses = {
+    'نواكشوط - تفرغ زينة',
+    'الرياض - المنطقة الصناعية',
+  };
+
+  /// هاتف ورقم ضريبي تجريبيان من نسخة قديمة؛ يُمسحان ليكتب المدير بياناته.
+  static const _oldPhones = {'0500000000'};
+  static const _oldTaxNumbers = {'300000000000003'};
 
   const CompanyInfo({
     this.name = defaultName,
@@ -197,12 +212,18 @@ class CompanyInfo {
       final n? when !_oldNames.contains(n) => n,
       _ => defaultName,
     },
-    phone: j['phone'] as String? ?? '',
+    phone: switch (j['phone'] as String?) {
+      final p? when !_oldPhones.contains(p) => p,
+      _ => '',
+    },
     address: switch (j['address'] as String?) {
       final a? when !_oldAddresses.contains(a) => a,
       _ => defaultAddress,
     },
-    taxNumber: j['taxNumber'] as String? ?? '',
+    taxNumber: switch (j['taxNumber'] as String?) {
+      final t? when !_oldTaxNumbers.contains(t) => t,
+      _ => '',
+    },
     defaultTaxPercent: (j['defaultTaxPercent'] as num?)?.toDouble() ?? 0,
     // البيانات المحفوظة قبل إضافة الحسابات تأخذ الحسابات الافتراضية.
     paymentAccounts: j['paymentAccounts'] == null

@@ -126,4 +126,49 @@ void main() {
     // عاد إلى قائمة الفواتير مع رسالة تأكيد.
     expect(find.text('عرض PDF'), findsOneWidget);
   });
+
+  testWidgets('sale invoice on debt records the unpaid amount', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await state.seedDemoData();
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('الفواتير').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('فاتورة بيع جديدة'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'الكمية'), '2');
+    await tester.tap(find.text('دين'));
+    await tester.pumpAndSettle();
+    // الدين يحتاج اسم العميل.
+    await tester.tap(find.text('حفظ الفاتورة'));
+    await tester.pumpAndSettle();
+    expect(find.text('اكتب الاسم لتسجيل الدين'), findsOneWidget);
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'العميل'),
+      'زبون بالآجل',
+    );
+    await tester.enterText(
+      find.widgetWithText(
+        TextFormField,
+        'المدفوع الآن (اتركه فارغاً إن لم يُدفع شيء)',
+      ),
+      '100',
+    );
+    await tester.tap(find.text('حفظ الفاتورة'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    final inv = state.invoices.firstWhere((i) => i.partyName == 'زبون بالآجل');
+    expect(inv.debt, closeTo(inv.total - 100, 0.001));
+    final debt = state.debtForInvoice(inv.id)!;
+    expect(debt.personName, 'زبون بالآجل');
+    expect(debt.remaining, closeTo(inv.total - 100, 0.001));
+  });
 }

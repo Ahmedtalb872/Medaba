@@ -35,6 +35,10 @@ const _amber = (
   fg: PdfColor.fromInt(0xFFA16207),
   bg: PdfColor.fromInt(0xFFFFF5CC),
 );
+const _red = (
+  fg: PdfColor.fromInt(0xFFB91C1C),
+  bg: PdfColor.fromInt(0xFFFDECEC),
+);
 const _sky = (
   fg: PdfColor.fromInt(0xFF1D4ED8),
   bg: PdfColor.fromInt(0xFFE6F0FF),
@@ -64,7 +68,11 @@ Future<Uint8List> buildInvoicePdf({
   required CompanyInfo company,
   required Product? Function(String id) productOf,
   required String warehouseName,
+
+  /// الدين المتبقي الآن (بعد أي تسديدات)؛ افتراضياً دين الفاتورة عند إصدارها.
+  double? remainingDebt,
 }) async {
+  final debt = remainingDebt ?? invoice.debt;
   final doc = pw.Document(
     title: '${invoice.type.label} ${invoice.number}',
     author: company.name,
@@ -83,11 +91,11 @@ Future<Uint8List> buildInvoicePdf({
       margin: const pw.EdgeInsets.fromLTRB(28, 28, 28, 20),
       footer: (ctx) => _footer(ctx, invoice, company),
       build: (_) => [
-        _headerCard(invoice, company, warehouseName, generated),
+        _headerCard(invoice, company, warehouseName, generated, debt),
         pw.SizedBox(height: 12),
         _linesCard(invoice, productOf),
         pw.SizedBox(height: 12),
-        _summaryCard(invoice),
+        _summaryCard(invoice, debt),
         if (invoice.notes.isNotEmpty) ...[
           pw.SizedBox(height: 12),
           _notesCard(invoice.notes),
@@ -115,11 +123,13 @@ Future<Uint8List> buildInvoicePdf({
 // ---------- عناصر مشتركة ----------
 
 pw.Widget _badge(String text, _Tone tone) => pw.Container(
-  padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+  height: 16,
+  alignment: pw.Alignment.center,
+  padding: const pw.EdgeInsets.symmetric(horizontal: 8),
   decoration: pw.BoxDecoration(
     color: tone.bg,
-    border: pw.Border.all(color: tone.fg, width: 1.2),
-    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(10)),
+    border: pw.Border.all(color: tone.fg),
+    borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
   ),
   child: pw.Text(
     text,
@@ -157,52 +167,54 @@ pw.Widget _headerCard(
   CompanyInfo c,
   String warehouseName,
   DateTime generated,
+  double debt,
 ) {
-  pw.Widget kv(String label, String value, {bool ltr = false}) => pw.Padding(
-    padding: const pw.EdgeInsets.only(bottom: 3),
+  const label = pw.TextStyle(fontSize: 9.5, color: _muted);
+  final value = pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold);
+
+  // بيانات الفاتورة: العنوان رمادي بعرض ثابت والقيمة عريضة بجانبه.
+  pw.Widget kv(String k, String v, {bool ltr = false}) => pw.Padding(
+    padding: const pw.EdgeInsets.only(bottom: 4),
     child: pw.Row(
-      mainAxisSize: pw.MainAxisSize.min,
       children: [
-        pw.Text('$label: ', style: const pw.TextStyle(fontSize: 9)),
-        ltr
-            ? _ltr(
-                value,
-                pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-              )
-            : pw.Text(
-                value,
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
+        pw.SizedBox(width: 72, child: pw.Text(k, style: label)),
+        pw.Expanded(child: ltr ? _ltr(v, value) : pw.Text(v, style: value)),
       ],
     ),
   );
 
-  pw.Widget pill(String label, String value) => pw.Container(
+  pw.Widget companyLine(String k, String v, {bool ltr = false}) => pw.Padding(
+    padding: const pw.EdgeInsets.only(top: 2),
+    child: pw.Row(
+      children: [
+        pw.Text('$k: ', style: label),
+        ltr
+            ? _ltr(v, const pw.TextStyle(fontSize: 9.5))
+            : pw.Text(v, style: const pw.TextStyle(fontSize: 9.5)),
+      ],
+    ),
+  );
+
+  pw.Widget pill(String k, String v, {_Tone? tone}) => pw.Container(
     padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
     decoration: pw.BoxDecoration(
-      border: pw.Border.all(color: _cardBorder, width: 1.2),
-      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(16)),
+      color: tone?.bg ?? PdfColors.white,
+      border: pw.Border.all(color: tone?.fg ?? _cardBorder),
+      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(13)),
     ),
     child: pw.Row(
       mainAxisSize: pw.MainAxisSize.min,
       children: [
-        pw.Text('$label: ', style: const pw.TextStyle(fontSize: 9)),
-        pw.Text(
-          value,
-          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-        ),
+        pw.Text('$k: ', style: label),
+        pw.Text(v, style: value.copyWith(color: tone?.fg)),
       ],
     ),
   );
 
   final initial = c.name.trim().isEmpty ? 'م' : c.name.trim()[0];
-  final details = [
-    if (c.address.isNotEmpty) 'المقر: ${c.address}',
-    if (c.taxNumber.isNotEmpty) 'الرقم الضريبي ${c.taxNumber}',
-  ].join(' • ');
+  final time =
+      '${generated.hour.toString().padLeft(2, '0')}:'
+      '${generated.minute.toString().padLeft(2, '0')}';
 
   return _card(
     border: _headBorder,
@@ -211,28 +223,28 @@ pw.Widget _headerCard(
       children: [
         pw.Container(
           color: _headBg,
-          padding: const pw.EdgeInsets.fromLTRB(16, 14, 16, 12),
+          padding: const pw.EdgeInsets.all(16),
           child: pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Container(
-                width: 30,
-                height: 30,
+                width: 38,
+                height: 38,
                 alignment: pw.Alignment.center,
                 decoration: const pw.BoxDecoration(
                   color: _blue,
-                  borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
+                  borderRadius: pw.BorderRadius.all(pw.Radius.circular(10)),
                 ),
                 child: pw.Text(
                   initial,
                   style: pw.TextStyle(
                     color: PdfColors.white,
-                    fontSize: 15,
+                    fontSize: 18,
                     fontWeight: pw.FontWeight.bold,
                   ),
                 ),
               ),
-              pw.SizedBox(width: 10),
+              pw.SizedBox(width: 12),
               pw.Expanded(
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -240,63 +252,49 @@ pw.Widget _headerCard(
                     pw.Text(
                       c.name,
                       style: pw.TextStyle(
-                        fontSize: 15,
+                        fontSize: 17,
                         fontWeight: pw.FontWeight.bold,
                       ),
                     ),
-                    pw.SizedBox(height: 2),
                     pw.Text(
                       'فاتورة رسمية • ${inv.type.label}',
-                      style: const pw.TextStyle(fontSize: 9, color: _muted),
+                      style: const pw.TextStyle(fontSize: 9.5, color: _blue),
                     ),
-                    if (details.isNotEmpty)
-                      pw.Text(
-                        details,
-                        style: const pw.TextStyle(fontSize: 9, color: _muted),
-                      ),
+                    pw.SizedBox(height: 4),
+                    if (c.address.isNotEmpty) companyLine('المقر', c.address),
                     if (c.phone.isNotEmpty)
-                      pw.Row(
-                        children: [
-                          pw.Text(
-                            'هاتف: ',
-                            style: const pw.TextStyle(
-                              fontSize: 9,
-                              color: _muted,
-                            ),
-                          ),
-                          _ltr(
-                            c.phone,
-                            const pw.TextStyle(fontSize: 9, color: _muted),
-                          ),
-                        ],
-                      ),
+                      companyLine('الهاتف', c.phone, ltr: true),
+                    if (c.taxNumber.isNotEmpty)
+                      companyLine('الرقم الضريبي', c.taxNumber, ltr: true),
                   ],
                 ),
               ),
-              pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  kv(
-                    inv.type.partyLabel,
-                    inv.partyName.isEmpty ? '-' : inv.partyName,
-                  ),
-                  if (inv.partyPhone.isNotEmpty)
-                    kv('الهاتف', inv.partyPhone, ltr: true),
-                  kv('التاريخ', fmt.date(inv.date), ltr: true),
-                  kv(
-                    'أُنشئت في',
-                    '${fmt.date(generated)} '
-                        '${generated.hour.toString().padLeft(2, '0')}:'
-                        '${generated.minute.toString().padLeft(2, '0')}',
-                    ltr: true,
-                  ),
-                  kv('المرجع', inv.number, ltr: true),
-                ],
+              pw.SizedBox(width: 12),
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: const pw.BoxDecoration(
+                  color: PdfColors.white,
+                  borderRadius: pw.BorderRadius.all(pw.Radius.circular(8)),
+                ),
+                width: 210,
+                child: pw.Column(
+                  children: [
+                    kv('رقم الفاتورة', inv.number, ltr: true),
+                    kv('التاريخ', fmt.date(inv.date), ltr: true),
+                    kv(
+                      inv.type.partyLabel,
+                      inv.partyName.isEmpty ? '-' : inv.partyName,
+                    ),
+                    if (inv.partyPhone.isNotEmpty)
+                      kv('الهاتف', inv.partyPhone, ltr: true),
+                    kv('أُنشئت في', '${fmt.date(generated)} $time', ltr: true),
+                  ],
+                ),
               ),
             ],
           ),
         ),
-        pw.Container(height: 1.2, color: _headBorder),
+        pw.Container(height: 1, color: _headBorder),
         pw.Padding(
           padding: const pw.EdgeInsets.fromLTRB(16, 12, 16, 14),
           child: pw.Column(
@@ -314,10 +312,14 @@ pw.Widget _headerCard(
                 spacing: 8,
                 runSpacing: 6,
                 children: [
-                  pill('النوع', inv.type.label),
-                  pill('الأصناف', '${inv.lines.length}'),
                   pill('المخزن', warehouseName),
-                  pill('الإجمالي المستحق', fmt.money(inv.total)),
+                  pill('الأصناف', '${inv.lines.length}'),
+                  pill('الإجمالي', fmt.money(inv.total), tone: _sky),
+                  pill(
+                    'الدين',
+                    fmt.money(debt),
+                    tone: debt > 0.0001 ? _red : _green,
+                  ),
                 ],
               ),
             ],
@@ -456,7 +458,7 @@ pw.Widget _linesCard(Invoice inv, Product? Function(String) productOf) {
   return _card(
     pw.Table(
       columnWidths: const {
-        0: pw.FixedColumnWidth(30),
+        0: pw.FixedColumnWidth(38),
         1: pw.FlexColumnWidth(4),
         2: pw.FlexColumnWidth(1.4),
         3: pw.FlexColumnWidth(1.6),
@@ -469,43 +471,67 @@ pw.Widget _linesCard(Invoice inv, Product? Function(String) productOf) {
 
 // ---------- الملخص ----------
 
-pw.Widget _summaryCard(Invoice inv) {
-  pw.TableRow row(
+pw.Widget _summaryCard(Invoice inv, double debt) {
+  // ثلاثة أعمدة كما في النموذج: النوع (شارة)، البيان، المبلغ.
+  pw.Widget line(
+    pw.Widget type,
+    pw.Widget label,
+    pw.Widget amount, {
+    PdfColor color = PdfColors.white,
+  }) => pw.Container(
+    color: color,
+    padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    child: pw.Row(
+      children: [
+        pw.SizedBox(width: 78, child: pw.Row(children: [type])),
+        pw.Expanded(flex: 3, child: label),
+        pw.Expanded(
+          flex: 2,
+          child: pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.end,
+            children: [amount],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  pw.Widget row(
     _Tone tone,
     String badge,
     String label,
     String amount, {
-    bool last = false,
-  }) => pw.TableRow(
-    decoration: pw.BoxDecoration(
-      color: last ? _gridSub : PdfColors.white,
-      border: const pw.Border(top: pw.BorderSide(color: _line)),
-    ),
+    bool strong = false,
+    PdfColor? color,
+  }) => pw.Column(
     children: [
-      _cell(_badge(badge, tone), align: pw.Alignment.centerRight),
-      _cell(
+      pw.Container(height: 1, color: _line),
+      line(
+        _badge(badge, tone),
         pw.Text(
           label,
           style: pw.TextStyle(
-            fontSize: 9.5,
-            fontWeight: last ? pw.FontWeight.bold : null,
+            fontSize: strong ? 11 : 10,
+            fontWeight: strong ? pw.FontWeight.bold : null,
           ),
         ),
-        align: pw.Alignment.centerRight,
-      ),
-      _cell(
         pw.Text(
           amount,
           style: pw.TextStyle(
-            fontSize: last ? 11 : 9.5,
+            fontSize: strong ? 12 : 10,
             fontWeight: pw.FontWeight.bold,
+            color: color,
           ),
         ),
-        align: pw.Alignment.centerLeft,
+        color: strong ? _gridSub : PdfColors.white,
       ),
     ],
   );
 
+  pw.Widget head(String t) =>
+      pw.Text(t, style: _headStyle.copyWith(fontWeight: pw.FontWeight.bold));
+
+  final hasDebt = debt > 0.0001;
   return _card(
     pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.stretch,
@@ -515,26 +541,17 @@ pw.Widget _summaryCard(Invoice inv) {
           padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           child: pw.Text(
             'الإجماليات / الملخص',
-            style: pw.TextStyle(fontSize: 9.5, fontWeight: pw.FontWeight.bold),
+            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
           ),
         ),
-        pw.Table(
-          columnWidths: const {
-            0: pw.FlexColumnWidth(1.3),
-            1: pw.FlexColumnWidth(3.5),
-            2: pw.FlexColumnWidth(2),
-          },
+        pw.Column(
           children: [
-            pw.TableRow(
-              decoration: const pw.BoxDecoration(
-                color: _gridSub,
-                border: pw.Border(top: pw.BorderSide(color: _cardBorder)),
-              ),
-              children: [
-                _headCell('النوع'),
-                _headCell('البيان'),
-                _headCell('المبلغ', end: true),
-              ],
+            pw.Container(height: 1, color: _cardBorder),
+            line(
+              head('النوع'),
+              head('البيان'),
+              head('المبلغ'),
+              color: _gridSub,
             ),
             row(
               _indigo,
@@ -553,10 +570,19 @@ pw.Widget _summaryCard(Invoice inv) {
               ),
             row(
               _sky,
-              'نهائي',
+              'الإجمالي',
               'الإجمالي المستحق',
               fmt.money(inv.total),
-              last: true,
+              strong: true,
+            ),
+            row(_green, 'مدفوع', 'المدفوع', fmt.money(inv.total - debt)),
+            row(
+              hasDebt ? _red : _green,
+              'دين',
+              hasDebt ? 'الدين المتبقي' : 'الدين المتبقي (لا يوجد)',
+              fmt.money(debt),
+              strong: true,
+              color: hasDebt ? _red.fg : _green.fg,
             ),
           ],
         ),
@@ -565,19 +591,21 @@ pw.Widget _summaryCard(Invoice inv) {
   );
 }
 
-pw.Widget _notesCard(String notes) => _card(
-  pw.Padding(
-    padding: const pw.EdgeInsets.all(12),
-    child: pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(
-          'ملاحظات',
-          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-        ),
-        pw.SizedBox(height: 3),
-        pw.Text(notes, style: const pw.TextStyle(fontSize: 9.5)),
-      ],
+pw.Widget _notesCard(String notes) => pw.Inseparable(
+  child: _card(
+    pw.Padding(
+      padding: const pw.EdgeInsets.all(12),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            'ملاحظات',
+            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 3),
+          pw.Text(notes, style: const pw.TextStyle(fontSize: 9.5)),
+        ],
+      ),
     ),
   ),
 );
