@@ -58,7 +58,7 @@ class MedabaApp extends StatelessWidget {
     );
     return ThemeData(
       useMaterial3: true,
-      fontFamily: 'Rubik',
+      fontFamily: 'ReadexPro',
       colorScheme: scheme,
       scaffoldBackgroundColor: dark
           ? AppColors.darkBackground

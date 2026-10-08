@@ -46,17 +46,19 @@ const _sky = (
 
 pw.ThemeData? _theme;
 
-/// يحمّل خط Rubik مرة واحدة؛ الخطوط الافتراضية في PDF لا تدعم العربية.
-/// مسافة الكلمات في Rubik ضيقة، فنوسّعها قليلاً لتتضح الكلمات العربية.
+/// يحمّل خط Readex Pro مرة واحدة؛ الخطوط الافتراضية في PDF لا تدعم العربية.
+/// نوسّع مسافة الكلمات قليلاً لتتضح الكلمات العربية.
 Future<pw.ThemeData> _loadTheme() async {
   if (_theme != null) return _theme!;
   final theme = pw.ThemeData.withFont(
-    base: pw.Font.ttf(await rootBundle.load('assets/fonts/Rubik-Regular.ttf')),
-    bold: pw.Font.ttf(await rootBundle.load('assets/fonts/Rubik-Bold.ttf')),
+    base: pw.Font.ttf(
+      await rootBundle.load('assets/fonts/ReadexPro-Regular.ttf'),
+    ),
+    bold: pw.Font.ttf(await rootBundle.load('assets/fonts/ReadexPro-Bold.ttf')),
   );
   return _theme = theme.copyWith(
     defaultTextStyle: theme.defaultTextStyle.copyWith(
-      wordSpacing: 1.6,
+      wordSpacing: 1.3,
       color: _ink,
     ),
   );
