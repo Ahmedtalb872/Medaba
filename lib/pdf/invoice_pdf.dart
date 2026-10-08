@@ -427,7 +427,7 @@ pw.Widget _linesCard(Invoice inv, Product? Function(String) productOf) {
         _headCell('#'),
         _headCell('الصنف'),
         _headCell('الكمية', end: true),
-        _headCell('سعر الوحدة', end: true),
+        _headCell('سعر الفرد', end: true),
         _headCell('الإجمالي', end: true),
       ],
     ),

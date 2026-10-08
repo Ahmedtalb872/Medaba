@@ -135,7 +135,7 @@ class StockMove {
   final String? toWarehouseId;
   final double qty;
 
-  /// سعر الوحدة للشراء والبيع.
+  /// سعر الفرد للشراء والبيع.
   final double unitPrice;
   final DateTime date;
   final String note;

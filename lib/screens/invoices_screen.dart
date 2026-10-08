@@ -697,7 +697,7 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
             width: 120,
             child: TextFormField(
               controller: l.price,
-              decoration: const InputDecoration(labelText: 'سعر الوحدة'),
+              decoration: const InputDecoration(labelText: 'سعر الفرد'),
               keyboardType: decimal,
               validator: numberValidator(),
               onChanged: (_) => setState(() {}),
