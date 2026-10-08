@@ -73,10 +73,9 @@ flutter:
         - asset: assets/fonts/ReadexPro-Bold.ttf
           weight: 700
 
-  # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  # أيقونات فاتورة PDF: جزء صغير من خط Material Icons (رخصة Apache 2.0).
+  assets:
+    - assets/fonts/InvoiceIcons.ttf
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
