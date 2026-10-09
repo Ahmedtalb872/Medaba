@@ -154,6 +154,10 @@ class CompanyInfo {
   final String phone;
   final String address;
 
+  /// اسم مستخدم النظام ودوره، ويظهران أعلى الشاشة.
+  final String ownerName;
+  final String ownerRole;
+
   /// حسابات الدفع التي تظهر أسفل فواتير البيع.
   final List<PaymentAccount> paymentAccounts;
 
@@ -167,6 +171,8 @@ class CompanyInfo {
 
   static const defaultName = 'طيبة للتجارة العامة';
   static const defaultAddress = 'انواكشوط - تفرغ زينة';
+  static const defaultOwnerName = 'أحمد طالب';
+  static const defaultOwnerRole = 'مدير النظام';
 
   /// أسماء وعناوين مؤقتة من النسخ السابقة تُستبدل ببيانات المؤسسة.
   static const _oldNames = {'مدبّر', 'مؤسسة مدبّر لمواد البناء'};
@@ -182,6 +188,8 @@ class CompanyInfo {
     this.name = defaultName,
     this.phone = '',
     this.address = defaultAddress,
+    this.ownerName = defaultOwnerName,
+    this.ownerRole = defaultOwnerRole,
     this.paymentAccounts = defaultPaymentAccounts,
   });
 
@@ -189,6 +197,8 @@ class CompanyInfo {
     'name': name,
     'phone': phone,
     'address': address,
+    'ownerName': ownerName,
+    'ownerRole': ownerRole,
     'paymentAccounts': [for (final a in paymentAccounts) a.toJson()],
   };
 
@@ -205,6 +215,8 @@ class CompanyInfo {
       final a? when !_oldAddresses.contains(a) => a,
       _ => defaultAddress,
     },
+    ownerName: j['ownerName'] as String? ?? defaultOwnerName,
+    ownerRole: j['ownerRole'] as String? ?? defaultOwnerRole,
     // البيانات المحفوظة قبل إضافة الحسابات تأخذ الحسابات الافتراضية.
     paymentAccounts: j['paymentAccounts'] == null
         ? defaultPaymentAccounts

@@ -16,6 +16,9 @@ class DashboardScreen extends StatelessWidget {
     final s = context.watch<AppState>();
     final thisMonth = Period.month(DateTime.now());
     final report = s.profitReport(thisMonth);
+    final last = s.profitReport(
+      Period.month(DateTime(thisMonth.start.year, thisMonth.start.month - 1)),
+    );
     final recent = s.transactions.take(5).toList();
     final lowStock = s.lowStockProducts;
     final now = DateTime.now();
@@ -26,11 +29,13 @@ class DashboardScreen extends StatelessWidget {
 
     final chart = SectionCard(
       title: 'الإيرادات والمصروفات (آخر 6 أشهر)',
+      icon: Icons.bar_chart,
       child: IncomeExpenseChart(data: s.monthlySeries()),
     );
 
     final distribution = SectionCard(
       title: 'توزيع أرباح هذا الشهر',
+      icon: Icons.pie_chart_outline,
       child: report.partners.isEmpty
           ? const EmptyState(message: 'أضف شركاء لعرض التوزيع')
           : Column(
@@ -69,8 +74,9 @@ class DashboardScreen extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       children: [
         PageHeader(
-          title: 'لوحة التحكم',
-          subtitle: 'ملخص شهر ${fmt.month(DateTime.now())}',
+          title: 'مرحباً بك في لوحة التحكم',
+          icon: Icons.space_dashboard_outlined,
+          subtitle: 'ملخص أعمال شهر ${fmt.month(DateTime.now())}',
           actionLabel: 'معاملة جديدة',
           onAction: () => showTransactionForm(context),
         ),
@@ -81,18 +87,25 @@ class DashboardScreen extends StatelessWidget {
               value: fmt.money(report.income),
               icon: Icons.trending_up,
               colors: AppColors.income,
+              current: report.income,
+              previous: last.income,
             ),
             StatCard(
               label: 'مصروفات الشهر',
               value: fmt.money(report.expenses),
               icon: Icons.trending_down,
               colors: AppColors.expense,
+              current: report.expenses,
+              previous: last.expenses,
+              upIsGood: false,
             ),
             StatCard(
               label: 'صافي ربح الشهر',
               value: fmt.money(report.netProfit),
               icon: Icons.account_balance_wallet_outlined,
               colors: report.netProfit >= 0 ? AppColors.profit : AppColors.loss,
+              current: report.netProfit,
+              previous: last.netProfit,
             ),
             StatCard(
               label: 'الرصيد النقدي',
@@ -119,44 +132,32 @@ class DashboardScreen extends StatelessWidget {
         ),
         if (lowStock.isNotEmpty) ...[
           const SizedBox(height: 16),
-          Card(
-            child: ListTile(
-              leading: Icon(
-                Icons.warning_amber_rounded,
-                color: AppColors.expense.last,
-              ),
-              title: Text('أصناف قاربت على النفاد: ${lowStock.length}'),
-              subtitle: Text(
-                lowStock
-                    .map((p) => '${p.name} (${fmt.number(s.stockOf(p.id))})')
-                    .join('، '),
-              ),
-            ),
+          _AlertCard(
+            icon: Icons.warning_amber_rounded,
+            color: AppColors.expense.last,
+            title: 'أصناف قاربت على النفاد: ${lowStock.length}',
+            body: lowStock
+                .map((p) => '${p.name} (${fmt.number(s.stockOf(p.id))})')
+                .join('، '),
           ),
         ],
         if (shipments.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          Card(
-            child: ListTile(
-              leading: Icon(
-                Icons.directions_boat_outlined,
-                color: AppColors.capital.last,
-              ),
-              title: Text(
+          const SizedBox(height: 12),
+          _AlertCard(
+            icon: Icons.directions_boat_outlined,
+            color: AppColors.capital.last,
+            title:
                 'شحنات بحرية تحتاج متابعة: ${shipments.length}'
                 '${s.delayedShipments(now) == 0 ? '' : ' (متأخرة: ${s.delayedShipments(now)})'}',
-              ),
-              subtitle: Text(
-                shipments
-                    .map((x) => '${x.contents} - ${x.status.label}')
-                    .join('، '),
-              ),
-            ),
+            body: shipments
+                .map((x) => '${x.contents} - ${x.status.label}')
+                .join('، '),
           ),
         ],
         const SizedBox(height: 16),
         SectionCard(
           title: 'آخر المعاملات',
+          icon: Icons.receipt_long_outlined,
           child: recent.isEmpty
               ? const EmptyState(message: 'لا توجد معاملات بعد')
               : Column(
@@ -164,14 +165,7 @@ class DashboardScreen extends StatelessWidget {
                     for (final t in recent)
                       ListTile(
                         contentPadding: EdgeInsets.zero,
-                        leading: Icon(
-                          t.type == TxType.income
-                              ? Icons.south_west
-                              : Icons.north_east,
-                          color: t.type == TxType.income
-                              ? AppColors.income.last
-                              : AppColors.expense.last,
-                        ),
+                        leading: _TxIcon(income: t.type == TxType.income),
                         title: Text(t.note.isEmpty ? t.category.label : t.note),
                         subtitle: Text(
                           '${t.category.label} • ${fmt.date(t.date)}',
@@ -190,6 +184,89 @@ class DashboardScreen extends StatelessWidget {
                 ),
         ),
       ],
+    );
+  }
+}
+
+/// تنبيه بخلفية ملونة خفيفة وشريط جانبي بلون التنبيه.
+class _AlertCard extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String body;
+  const _AlertCard({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.body,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      decoration: BoxDecoration(
+        color: dark
+            ? Color.alphaBlend(
+                color.withValues(alpha: 0.14),
+                Theme.of(context).colorScheme.surfaceContainer,
+              )
+            : Color.alphaBlend(color.withValues(alpha: 0.07), Colors.white),
+        borderRadius: BorderRadius.circular(16),
+        border: BorderDirectional(start: BorderSide(color: color, width: 5)),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(color: color, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(body),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TxIcon extends StatelessWidget {
+  final bool income;
+  const _TxIcon({required this.income});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = income ? AppColors.income.last : AppColors.expense.last;
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Icon(
+        income ? Icons.south_west : Icons.north_east,
+        color: color,
+        size: 20,
+      ),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../models/models.dart';
 import '../state/app_state.dart';
+import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
 import '../widgets/common.dart';
 import '../widgets/data_table_card.dart';
@@ -20,6 +21,7 @@ class WorkersScreen extends StatelessWidget {
       children: [
         PageHeader(
           title: 'العمال',
+          icon: Icons.engineering_outlined,
           subtitle:
               '$active عامل نشط • الرواتب الشهرية: ${fmt.money(s.monthlyPayroll)}',
           actionLabel: 'إضافة عامل',
@@ -51,10 +53,11 @@ class WorkersScreen extends StatelessWidget {
             ),
           ],
           extraActions: (w) => [
-            IconButton(
+            TableAction(
               tooltip: 'صرف راتب هذا الشهر',
-              icon: const Icon(Icons.payments_outlined),
-              onPressed: !w.active
+              icon: Icons.payments_outlined,
+              color: AppColors.income.last,
+              onTap: !w.active
                   ? null
                   : () async {
                       await s.paySalary(w, DateTime.now());

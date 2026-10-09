@@ -1,76 +1,228 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
+import 'brand.dart';
 
-/// رأس الصفحة مع عنوان وزر إضافة اختياري.
+/// رأس الصفحة: لافتة ترحيب بشعار المؤسسة وعنوان الصفحة ورسم زخرفي،
+/// وتحتها أزرار الإجراءات.
 class PageHeader extends StatelessWidget {
   final String title;
   final String? subtitle;
+  final IconData icon;
   final String? actionLabel;
+  final IconData actionIcon;
   final VoidCallback? onAction;
+  final String? secondaryLabel;
+  final IconData secondaryIcon;
+  final VoidCallback? onSecondary;
   const PageHeader({
     super.key,
     required this.title,
     this.subtitle,
+    this.icon = Icons.dashboard_outlined,
     this.actionLabel,
+    this.actionIcon = Icons.add,
     this.onAction,
+    this.secondaryLabel,
+    this.secondaryIcon = Icons.add,
+    this.onSecondary,
   });
 
   @override
   Widget build(BuildContext context) {
     final t = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        runSpacing: 12,
-        spacing: 12,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                title,
-                style: t.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+    final cs = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final company = context.select<AppState, String>((s) => s.company.name);
+    return LayoutBuilder(
+      builder: (context, c) {
+        final wide = c.maxWidth >= 900;
+        final showLogo = c.maxWidth >= 1050;
+        final text = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              title,
+              style: (wide ? t.headlineSmall : t.titleLarge)?.copyWith(
+                fontWeight: FontWeight.bold,
               ),
-              if (subtitle != null)
-                Text(
-                  subtitle!,
-                  style: t.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            Text(
+              company,
+              style: t.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: dark ? cs.primary : AppColors.brand,
+              ),
+            ),
+            if (subtitle != null)
+              Text(
+                subtitle!,
+                style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
+              ),
+          ],
+        );
+        final lead = showLogo
+            ? Padding(
+                padding: const EdgeInsetsDirectional.only(end: 20),
+                child: Container(
+                  padding: const EdgeInsetsDirectional.only(end: 20),
+                  decoration: BoxDecoration(
+                    border: BorderDirectional(
+                      end: BorderSide(color: cs.outlineVariant),
+                    ),
+                  ),
+                  child: const BrandLogo(size: 44),
+                ),
+              )
+            : Padding(
+                padding: const EdgeInsetsDirectional.only(end: 14),
+                child: Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: dark ? AppColors.brand : const Color(0xFFF6E3B5),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 28,
+                    color: dark ? Colors.white : AppColors.brand,
                   ),
                 ),
+              );
+        final banner = Container(
+          clipBehavior: Clip.antiAlias,
+          constraints: BoxConstraints(minHeight: wide ? 150 : 0),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: LinearGradient(
+              colors: dark
+                  ? [cs.surfaceContainerHigh, cs.surfaceContainer]
+                  : const [Color(0xFFFFFCF5), Color(0xFFF7EEDC)],
+              begin: AlignmentDirectional.centerStart,
+              end: AlignmentDirectional.centerEnd,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x14000000),
+                blurRadius: 18,
+                offset: Offset(0, 6),
+              ),
             ],
           ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Row(
+                      children: [
+                        lead,
+                        Expanded(child: text),
+                      ],
+                    ),
+                  ),
+                ),
+                if (wide) BannerArt(width: math.min(440, c.maxWidth * 0.4)),
+              ],
+            ),
+          ),
+        );
+        final actions = [
           if (onAction != null)
             FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.brand,
+                foregroundColor: Colors.white,
+                minimumSize: Size(wide ? 280 : 0, 54),
+                textStyle: const TextStyle(
+                  fontFamily: 'ReadexPro',
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
               onPressed: onAction,
-              icon: const Icon(Icons.add),
+              icon: Icon(actionIcon),
               label: Text(actionLabel ?? 'إضافة'),
             ),
-        ],
-      ),
+          if (onSecondary != null)
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                backgroundColor: dark ? null : Colors.white,
+                foregroundColor: dark ? cs.primary : AppColors.brand,
+                side: BorderSide(
+                  color: (dark ? cs.primary : AppColors.brand).withValues(
+                    alpha: 0.5,
+                  ),
+                ),
+                minimumSize: Size(wide ? 280 : 0, 54),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                textStyle: const TextStyle(
+                  fontFamily: 'ReadexPro',
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              onPressed: onSecondary,
+              icon: Icon(secondaryIcon),
+              label: Text(secondaryLabel ?? ''),
+            ),
+        ];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              banner,
+              if (actions.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Wrap(spacing: 12, runSpacing: 12, children: actions),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 }
 
-/// بطاقة مؤشر رقمي (KPI): أيقونة صغيرة ملونة، عنوان، ورقم.
+/// بطاقة مؤشر رقمي (KPI) بخلفية ملونة خفيفة، مع مقارنة اختيارية.
+///
+/// [current] و[previous] يضيفان سطر «مقارنة بالشهر الماضي» بنسبة التغير.
 class StatCard extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
   final List<Color> colors;
+  final double? current;
+  final double? previous;
+
+  /// وحدة صغيرة بجانب الرقم (مثل «صنف»).
+  final String? unit;
+
+  /// هل الارتفاع خبر جيد؟ (للمصروفات: لا، فيُلوَّن الارتفاع بالأحمر).
+  final bool upIsGood;
   const StatCard({
     super.key,
     required this.label,
     required this.value,
     required this.icon,
     this.colors = AppColors.profit,
+    this.current,
+    this.previous,
+    this.unit,
+    this.upIsGood = true,
   });
 
   @override
@@ -78,40 +230,135 @@ class StatCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final tone = dark ? colors.first : colors.last;
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    final tint = dark
+        ? Color.alphaBlend(tone.withValues(alpha: 0.12), cs.surfaceContainer)
+        : Color.alphaBlend(tone.withValues(alpha: 0.08), Colors.white);
+    final hasTrend = current != null && previous != null;
+    final change = !hasTrend || previous == 0
+        ? null
+        : ((current! - previous!) / previous!.abs() * 100).round();
+    final up = (change ?? 0) >= 0;
+    final trendColor = change == null
+        ? cs.onSurfaceVariant
+        : up == upIsGood
+        ? AppColors.income.last
+        : AppColors.expense.last;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: tint,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: tone.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(color: tone, fontWeight: FontWeight.bold),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: tone.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: tone, size: 20),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(
+                        value,
+                        style: Theme.of(context).textTheme.headlineMedium
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      if (unit != null) ...[
+                        const SizedBox(width: 6),
+                        Text(unit!, style: TextStyle(color: tone)),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              _MiniBars(color: tone),
+            ],
+          ),
+          if (hasTrend) ...[
+            const SizedBox(height: 6),
             Row(
               children: [
-                Icon(icon, color: tone, size: 20),
-                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    label,
-                    style: TextStyle(color: cs.onSurfaceVariant),
+                    'مقارنة بالشهر الماضي',
+                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                Text(
+                  change == null ? '—' : '${change.abs()}%',
+                  style: TextStyle(
+                    color: trendColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (change != null)
+                  Icon(
+                    up ? Icons.arrow_upward : Icons.arrow_downward,
+                    size: 16,
+                    color: trendColor,
+                  ),
               ],
             ),
-            const SizedBox(height: 8),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: AlignmentDirectional.centerStart,
-              child: Text(
-                value,
-                style: Theme.of(context).textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.bold),
-              ),
-            ),
           ],
-        ),
+        ],
       ),
     );
   }
+}
+
+/// أعمدة صغيرة متصاعدة تزيّن بطاقات المؤشرات.
+class _MiniBars extends StatelessWidget {
+  final Color color;
+  const _MiniBars({required this.color});
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: [
+      for (final (i, f) in const [0.35, 0.55, 0.8, 1.0].indexed)
+        Container(
+          width: 10,
+          height: 40 * f,
+          margin: const EdgeInsetsDirectional.only(start: 4),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.18 + i * 0.22),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
+          ),
+        ),
+    ],
+  );
 }
 
 /// شبكة متجاوبة لبطاقات المؤشرات.
@@ -262,43 +509,64 @@ class _Legend extends StatelessWidget {
   );
 }
 
-/// بطاقة بعنوان تحيط بمحتوى.
+/// بطاقة بعنوان (وأيقونة اختيارية) تحيط بمحتوى.
 class SectionCard extends StatelessWidget {
   final String title;
   final Widget child;
   final Widget? trailing;
+  final IconData? icon;
   const SectionCard({
     super.key,
     required this.title,
     required this.child,
     this.trailing,
+    this.icon,
   });
 
   @override
-  Widget build(BuildContext context) => Card(
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.bold),
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                if (icon != null) ...[
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: dark ? AppColors.brand : const Color(0xFFE7F1EC),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      icon,
+                      size: 19,
+                      color: dark ? Colors.white : AppColors.brand,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
                 ),
-              ),
-              ?trailing,
-            ],
-          ),
-          const SizedBox(height: 12),
-          child,
-        ],
+                ?trailing,
+              ],
+            ),
+            const SizedBox(height: 12),
+            child,
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 Future<bool> confirmDelete(BuildContext context, String name) async {

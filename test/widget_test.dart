@@ -37,7 +37,7 @@ void main() {
         'توزيع الأرباح',
         'الإعدادات',
       ]) {
-        if (size.width < 800) {
+        if (size.width < 900) {
           await tester.tap(find.byIcon(Icons.menu));
           await tester.pumpAndSettle();
         }
@@ -47,6 +47,32 @@ void main() {
       }
     });
   }
+
+  testWidgets('top bar shows the user and finds invoices by party', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await state.seedDemoData();
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+
+    expect(find.text(CompanyInfo.defaultOwnerName), findsOneWidget);
+    expect(find.text('إجمالي الأرباح'), findsOneWidget);
+
+    final invoice = state.invoices.first;
+    await tester.enterText(find.byType(TextField).first, invoice.partyName);
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('${invoice.type.label} ${invoice.number}'),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('inventory tabs and new stock movement form', (tester) async {
     tester.view.physicalSize = const Size(1400, 900);

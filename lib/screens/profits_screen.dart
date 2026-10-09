@@ -72,6 +72,7 @@ class _ProfitsScreenState extends State<ProfitsScreen> {
       children: [
         const PageHeader(
           title: 'توزيع الأرباح',
+          icon: Icons.pie_chart_outline,
           subtitle: 'يُوزَّع صافي الربح على الشركاء حسب نسبة كل شريك',
         ),
         SegmentedButton<_Range>(

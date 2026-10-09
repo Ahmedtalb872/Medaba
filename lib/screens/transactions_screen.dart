@@ -32,6 +32,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
       children: [
         PageHeader(
           title: 'المعاملات المالية',
+          icon: Icons.receipt_long_outlined,
           subtitle:
               'الإيرادات: ${fmt.money(s.totalIncome(period))} • '
               'المصروفات: ${fmt.money(s.totalExpenses(period))}',

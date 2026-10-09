@@ -76,49 +76,51 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _InvoicesHeader(
-          onSale: () => openInvoiceEditor(context, InvoiceType.sale),
-          onPurchase: () => openInvoiceEditor(context, InvoiceType.purchase),
+        PageHeader(
+          title: 'مرحباً بك في لوحة إدارة الفواتير',
+          subtitle: 'إدارة الفواتير والمخزون والمبيعات بسهولة وأمان',
+          icon: Icons.description_outlined,
+          actionLabel: 'فاتورة بيع جديدة',
+          actionIcon: Icons.shopping_cart_outlined,
+          onAction: () => openInvoiceEditor(context, InvoiceType.sale),
+          secondaryLabel: 'فاتورة شراء جديدة',
+          secondaryIcon: Icons.add_shopping_cart,
+          onSecondary: () => openInvoiceEditor(context, InvoiceType.purchase),
         ),
-        const SizedBox(height: 16),
         StatGrid(
           children: [
-            _TrendCard(
+            StatCard(
               label: 'إجمالي المخزون',
               value: fmt.number(s.totalStockQty()),
               unit: 'وحدة',
               icon: Icons.inventory_2_outlined,
-              color: const Color(0xFFB7791F),
-              tint: const Color(0xFFFFF8E6),
+              colors: AppColors.profit,
               current: s.totalStockQty(),
               previous: s.totalStockQty(at: lastMonth.end),
             ),
-            _TrendCard(
-              label: 'مبيعات الشهر (فواتير)',
+            StatCard(
+              label: 'مبيعات الشهر (أوقية)',
               value: fmt.number(sum(InvoiceType.sale, thisMonth)),
               icon: Icons.point_of_sale,
-              color: AppColors.income.last,
-              tint: const Color(0xFFEAF7F0),
+              colors: AppColors.income,
               current: sum(InvoiceType.sale, thisMonth),
               previous: sum(InvoiceType.sale, lastMonth),
             ),
-            _TrendCard(
-              label: 'مشتريات الشهر (فواتير)',
+            StatCard(
+              label: 'مشتريات الشهر (أوقية)',
               value: fmt.number(sum(InvoiceType.purchase, thisMonth)),
               icon: Icons.shopping_cart_outlined,
-              color: AppColors.expense.last,
-              tint: const Color(0xFFFDEEEE),
+              colors: AppColors.expense,
               current: sum(InvoiceType.purchase, thisMonth),
               previous: sum(InvoiceType.purchase, lastMonth),
               // ارتفاع المشتريات ليس خبراً جيداً بالضرورة: نلوّنه بالأحمر.
               upIsGood: false,
             ),
-            _TrendCard(
+            StatCard(
               label: 'عدد الفواتير',
               value: '${count(thisMonth)}',
               icon: Icons.description_outlined,
-              color: const Color(0xFF5B3E96),
-              tint: const Color(0xFFF2EEFB),
+              colors: AppColors.people,
               current: count(thisMonth).toDouble(),
               previous: count(lastMonth).toDouble(),
             ),
@@ -223,310 +225,6 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           },
         ),
       ],
-    );
-  }
-}
-
-/// رأس الصفحة: أيقونة وعنوان ووصف، وزرا الفاتورة الجديدة.
-class _InvoicesHeader extends StatelessWidget {
-  final VoidCallback onSale;
-  final VoidCallback onPurchase;
-  const _InvoicesHeader({required this.onSale, required this.onPurchase});
-
-  @override
-  Widget build(BuildContext context) {
-    final t = Theme.of(context).textTheme;
-    final wide = MediaQuery.sizeOf(context).width >= 1100;
-    final content = _content(context, t);
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFBF6EA), Color(0xFFF1EBDD)],
-          begin: AlignmentDirectional.centerStart,
-          end: AlignmentDirectional.centerEnd,
-        ),
-      ),
-      child: wide
-          ? Row(
-              children: [
-                Expanded(child: content),
-                const SizedBox(width: 24),
-                const _HeaderArt(),
-              ],
-            )
-          : content,
-    );
-  }
-
-  Widget _content(BuildContext context, TextTheme t) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF6E3B5),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: const Icon(
-              Icons.description_outlined,
-              size: 34,
-              color: AppColors.brand,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'الفواتير',
-                  style: t.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                Text(
-                  'إدارة فواتير البيع والشراء والمخزون بشكل سهل وآمن',
-                  style: t.bodyLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 18),
-      Wrap(
-        spacing: 12,
-        runSpacing: 12,
-        children: [
-          FilledButton.icon(
-            style: FilledButton.styleFrom(
-              backgroundColor: AppColors.brand,
-              minimumSize: const Size(240, 54),
-            ),
-            onPressed: onSale,
-            icon: const Icon(Icons.point_of_sale),
-            label: const Text('فاتورة بيع جديدة'),
-          ),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: AppColors.brand,
-              minimumSize: const Size(240, 54),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-            onPressed: onPurchase,
-            icon: const Icon(Icons.shopping_cart_outlined),
-            label: const Text('فاتورة شراء جديدة'),
-          ),
-        ],
-      ),
-    ],
-  );
-}
-
-/// رسم زخرفي في رأس الصفحة على الشاشات العريضة: صناديق وحافظة أوراق ونبتة.
-class _HeaderArt extends StatelessWidget {
-  const _HeaderArt();
-
-  Widget _box(double size, Color color) => Container(
-    width: size,
-    height: size * 0.8,
-    decoration: BoxDecoration(
-      color: color,
-      borderRadius: BorderRadius.circular(8),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x22000000),
-          blurRadius: 6,
-          offset: Offset(0, 3),
-        ),
-      ],
-    ),
-    child: Center(
-      child: Container(
-        width: size * 0.16,
-        height: size * 0.8,
-        color: const Color(0x22000000),
-      ),
-    ),
-  );
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 300,
-    height: 150,
-    child: Stack(
-      children: [
-        PositionedDirectional(
-          end: 150,
-          bottom: 0,
-          child: _box(80, const Color(0xFFD9A066)),
-        ),
-        PositionedDirectional(
-          end: 205,
-          bottom: 0,
-          child: _box(70, const Color(0xFFC98F55)),
-        ),
-        PositionedDirectional(
-          end: 175,
-          bottom: 60,
-          child: _box(62, const Color(0xFFE2B07A)),
-        ),
-        PositionedDirectional(
-          end: 230,
-          bottom: 52,
-          child: _box(50, AppColors.brand),
-        ),
-        PositionedDirectional(
-          end: 70,
-          bottom: 0,
-          child: Container(
-            width: 92,
-            height: 124,
-            decoration: BoxDecoration(
-              color: AppColors.brand,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.all(8),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Icon(
-                Icons.receipt_long,
-                size: 54,
-                color: Color(0xFF9DB7A9),
-              ),
-            ),
-          ),
-        ),
-        const PositionedDirectional(
-          end: 10,
-          bottom: 0,
-          child: Icon(Icons.local_florist, size: 64, color: Color(0xFF4F8A5B)),
-        ),
-      ],
-    ),
-  );
-}
-
-/// بطاقة رقم بلون خفيف ومقارنة بالشهر الماضي.
-class _TrendCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final String? unit;
-  final IconData icon;
-  final Color color;
-  final Color tint;
-  final double current;
-  final double previous;
-  final bool upIsGood;
-
-  const _TrendCard({
-    required this.label,
-    required this.value,
-    this.unit,
-    required this.icon,
-    required this.color,
-    required this.tint,
-    required this.current,
-    required this.previous,
-    this.upIsGood = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    final change = previous == 0
-        ? null
-        : ((current - previous) / previous * 100).round();
-    final up = (change ?? 0) >= 0;
-    final good = up == upIsGood;
-    final trendColor = change == null
-        ? muted
-        : good
-        ? AppColors.income.last
-        : AppColors.expense.last;
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: tint,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: color.withValues(alpha: 0.15)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: TextStyle(color: color, fontWeight: FontWeight.bold),
-                ),
-              ),
-              Icon(icon, color: color),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Flexible(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    value,
-                    style: Theme.of(context).textTheme.headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-              if (unit != null) ...[
-                const SizedBox(width: 6),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text(unit!, style: TextStyle(color: color)),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'مقارنة بالشهر الماضي',
-                  style: TextStyle(color: muted, fontSize: 12),
-                ),
-              ),
-              Text(
-                change == null ? '—' : '${change.abs()}%',
-                style: TextStyle(
-                  color: trendColor,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              if (change != null)
-                Icon(
-                  up ? Icons.arrow_upward : Icons.arrow_downward,
-                  size: 16,
-                  color: trendColor,
-                ),
-            ],
-          ),
-        ],
-      ),
     );
   }
 }

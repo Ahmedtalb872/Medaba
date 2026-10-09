@@ -22,6 +22,7 @@ class PartnersScreen extends StatelessWidget {
       children: [
         PageHeader(
           title: 'الشركاء',
+          icon: Icons.handshake_outlined,
           subtitle:
               'مجموع النسب: ${fmt.percent(total)}'
               '${total < 100 && s.partners.isNotEmpty ? ' (غير مكتمل)' : ''}',

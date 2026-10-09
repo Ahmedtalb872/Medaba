@@ -52,6 +52,7 @@ class _ShipmentsScreenState extends State<ShipmentsScreen> {
       children: [
         PageHeader(
           title: 'الشحنات البحرية',
+          icon: Icons.directions_boat_outlined,
           subtitle: 'الحاويات الواردة عبر شركات الشحن حتى استلامها',
           actionLabel: 'شحنة جديدة',
           onAction: () => showShipmentForm(context),

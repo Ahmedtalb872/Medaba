@@ -34,6 +34,7 @@ class _DebtsScreenState extends State<DebtsScreen> {
       children: [
         PageHeader(
           title: 'الديون',
+          icon: Icons.account_balance_wallet_outlined,
           subtitle: 'ما لك عند الآخرين وما عليك لهم، مع كل تسديد',
           actionLabel: 'دين جديد',
           onAction: () => showDebtForm(context),
@@ -109,13 +110,11 @@ class _DebtsScreenState extends State<DebtsScreen> {
             _DebtStatus(debt: d, now: now),
           ],
           extraActions: (d) => [
-            IconButton(
+            TableAction(
               tooltip: 'تسجيل تسديد',
-              icon: const Icon(Icons.payments_outlined),
+              icon: Icons.payments_outlined,
               color: AppColors.income.last,
-              onPressed: d.isSettled
-                  ? null
-                  : () => showDebtPaymentForm(context, d),
+              onTap: d.isSettled ? null : () => showDebtPaymentForm(context, d),
             ),
           ],
           onEdit: (d) => showDebtForm(context, existing: d),

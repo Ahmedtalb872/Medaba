@@ -18,7 +18,11 @@ class SettingsScreen extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const PageHeader(title: 'الإعدادات'),
+        const PageHeader(
+          title: 'الإعدادات',
+          subtitle: 'بيانات المنشأة وحسابات الدفع والبيانات التجريبية',
+          icon: Icons.settings_outlined,
+        ),
         Card(
           child: ListTile(
             leading: const Icon(Icons.storefront_outlined),
@@ -74,6 +78,8 @@ Future<void> _editCompany(BuildContext context, AppState s) {
   final name = TextEditingController(text: c.name);
   final phone = TextEditingController(text: c.phone);
   final address = TextEditingController(text: c.address);
+  final owner = TextEditingController(text: c.ownerName);
+  final role = TextEditingController(text: c.ownerRole);
   final accounts = [
     for (final a in c.paymentAccounts)
       (
@@ -100,6 +106,14 @@ Future<void> _editCompany(BuildContext context, AppState s) {
       TextFormField(
         controller: address,
         decoration: const InputDecoration(labelText: 'العنوان'),
+      ),
+      TextFormField(
+        controller: owner,
+        decoration: const InputDecoration(labelText: 'اسم المستخدم'),
+      ),
+      TextFormField(
+        controller: role,
+        decoration: const InputDecoration(labelText: 'الصفة'),
       ),
       const Text(
         'حسابات الدفع (تظهر أسفل فواتير البيع)',
@@ -154,6 +168,8 @@ Future<void> _editCompany(BuildContext context, AppState s) {
         name: name.text.trim(),
         phone: phone.text.trim(),
         address: address.text.trim(),
+        ownerName: owner.text.trim(),
+        ownerRole: role.text.trim(),
         paymentAccounts: [
           for (final a in accounts)
             PaymentAccount(a.name.text.trim(), a.number.text.trim()),

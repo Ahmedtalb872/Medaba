@@ -26,6 +26,7 @@ class InventoryScreen extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: PageHeader(
               title: 'المخازن',
+              icon: Icons.warehouse_outlined,
               subtitle: 'أرصدة الأصناف وحركات الوارد والصادر والتحويل',
             ),
           ),
