@@ -197,7 +197,7 @@ class _CompanyCard extends StatelessWidget {
     return SizedBox(
       width: 300,
       child: Card(
-        color: selected ? AppColors.navSelected : null,
+        color: selected ? AppColors.brandLight : null,
         child: InkWell(
           borderRadius: BorderRadius.circular(18),
           onTap: onTap,
@@ -205,7 +205,7 @@ class _CompanyCard extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Icon(Icons.sailing_outlined, color: AppColors.navText),
+                Icon(Icons.sailing_outlined, color: AppColors.brand),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -223,7 +223,7 @@ class _CompanyCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (selected) Icon(Icons.filter_alt, color: AppColors.navText),
+                if (selected) Icon(Icons.filter_alt, color: AppColors.brand),
               ],
             ),
           ),

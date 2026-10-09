@@ -466,6 +466,14 @@ class AppState extends ChangeNotifier {
     return (received: received, issued: issued);
   }
 
+  /// مجموع كميات كل الأصناف في كل المخازن حتى تاريخ معيّن (اليوم إن لم يُحدَّد).
+  double totalStockQty({DateTime? at}) {
+    final end = at == null ? null : DateTime(at.year, at.month, at.day + 1);
+    return _moves
+        .where((m) => end == null || m.date.isBefore(end))
+        .fold(0.0, (s, m) => s + m.effectOn(null));
+  }
+
   /// قيمة المخزون بسعر التكلفة.
   double stockValue({String? warehouseId}) => _products.fold(
     0,

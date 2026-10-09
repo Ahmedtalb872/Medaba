@@ -12,7 +12,6 @@ import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
 import '../widgets/common.dart';
-import '../widgets/data_table_card.dart';
 import '../widgets/product_thumb.dart';
 
 class InvoicesScreen extends StatefulWidget {
@@ -24,115 +23,190 @@ class InvoicesScreen extends StatefulWidget {
 
 class _InvoicesScreenState extends State<InvoicesScreen> {
   InvoiceType? _type;
+  DateTimeRange? _range;
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 1),
+      initialDateRange: _range,
+      helpText: 'اختر فترة الفواتير',
+    );
+    if (picked != null) setState(() => _range = picked);
+  }
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<AppState>();
-    final month = Period.month(DateTime.now());
-    double monthTotal(InvoiceType t) => s.invoices
-        .where((i) => i.type == t && month.contains(i.date))
-        .fold(0, (sum, i) => sum + i.total);
-    final items = s.invoices
-        .where((i) => _type == null || i.type == _type)
-        .toList();
+    final now = DateTime.now();
+    final thisMonth = Period.month(now);
+    final lastMonth = Period.month(DateTime(now.year, now.month - 1));
+
+    double sum(InvoiceType t, Period p) => s.invoices
+        .where((i) => i.type == t && p.contains(i.date))
+        .fold(0, (a, i) => a + i.total);
+    int count(Period p) => s.invoices.where((i) => p.contains(i.date)).length;
+
+    final q = _search.text.trim().toLowerCase();
+    final items = s.invoices.where((i) {
+      if (_type != null && i.type != _type) return false;
+      if (_range != null &&
+          !Period(_range!.start, _range!.end).contains(i.date)) {
+        return false;
+      }
+      if (q.isEmpty) return true;
+      final products = i.lines.map((l) => s.productById(l.productId)?.name);
+      return [
+        i.number,
+        i.partyName,
+        i.partyPhone,
+        ...products.whereType<String>(),
+      ].any((x) => x.toLowerCase().contains(q));
+    }).toList();
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        PageHeader(
-          title: 'الفواتير',
-          subtitle: 'فواتير البيع والشراء؛ كل فاتورة تحرّك المخزون وتُسجَّل في الحسابات',
-        ),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            FilledButton.icon(
-              onPressed: () => openInvoiceEditor(context, InvoiceType.sale),
-              icon: const Icon(Icons.point_of_sale),
-              label: const Text('فاتورة بيع جديدة'),
-            ),
-            FilledButton.tonalIcon(
-              onPressed: () => openInvoiceEditor(context, InvoiceType.purchase),
-              icon: const Icon(Icons.shopping_cart_outlined),
-              label: const Text('فاتورة شراء جديدة'),
-            ),
-          ],
+        _InvoicesHeader(
+          onSale: () => openInvoiceEditor(context, InvoiceType.sale),
+          onPurchase: () => openInvoiceEditor(context, InvoiceType.purchase),
         ),
         const SizedBox(height: 16),
         StatGrid(
           children: [
-            StatCard(
+            _TrendCard(
+              label: 'إجمالي المخزون',
+              value: fmt.number(s.totalStockQty()),
+              unit: 'وحدة',
+              icon: Icons.inventory_2_outlined,
+              color: const Color(0xFFB7791F),
+              tint: const Color(0xFFFFF8E6),
+              current: s.totalStockQty(),
+              previous: s.totalStockQty(at: lastMonth.end),
+            ),
+            _TrendCard(
               label: 'مبيعات الشهر (فواتير)',
-              value: fmt.money(monthTotal(InvoiceType.sale)),
+              value: fmt.number(sum(InvoiceType.sale, thisMonth)),
               icon: Icons.point_of_sale,
-              colors: AppColors.income,
+              color: AppColors.income.last,
+              tint: const Color(0xFFEAF7F0),
+              current: sum(InvoiceType.sale, thisMonth),
+              previous: sum(InvoiceType.sale, lastMonth),
             ),
-            StatCard(
+            _TrendCard(
               label: 'مشتريات الشهر (فواتير)',
-              value: fmt.money(monthTotal(InvoiceType.purchase)),
+              value: fmt.number(sum(InvoiceType.purchase, thisMonth)),
               icon: Icons.shopping_cart_outlined,
-              colors: AppColors.expense,
+              color: AppColors.expense.last,
+              tint: const Color(0xFFFDEEEE),
+              current: sum(InvoiceType.purchase, thisMonth),
+              previous: sum(InvoiceType.purchase, lastMonth),
+              // ارتفاع المشتريات ليس خبراً جيداً بالضرورة: نلوّنه بالأحمر.
+              upIsGood: false,
             ),
-            StatCard(
+            _TrendCard(
               label: 'عدد الفواتير',
-              value: '${s.invoices.length}',
-              icon: Icons.receipt_long_outlined,
-              colors: AppColors.capital,
+              value: '${count(thisMonth)}',
+              icon: Icons.description_outlined,
+              color: const Color(0xFF5B3E96),
+              tint: const Color(0xFFF2EEFB),
+              current: count(thisMonth).toDouble(),
+              previous: count(lastMonth).toDouble(),
             ),
           ],
         ),
         const SizedBox(height: 16),
-        SegmentedButton<InvoiceType?>(
-          segments: const [
-            ButtonSegment(value: null, label: Text('الكل')),
-            ButtonSegment(value: InvoiceType.sale, label: Text('بيع')),
-            ButtonSegment(value: InvoiceType.purchase, label: Text('شراء')),
-          ],
-          selected: {_type},
-          onSelectionChanged: (v) => setState(() => _type = v.first),
-        ),
-        const SizedBox(height: 12),
-        DataTableCard<Invoice>(
-          columns: const [
-            'الرقم',
-            'النوع',
-            'التاريخ',
-            'العميل / المورد',
-            'المخزن',
-            'الأصناف',
-            'الإجمالي',
-          ],
-          items: items,
-          emptyMessage: 'لا توجد فواتير بعد',
-          cells: (i) => [
-            Text(i.number, style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text(
-              i.type.label,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: i.type == InvoiceType.sale
-                    ? AppColors.income.last
-                    : AppColors.expense.last,
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            SizedBox(
+              width: 340,
+              child: TextField(
+                controller: _search,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  hintText: 'ابحث في الفواتير...',
+                  prefixIcon: const Icon(Icons.search),
+                  filled: true,
+                  fillColor: Colors.white,
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
               ),
             ),
-            Text(fmt.date(i.date)),
-            Text(i.partyName.isEmpty ? '-' : i.partyName),
-            Text(s.warehouseById(i.warehouseId)?.name ?? '-'),
-            Text('${i.lines.length}'),
-            Text(
-              fmt.money(i.total),
-              style: const TextStyle(fontWeight: FontWeight.bold),
+            SegmentedButton<InvoiceType?>(
+              showSelectedIcon: false,
+              style: SegmentedButton.styleFrom(
+                selectedBackgroundColor: AppColors.brand,
+                selectedForegroundColor: Colors.white,
+                backgroundColor: Colors.white,
+              ),
+              segments: const [
+                ButtonSegment(
+                  value: null,
+                  icon: Icon(Icons.check_circle_outline),
+                  label: Text('الكل'),
+                ),
+                ButtonSegment(
+                  value: InvoiceType.sale,
+                  icon: Icon(Icons.shopping_cart_outlined),
+                  label: Text('بيع'),
+                ),
+                ButtonSegment(
+                  value: InvoiceType.purchase,
+                  icon: Icon(Icons.add_shopping_cart),
+                  label: Text('شراء'),
+                ),
+              ],
+              selected: {_type},
+              onSelectionChanged: (v) => setState(() => _type = v.first),
             ),
-          ],
-          extraActions: (i) => [
-            IconButton(
-              tooltip: 'عرض وطباعة PDF',
-              icon: const Icon(Icons.picture_as_pdf_outlined),
-              color: AppColors.expense.last,
-              onPressed: () => openInvoicePdf(context, i),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                backgroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              onPressed: _pickRange,
+              icon: const Icon(Icons.calendar_month_outlined),
+              label: Text(
+                _range == null
+                    ? 'اختر التاريخ'
+                    : '${fmt.date(_range!.start)} - ${fmt.date(_range!.end)}',
+              ),
             ),
+            if (_range != null)
+              IconButton(
+                tooltip: 'كل التواريخ',
+                onPressed: () => setState(() => _range = null),
+                icon: const Icon(Icons.close),
+              ),
           ],
+        ),
+        const SizedBox(height: 12),
+        _InvoiceTable(
+          invoices: items,
+          warehouseName: (id) => s.warehouseById(id)?.name ?? '-',
+          onPdf: (i) => openInvoicePdf(context, i),
           onEdit: (i) => openInvoiceEditor(context, i.type, existing: i),
           onDelete: (i) async {
             if (!await confirmDelete(context, '${i.type.label} ${i.number}')) {
@@ -149,6 +223,471 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           },
         ),
       ],
+    );
+  }
+}
+
+/// رأس الصفحة: أيقونة وعنوان ووصف، وزرا الفاتورة الجديدة.
+class _InvoicesHeader extends StatelessWidget {
+  final VoidCallback onSale;
+  final VoidCallback onPurchase;
+  const _InvoicesHeader({required this.onSale, required this.onPurchase});
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Theme.of(context).textTheme;
+    final wide = MediaQuery.sizeOf(context).width >= 1100;
+    final content = _content(context, t);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(
+          colors: [Color(0xFFFBF6EA), Color(0xFFF1EBDD)],
+          begin: AlignmentDirectional.centerStart,
+          end: AlignmentDirectional.centerEnd,
+        ),
+      ),
+      child: wide
+          ? Row(
+              children: [
+                Expanded(child: content),
+                const SizedBox(width: 24),
+                const _HeaderArt(),
+              ],
+            )
+          : content,
+    );
+  }
+
+  Widget _content(BuildContext context, TextTheme t) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          Container(
+            width: 64,
+            height: 64,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF6E3B5),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: const Icon(
+              Icons.description_outlined,
+              size: 34,
+              color: AppColors.brand,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'الفواتير',
+                  style: t.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  'إدارة فواتير البيع والشراء والمخزون بشكل سهل وآمن',
+                  style: t.bodyLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 18),
+      Wrap(
+        spacing: 12,
+        runSpacing: 12,
+        children: [
+          FilledButton.icon(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.brand,
+              minimumSize: const Size(240, 54),
+            ),
+            onPressed: onSale,
+            icon: const Icon(Icons.point_of_sale),
+            label: const Text('فاتورة بيع جديدة'),
+          ),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              backgroundColor: Colors.white,
+              foregroundColor: AppColors.brand,
+              minimumSize: const Size(240, 54),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            onPressed: onPurchase,
+            icon: const Icon(Icons.shopping_cart_outlined),
+            label: const Text('فاتورة شراء جديدة'),
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
+/// رسم زخرفي في رأس الصفحة على الشاشات العريضة: صناديق وحافظة أوراق ونبتة.
+class _HeaderArt extends StatelessWidget {
+  const _HeaderArt();
+
+  Widget _box(double size, Color color) => Container(
+    width: size,
+    height: size * 0.8,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(8),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x22000000),
+          blurRadius: 6,
+          offset: Offset(0, 3),
+        ),
+      ],
+    ),
+    child: Center(
+      child: Container(
+        width: size * 0.16,
+        height: size * 0.8,
+        color: const Color(0x22000000),
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 300,
+    height: 150,
+    child: Stack(
+      children: [
+        PositionedDirectional(
+          end: 150,
+          bottom: 0,
+          child: _box(80, const Color(0xFFD9A066)),
+        ),
+        PositionedDirectional(
+          end: 205,
+          bottom: 0,
+          child: _box(70, const Color(0xFFC98F55)),
+        ),
+        PositionedDirectional(
+          end: 175,
+          bottom: 60,
+          child: _box(62, const Color(0xFFE2B07A)),
+        ),
+        PositionedDirectional(
+          end: 230,
+          bottom: 52,
+          child: _box(50, AppColors.brand),
+        ),
+        PositionedDirectional(
+          end: 70,
+          bottom: 0,
+          child: Container(
+            width: 92,
+            height: 124,
+            decoration: BoxDecoration(
+              color: AppColors.brand,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.all(8),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(
+                Icons.receipt_long,
+                size: 54,
+                color: Color(0xFF9DB7A9),
+              ),
+            ),
+          ),
+        ),
+        const PositionedDirectional(
+          end: 10,
+          bottom: 0,
+          child: Icon(Icons.local_florist, size: 64, color: Color(0xFF4F8A5B)),
+        ),
+      ],
+    ),
+  );
+}
+
+/// بطاقة رقم بلون خفيف ومقارنة بالشهر الماضي.
+class _TrendCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final String? unit;
+  final IconData icon;
+  final Color color;
+  final Color tint;
+  final double current;
+  final double previous;
+  final bool upIsGood;
+
+  const _TrendCard({
+    required this.label,
+    required this.value,
+    this.unit,
+    required this.icon,
+    required this.color,
+    required this.tint,
+    required this.current,
+    required this.previous,
+    this.upIsGood = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final change = previous == 0
+        ? null
+        : ((current - previous) / previous * 100).round();
+    final up = (change ?? 0) >= 0;
+    final good = up == upIsGood;
+    final trendColor = change == null
+        ? muted
+        : good
+        ? AppColors.income.last
+        : AppColors.expense.last;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: tint,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(color: color, fontWeight: FontWeight.bold),
+                ),
+              ),
+              Icon(icon, color: color),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    value,
+                    style: Theme.of(context).textTheme.headlineMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              if (unit != null) ...[
+                const SizedBox(width: 6),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Text(unit!, style: TextStyle(color: color)),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'مقارنة بالشهر الماضي',
+                  style: TextStyle(color: muted, fontSize: 12),
+                ),
+              ),
+              Text(
+                change == null ? '—' : '${change.abs()}%',
+                style: TextStyle(
+                  color: trendColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (change != null)
+                Icon(
+                  up ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 16,
+                  color: trendColor,
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// جدول الفواتير برأس أخضر وأزرار ملونة للإجراءات.
+class _InvoiceTable extends StatelessWidget {
+  final List<Invoice> invoices;
+  final String Function(String) warehouseName;
+  final void Function(Invoice) onPdf;
+  final void Function(Invoice) onEdit;
+  final void Function(Invoice) onDelete;
+
+  const _InvoiceTable({
+    required this.invoices,
+    required this.warehouseName,
+    required this.onPdf,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  static const _head = TextStyle(
+    color: Colors.white,
+    fontWeight: FontWeight.bold,
+  );
+
+  Widget _action(
+    String tooltip,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) => Padding(
+    padding: const EdgeInsetsDirectional.only(end: 8),
+    child: Material(
+      color: color.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Tooltip(
+          message: tooltip,
+          child: SizedBox(
+            width: 44,
+            height: 36,
+            child: Icon(icon, color: color, size: 20),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    if (invoices.isEmpty) {
+      return const Card(child: EmptyState(message: 'لا توجد فواتير هنا'));
+    }
+    DataColumn col(String label, IconData icon) => DataColumn(
+      label: Row(
+        children: [
+          Icon(icon, color: Colors.white, size: 18),
+          const SizedBox(width: 6),
+          Text(label, style: _head),
+        ],
+      ),
+    );
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: LayoutBuilder(
+        builder: (context, c) => SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minWidth: c.maxWidth),
+            child: DataTable(
+              headingRowColor: const WidgetStatePropertyAll(AppColors.brand),
+              headingRowHeight: 58,
+              dataRowMinHeight: 56,
+              dataRowMaxHeight: 60,
+              columnSpacing: 28,
+              columns: [
+                const DataColumn(label: Text('#', style: _head)),
+                col('التاريخ', Icons.calendar_today_outlined),
+                col('العميل / المورد', Icons.person_outline),
+                col('المخزن', Icons.warehouse_outlined),
+                col('الأصناف', Icons.layers_outlined),
+                col('الإجمالي', Icons.payments_outlined),
+                col('إجراءات', Icons.settings_outlined),
+              ],
+              rows: [
+                for (final (n, i) in invoices.indexed)
+                  DataRow(
+                    color: WidgetStatePropertyAll(
+                      n.isOdd ? const Color(0xFFF7F8FA) : Colors.white,
+                    ),
+                    cells: [
+                      DataCell(
+                        Text(
+                          i.number,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: i.type == InvoiceType.sale
+                                ? AppColors.income.last
+                                : AppColors.expense.last,
+                          ),
+                        ),
+                      ),
+                      DataCell(Text(fmt.date(i.date))),
+                      DataCell(Text(i.partyName.isEmpty ? '-' : i.partyName)),
+                      DataCell(
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE6F0FF),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            warehouseName(i.warehouseId),
+                            style: const TextStyle(color: Color(0xFF1D4ED8)),
+                          ),
+                        ),
+                      ),
+                      DataCell(Text('${i.lines.length}')),
+                      DataCell(
+                        Text(
+                          fmt.money(i.total),
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      DataCell(
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _action(
+                              'عرض وطباعة PDF',
+                              Icons.picture_as_pdf_outlined,
+                              AppColors.expense.last,
+                              () => onPdf(i),
+                            ),
+                            _action(
+                              'تعديل',
+                              Icons.edit_outlined,
+                              const Color(0xFF1D4ED8),
+                              () => onEdit(i),
+                            ),
+                            _action(
+                              'حذف',
+                              Icons.delete_outline,
+                              AppColors.expense.last,
+                              () => onDelete(i),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

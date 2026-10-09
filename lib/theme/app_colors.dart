@@ -20,12 +20,18 @@ abstract final class AppColors {
   static const stock = [Color(0xFF7FA650), Color(0xFF4A6B26)];
   static const ok = [Color(0xFF2FB37E), Color(0xFF0B6E4F)];
 
-  /// القائمة الجانبية: خلفية بيضاء ونص أخضر، والخيار المحدد بخلفية خضراء فاتحة.
-  static const navBackground = Color(0xFFFFFFFF);
-  static const navBorder = Color(0xFFE6DFCF);
-  static const navText = Color(0xFF0B4D38);
-  static const navMuted = Color(0xFF5E6E66);
-  static const navSelected = Color(0xFFD5EBDF);
+  /// الأخضر الداكن للهوية: أزرار رئيسية ورؤوس الجداول.
+  static const brand = Color(0xFF0B4D38);
+  static const brandLight = Color(0xFFD5EBDF);
+
+  /// القائمة الجانبية: خضراء داكنة بنص أبيض، والخيار المحدد بلون ذهبي.
+  static const navBackground = Color(0xFF0A3B2C);
+  static const navBackgroundEnd = Color(0xFF0E4B39);
+  static const navBorder = Color(0xFF0A3B2C);
+  static const navText = Color(0xFFFFFFFF);
+  static const navMuted = Color(0xFFC3D5CD);
+  static const navSelected = Color(0x26FFFFFF);
+  static const navAccent = Color(0xFFF2C14E);
 
   /// الشريط العلوي على الجوال وعناصر داكنة أخرى.
   static const sidebar = [Color(0xFF07291F), Color(0xFF0B4D38)];
