@@ -819,6 +819,7 @@ class AppState extends ChangeNotifier {
       Worker(
         id: newId(),
         name: 'سالم يوسف',
+        nationalId: '1234567890',
         jobTitle: 'مدير عمليات',
         monthlySalary: 30000,
         hiredAt: DateTime(now.year - 1),
@@ -826,6 +827,7 @@ class AppState extends ChangeNotifier {
       Worker(
         id: newId(),
         name: 'يوسف إبراهيم',
+        nationalId: '2345678901',
         jobTitle: 'أمين مخزن',
         monthlySalary: 22000,
         hiredAt: DateTime(now.year - 1),
@@ -833,6 +835,7 @@ class AppState extends ChangeNotifier {
       Worker(
         id: newId(),
         name: 'عمر فاروق',
+        nationalId: '3456789012',
         jobTitle: 'فني',
         monthlySalary: 16000,
         hiredAt: DateTime(now.year - 1, 3),

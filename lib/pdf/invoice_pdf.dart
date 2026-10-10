@@ -70,7 +70,7 @@ pw.ThemeData? _theme;
 
 /// يحمّل خط Readex Pro وخط الأيقونات مرة واحدة؛ خطوط PDF الافتراضية لا تدعم العربية.
 /// نوسّع مسافة الكلمات قليلاً لتتضح الكلمات العربية.
-Future<pw.ThemeData> _loadTheme() async {
+Future<pw.ThemeData> loadPdfTheme() async {
   if (_theme != null) return _theme!;
   final theme = pw.ThemeData.withFont(
     base: pw.Font.ttf(
@@ -106,7 +106,7 @@ Future<Uint8List> buildInvoicePdf({
   final doc = pw.Document(
     title: '${t.title(invoice.type)} ${invoice.number}',
     author: company.name,
-    theme: await _loadTheme(),
+    theme: await loadPdfTheme(),
   );
   final generated = DateTime.now();
   // حسابات الدفع تخص فواتير البيع فقط (العميل يدفع لنا).

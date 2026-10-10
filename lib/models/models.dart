@@ -55,7 +55,15 @@ class Worker {
   final String id;
   final String name;
   final String phone;
+
+  /// دور العامل في العمل (الوظيفة).
   final String jobTitle;
+
+  /// الرقم الوطني (NNI) كما في بطاقة التعريف.
+  final String nationalId;
+
+  /// صورة العامل JPEG بترميز base64، أو null.
+  final String? photo;
   final double monthlySalary;
   final DateTime hiredAt;
   final bool active;
@@ -65,6 +73,8 @@ class Worker {
     required this.name,
     this.phone = '',
     this.jobTitle = '',
+    this.nationalId = '',
+    this.photo,
     required this.monthlySalary,
     required this.hiredAt,
     this.active = true,
@@ -75,16 +85,33 @@ class Worker {
     'name': name,
     'phone': phone,
     'jobTitle': jobTitle,
+    'nationalId': nationalId,
+    'photo': photo,
     'monthlySalary': monthlySalary,
     'hiredAt': hiredAt.toIso8601String(),
     'active': active,
   };
+
+  /// نسخة بصورة جديدة (أو بدون صورة).
+  Worker withPhoto(String? photo) => Worker(
+    id: id,
+    name: name,
+    phone: phone,
+    jobTitle: jobTitle,
+    nationalId: nationalId,
+    photo: photo,
+    monthlySalary: monthlySalary,
+    hiredAt: hiredAt,
+    active: active,
+  );
 
   factory Worker.fromJson(Map<String, dynamic> j) => Worker(
     id: j['id'] as String,
     name: j['name'] as String,
     phone: j['phone'] as String? ?? '',
     jobTitle: j['jobTitle'] as String? ?? '',
+    nationalId: j['nationalId'] as String? ?? '',
+    photo: j['photo'] as String?,
     monthlySalary: (j['monthlySalary'] as num).toDouble(),
     hiredAt: parseDate(j['hiredAt']),
     active: j['active'] as bool? ?? true,
