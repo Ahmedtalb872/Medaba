@@ -92,7 +92,7 @@
 1. **SQL Editor ← New query**: الصق محتوى [`supabase/schema.sql`](supabase/schema.sql) واضغط **Run**.
 2. **Authentication ← Sign In / Providers**: أوقف **Allow new users to sign up**،
    حتى لا يستطيع أحد إنشاء حساب بنفسه.
-3. **Authentication ← Users ← Add user ← Create new user**: أدخل بريد المدير وكلمة مروره
+3. **Authentication ← Users ← Add user ← Create new user**: البريد `اسم-المستخدم@taiba.app` (مثل `36933636@taiba.app`) وكلمة المرور،
    وفعّل **Auto Confirm User**.
 
 عند أول دخول، إذا كانت قاعدة البيانات فارغة تُرفع إليها البيانات الموجودة على ذلك الجهاز.

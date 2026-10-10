@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:medaba/data/storage.dart';
 import 'package:medaba/data/synced_storage.dart';
 import 'package:medaba/models/models.dart';
+import 'package:medaba/screens/cloud_gate.dart';
 import 'package:medaba/state/app_state.dart';
 
 /// قاعدة بيانات وهمية يمكن قطع الاتصال بها.
@@ -147,5 +148,10 @@ void main() {
     );
     await s.flush();
     expect(remote.rows['workers']!.single['name'], 'عمر');
+  });
+
+  test('a username becomes the account email', () {
+    expect(loginEmail(' 36933636 '), '36933636@taiba.app');
+    expect(loginEmail('Boss@Example.com'), 'boss@example.com');
   });
 }

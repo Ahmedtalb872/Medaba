@@ -120,7 +120,16 @@ class _CloudGateState extends State<CloudGate> {
   }
 }
 
-/// تسجيل الدخول بالبريد وكلمة المرور (الحسابات يضيفها المدير من Supabase).
+/// نطاق البريد الذي يُكمل به اسم المستخدم (حسابات Supabase تحتاج بريداً).
+const loginDomain = 'taiba.app';
+
+/// اسم المستخدم «36933636» يصبح «36933636@taiba.app»؛ والبريد الكامل يبقى كما هو.
+String loginEmail(String username) {
+  final u = username.trim().toLowerCase();
+  return u.contains('@') ? u : '$u@$loginDomain';
+}
+
+/// تسجيل الدخول باسم المستخدم وكلمة المرور (الحسابات يضيفها المدير من Supabase).
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -151,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     try {
       await Supabase.instance.client.auth.signInWithPassword(
-        email: _email.text.trim(),
+        email: loginEmail(_email.text),
         password: _password.text,
       );
     } on AuthException catch (e) {
@@ -168,7 +177,9 @@ class _LoginScreenState extends State<LoginScreen> {
       return 'تعذّر الاتصال بالخادم، تحقق من الإنترنت';
     }
     final m = e.message.toLowerCase();
-    if (m.contains('invalid login')) return 'البريد أو كلمة المرور غير صحيحة';
+    if (m.contains('invalid login')) {
+      return 'اسم المستخدم أو كلمة المرور غير صحيحة';
+    }
     if (m.contains('not confirmed')) return 'الحساب لم يُفعَّل بعد';
     return 'تعذّر تسجيل الدخول: ${e.message}';
   }
@@ -207,16 +218,15 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 24),
                         TextFormField(
                           controller: _email,
-                          keyboardType: TextInputType.emailAddress,
                           textDirection: TextDirection.ltr,
-                          autofillHints: const [AutofillHints.email],
+                          autofillHints: const [AutofillHints.username],
                           decoration: const InputDecoration(
-                            labelText: 'البريد الإلكتروني',
-                            prefixIcon: Icon(Icons.email_outlined),
+                            labelText: 'اسم المستخدم',
+                            prefixIcon: Icon(Icons.person_outline),
                           ),
-                          validator: (v) => (v ?? '').contains('@')
-                              ? null
-                              : 'اكتب بريداً صحيحاً',
+                          validator: (v) => (v ?? '').trim().isEmpty
+                              ? 'اكتب اسم المستخدم'
+                              : null,
                         ),
                         const SizedBox(height: 14),
                         TextFormField(
