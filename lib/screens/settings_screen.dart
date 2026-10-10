@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../data/cloud.dart';
 import '../models/invoice.dart';
 import '../state/app_state.dart';
 import '../widgets/common.dart';
@@ -36,18 +37,21 @@ class SettingsScreen extends StatelessWidget {
         Card(
           child: Column(
             children: [
-              ListTile(
-                leading: const Icon(Icons.auto_awesome_outlined),
-                title: const Text('تحميل بيانات تجريبية'),
-                subtitle: const Text(
-                  'يضيف شركاء وعمالاً ومخازن وأصنافاً وفواتير ومعاملات لآخر 6 أشهر للعرض',
+              // البيانات التجريبية لا تُضاف إلى قاعدة بيانات المؤسسة الحقيقية.
+              if (cloudSync.value == null) ...[
+                ListTile(
+                  leading: const Icon(Icons.auto_awesome_outlined),
+                  title: const Text('تحميل بيانات تجريبية'),
+                  subtitle: const Text(
+                    'يضيف شركاء وعمالاً ومخازن وأصنافاً وفواتير ومعاملات لآخر 6 أشهر للعرض',
+                  ),
+                  onTap: () async {
+                    await s.seedDemoData();
+                    done('تمت إضافة البيانات التجريبية');
+                  },
                 ),
-                onTap: () async {
-                  await s.seedDemoData();
-                  done('تمت إضافة البيانات التجريبية');
-                },
-              ),
-              const Divider(height: 1),
+                const Divider(height: 1),
+              ],
               ListTile(
                 leading: Icon(
                   Icons.delete_forever_outlined,

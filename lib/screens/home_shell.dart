@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../data/cloud.dart';
+import '../data/synced_storage.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
@@ -107,7 +109,14 @@ class _HomeShellState extends State<HomeShell> {
             icon: const Icon(Icons.search),
             onPressed: () => _openSearch(context, '', _go),
           ),
+          const SyncIndicator(light: true),
           _Bell(onNavigate: _go, light: true),
+          if (cloudSignOut != null)
+            IconButton(
+              tooltip: 'تسجيل الخروج',
+              icon: const Icon(Icons.logout),
+              onPressed: () => cloudSignOut?.call(),
+            ),
           const SizedBox(width: 8),
         ],
       ),
@@ -266,6 +275,39 @@ class _NavItem extends StatelessWidget {
   }
 }
 
+/// قيمة عنصر «تسجيل الخروج» في قائمة المستخدم.
+const _logout = -1;
+
+/// أيقونة حالة الحفظ في قاعدة البيانات؛ لا تظهر عند الحفظ على الجهاز فقط.
+class SyncIndicator extends StatelessWidget {
+  final bool light;
+  const SyncIndicator({super.key, this.light = false});
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<SyncStatus?>(
+    valueListenable: cloudSync,
+    builder: (context, status, _) {
+      if (status == null) return const SizedBox.shrink();
+      final (icon, color) = switch (status) {
+        SyncStatus.synced => (Icons.cloud_done_outlined, AppColors.income.last),
+        SyncStatus.syncing => (Icons.cloud_upload_outlined, AppColors.gold),
+        SyncStatus.offline => (
+          Icons.cloud_off_outlined,
+          AppColors.expense.last,
+        ),
+      };
+      return Tooltip(
+        message: status.label,
+        child: Icon(
+          icon,
+          color: light && status == SyncStatus.synced ? Colors.white : color,
+          size: 28,
+        ),
+      );
+    },
+  );
+}
+
 /// الشريط العلوي: المستخدم، التنبيهات، والبحث العام.
 class _TopBar extends StatefulWidget {
   final ValueChanged<int> onNavigate;
@@ -297,9 +339,10 @@ class _TopBarState extends State<_TopBar> {
           PopupMenuButton<int>(
             tooltip: 'الحساب',
             position: PopupMenuPosition.under,
-            onSelected: widget.onNavigate,
-            itemBuilder: (_) => const [
-              PopupMenuItem(
+            onSelected: (v) =>
+                v == _logout ? cloudSignOut?.call() : widget.onNavigate(v),
+            itemBuilder: (_) => [
+              const PopupMenuItem(
                 value: ShellPage.settings,
                 child: Row(
                   children: [
@@ -309,6 +352,17 @@ class _TopBarState extends State<_TopBar> {
                   ],
                 ),
               ),
+              if (cloudSignOut != null)
+                const PopupMenuItem(
+                  value: _logout,
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout),
+                      SizedBox(width: 10),
+                      Text('تسجيل الخروج'),
+                    ],
+                  ),
+                ),
             ],
             child: Container(
               height: 64,
@@ -351,6 +405,8 @@ class _TopBarState extends State<_TopBar> {
           ),
           const SizedBox(width: 14),
           _Bell(onNavigate: widget.onNavigate),
+          const SizedBox(width: 14),
+          const SyncIndicator(),
           const Spacer(),
           Flexible(
             flex: 3,

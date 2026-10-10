@@ -69,6 +69,20 @@ class AppState extends ChangeNotifier {
   static const _kDebts = 'debts';
   static const _kShipments = 'shipments';
 
+  /// كل مفاتيح التخزين، لمزامنتها مع قاعدة البيانات.
+  static const storageKeys = [
+    _kPartners,
+    _kWorkers,
+    _kTx,
+    _kWarehouses,
+    _kProducts,
+    _kMoves,
+    _kInvoices,
+    _kCompany,
+    _kDebts,
+    _kShipments,
+  ];
+
   final Storage _storage;
   AppState(this._storage);
 

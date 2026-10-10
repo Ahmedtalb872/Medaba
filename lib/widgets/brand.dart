@@ -13,16 +13,22 @@ class BrandLogo extends StatelessWidget {
   final bool onDark;
   final double size;
   final bool showRest;
+
+  /// اسم المؤسسة؛ إن لم يُمرَّر يؤخذ من بيانات التطبيق.
+  final String? name;
   const BrandLogo({
     super.key,
     this.onDark = false,
     this.size = 40,
     this.showRest = true,
+    this.name,
   });
 
   @override
   Widget build(BuildContext context) {
-    final name = context.select<AppState, String>((s) => s.company.name).trim();
+    final name =
+        (this.name ?? context.select<AppState, String>((s) => s.company.name))
+            .trim();
     final space = name.indexOf(' ');
     final first = space < 0 ? name : name.substring(0, space);
     final rest = space < 0 || !showRest ? '' : name.substring(space + 1);

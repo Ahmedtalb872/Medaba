@@ -43,6 +43,7 @@ dependencies:
   printing: ^5.15.1
   file_picker: ^13.1.0
   image: ^4.10.1
+  supabase_flutter: ^2.18.2
 
 dev_dependencies:
   flutter_test:
