@@ -79,6 +79,8 @@ class _HomeShellState extends State<HomeShell> {
       return Scaffold(
         body: Row(
           children: [
+            // أول عنصر في الصف يكون يميناً بالعربية: القائمة تبدأ من اليمين.
+            _Sidebar(index: _index, onSelect: _go),
             Expanded(
               child: Column(
                 children: [
@@ -87,8 +89,6 @@ class _HomeShellState extends State<HomeShell> {
                 ],
               ),
             ),
-            // القائمة في الجهة اليسرى كما في التصميم.
-            _Sidebar(index: _index, onSelect: _go),
           ],
         ),
       );
@@ -147,33 +147,50 @@ class _Sidebar extends StatelessWidget {
         ),
       ),
       child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 26, 16, 26),
-              child: Center(
-                child: FittedBox(
-                  child: BrandLogo(onDark: true, size: 52, showRest: false),
-                ),
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                children: [
-                  for (final (i, d) in _dests.indexed)
-                    _NavItem(
-                      dest: d,
-                      label: _label(context, i),
-                      selected: i == index,
-                      onTap: () => onSelect(i),
+        child: LayoutBuilder(
+          builder: (context, c) {
+            // على الشاشات القصيرة (مثل MacBook Air) نصغّر الشعار والأزرار
+            // حتى تظهر كل الصفحات دون تمرير.
+            final compact = c.maxHeight < 790;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    16,
+                    compact ? 12 : 26,
+                    16,
+                    compact ? 10 : 26,
+                  ),
+                  child: Center(
+                    child: FittedBox(
+                      child: BrandLogo(
+                        onDark: true,
+                        size: compact ? 38 : 52,
+                        showRest: false,
+                      ),
                     ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
+                  ),
+                ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    children: [
+                      for (final (i, d) in _dests.indexed)
+                        _NavItem(
+                          dest: d,
+                          label: _label(context, i),
+                          selected: i == index,
+                          compact: compact,
+                          onTap: () => onSelect(i),
+                        ),
+                    ],
+                  ),
+                ),
+                SizedBox(height: compact ? 8 : 16),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -184,18 +201,20 @@ class _NavItem extends StatelessWidget {
   final _Dest dest;
   final String label;
   final bool selected;
+  final bool compact;
   final VoidCallback onTap;
   const _NavItem({
     required this.dest,
     required this.label,
     required this.selected,
+    this.compact = false,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.symmetric(vertical: compact ? 2 : 4),
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(16),
@@ -203,7 +222,10 @@ class _NavItem extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           child: Ink(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+            padding: EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: compact ? 10 : 15,
+            ),
             decoration: selected
                 ? BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
@@ -223,14 +245,14 @@ class _NavItem extends StatelessWidget {
                 : null,
             child: Row(
               children: [
-                Icon(dest.icon, color: Colors.white, size: 26),
+                Icon(dest.icon, color: Colors.white, size: compact ? 23 : 26),
                 const SizedBox(width: 18),
                 Expanded(
                   child: Text(
                     label,
                     style: TextStyle(
                       color: Colors.white,
-                      fontSize: 17,
+                      fontSize: compact ? 16 : 17,
                       fontWeight: selected ? FontWeight.bold : FontWeight.w500,
                     ),
                   ),
