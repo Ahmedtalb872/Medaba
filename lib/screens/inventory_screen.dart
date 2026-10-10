@@ -22,12 +22,17 @@ class InventoryScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 12, 20, 0),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
             child: PageHeader(
-              title: 'المخزون',
+              title: context.select<AppState, String>(
+                (s) => s.company.inventoryLabel,
+              ),
               icon: Icons.warehouse_outlined,
               subtitle: 'أرصدة الأصناف وحركات الوارد والصادر والتحويل',
+              secondaryLabel: 'تغيير الاسم',
+              secondaryIcon: Icons.edit_outlined,
+              onSecondary: () => showRenameInventory(context),
             ),
           ),
           const TabBar(
@@ -392,6 +397,38 @@ void _invoiceMoveNotice(BuildContext context, AppState s, StockMove m) =>
       'هذه الحركة جزء من ${s.invoiceById(m.invoiceId)?.number ?? 'فاتورة'}؛ '
       'عدّلها أو احذفها من شاشة الفواتير',
     );
+
+/// يطلب اسماً جديداً لقسم المخزون (مثل «المستودع») ويحفظه.
+Future<void> showRenameInventory(BuildContext context) async {
+  final s = context.read<AppState>();
+  final controller = TextEditingController(text: s.company.inventoryLabel);
+  final name = await showDialog<String>(
+    context: context,
+    builder: (dialog) => AlertDialog(
+      title: const Text('اسم قسم المخزون'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        decoration: const InputDecoration(
+          labelText: 'الاسم',
+          helperText: 'مثل: المخزون، المستودع، المخزن',
+        ),
+        onSubmitted: (v) => Navigator.pop(dialog, v),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialog),
+          child: const Text('إلغاء'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialog, controller.text),
+          child: const Text('حفظ'),
+        ),
+      ],
+    ),
+  );
+  if (name != null) await s.renameInventory(name);
+}
 
 Future<void> showMoveForm(BuildContext context, {StockMove? existing}) async {
   final s = context.read<AppState>();

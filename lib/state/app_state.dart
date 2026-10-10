@@ -674,6 +674,16 @@ class AppState extends ChangeNotifier {
     await Future.wait([_saveInvoices(), _saveMoves(), _saveTx(), _saveDebts()]);
   }
 
+  /// يغيّر اسم قسم المخزون؛ الاسم الفارغ يعيده إلى «المخزون».
+  Future<void> renameInventory(String label) {
+    final l = label.trim();
+    return saveCompany(
+      _company.copyWith(
+        inventoryLabel: l.isEmpty ? CompanyInfo.defaultInventoryLabel : l,
+      ),
+    );
+  }
+
   Future<void> saveCompany(CompanyInfo c) async {
     _company = c;
     notifyListeners();

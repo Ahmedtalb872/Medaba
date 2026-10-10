@@ -77,6 +77,35 @@ void main() {
     );
   });
 
+  testWidgets('the inventory section can be renamed', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('المخزون').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('تغيير الاسم'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'المستودع');
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+
+    expect(state.company.inventoryLabel, 'المستودع');
+    // في القائمة الجانبية وعنوان الصفحة.
+    expect(find.text('المستودع'), findsNWidgets(2));
+
+    // الاسم يبقى بعد حفظ بيانات المنشأة، والاسم الفارغ يعيد الافتراضي.
+    final back = CompanyInfo.fromJson(state.company.toJson());
+    expect(back.inventoryLabel, 'المستودع');
+    await state.renameInventory('  ');
+    expect(state.company.inventoryLabel, CompanyInfo.defaultInventoryLabel);
+  });
+
   testWidgets('inventory tabs and new stock movement form', (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;

@@ -158,6 +158,9 @@ class CompanyInfo {
   final String ownerName;
   final String ownerRole;
 
+  /// اسم قسم المخزون كما يريده المدير (يظهر في القائمة وعنوان الصفحة).
+  final String inventoryLabel;
+
   /// حسابات الدفع التي تظهر أسفل فواتير البيع.
   final List<PaymentAccount> paymentAccounts;
 
@@ -173,6 +176,7 @@ class CompanyInfo {
   static const defaultAddress = 'انواكشوط - تفرغ زينة';
   static const defaultOwnerName = 'أحمد طالب';
   static const defaultOwnerRole = 'مدير النظام';
+  static const defaultInventoryLabel = 'المخزون';
 
   /// أسماء وعناوين مؤقتة من النسخ السابقة تُستبدل ببيانات المؤسسة.
   static const _oldNames = {'مدبّر', 'مؤسسة مدبّر لمواد البناء'};
@@ -190,8 +194,19 @@ class CompanyInfo {
     this.address = defaultAddress,
     this.ownerName = defaultOwnerName,
     this.ownerRole = defaultOwnerRole,
+    this.inventoryLabel = defaultInventoryLabel,
     this.paymentAccounts = defaultPaymentAccounts,
   });
+
+  CompanyInfo copyWith({String? inventoryLabel}) => CompanyInfo(
+    name: name,
+    phone: phone,
+    address: address,
+    ownerName: ownerName,
+    ownerRole: ownerRole,
+    inventoryLabel: inventoryLabel ?? this.inventoryLabel,
+    paymentAccounts: paymentAccounts,
+  );
 
   Map<String, dynamic> toJson() => {
     'name': name,
@@ -199,6 +214,7 @@ class CompanyInfo {
     'address': address,
     'ownerName': ownerName,
     'ownerRole': ownerRole,
+    'inventoryLabel': inventoryLabel,
     'paymentAccounts': [for (final a in paymentAccounts) a.toJson()],
   };
 
@@ -217,6 +233,10 @@ class CompanyInfo {
     },
     ownerName: j['ownerName'] as String? ?? defaultOwnerName,
     ownerRole: j['ownerRole'] as String? ?? defaultOwnerRole,
+    inventoryLabel: switch ((j['inventoryLabel'] as String?)?.trim()) {
+      final l? when l.isNotEmpty => l,
+      _ => defaultInventoryLabel,
+    },
     // البيانات المحفوظة قبل إضافة الحسابات تأخذ الحسابات الافتراضية.
     paymentAccounts: j['paymentAccounts'] == null
         ? defaultPaymentAccounts

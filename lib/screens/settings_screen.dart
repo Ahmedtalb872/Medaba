@@ -80,6 +80,7 @@ Future<void> _editCompany(BuildContext context, AppState s) {
   final address = TextEditingController(text: c.address);
   final owner = TextEditingController(text: c.ownerName);
   final role = TextEditingController(text: c.ownerRole);
+  final inventory = TextEditingController(text: c.inventoryLabel);
   final accounts = [
     for (final a in c.paymentAccounts)
       (
@@ -114,6 +115,14 @@ Future<void> _editCompany(BuildContext context, AppState s) {
       TextFormField(
         controller: role,
         decoration: const InputDecoration(labelText: 'الصفة'),
+      ),
+      TextFormField(
+        controller: inventory,
+        decoration: const InputDecoration(
+          labelText: 'اسم قسم المخزون',
+          helperText: 'مثل: المخزون، المستودع، المخزن',
+        ),
+        validator: requiredText,
       ),
       const Text(
         'حسابات الدفع (تظهر أسفل فواتير البيع)',
@@ -170,6 +179,7 @@ Future<void> _editCompany(BuildContext context, AppState s) {
         address: address.text.trim(),
         ownerName: owner.text.trim(),
         ownerRole: role.text.trim(),
+        inventoryLabel: inventory.text.trim(),
         paymentAccounts: [
           for (final a in accounts)
             PaymentAccount(a.name.text.trim(), a.number.text.trim()),

@@ -38,6 +38,11 @@ const _dests = [
   _Dest('الإعدادات', Icons.settings_outlined, SettingsScreen()),
 ];
 
+/// اسم الصفحة في القائمة؛ المخزون يحمل الاسم الذي اختاره المدير.
+String _label(BuildContext context, int i) => i == ShellPage.inventory
+    ? context.select<AppState, String>((s) => s.company.inventoryLabel)
+    : _dests[i].label;
+
 /// خلفية بيضاء بحواف دائرية وظل خفيف لعناصر الشريط العلوي.
 BoxDecoration _panel(BuildContext context) {
   final cs = Theme.of(context).colorScheme;
@@ -91,7 +96,7 @@ class _HomeShellState extends State<HomeShell> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_dests[_index].label),
+        title: Text(_label(context, _index)),
         foregroundColor: Colors.white,
         flexibleSpace: Container(
           decoration: const BoxDecoration(color: AppColors.navBackground),
@@ -160,6 +165,7 @@ class _Sidebar extends StatelessWidget {
                   for (final (i, d) in _dests.indexed)
                     _NavItem(
                       dest: d,
+                      label: _label(context, i),
                       selected: i == index,
                       onTap: () => onSelect(i),
                     ),
@@ -176,10 +182,12 @@ class _Sidebar extends StatelessWidget {
 
 class _NavItem extends StatelessWidget {
   final _Dest dest;
+  final String label;
   final bool selected;
   final VoidCallback onTap;
   const _NavItem({
     required this.dest,
+    required this.label,
     required this.selected,
     required this.onTap,
   });
@@ -219,7 +227,7 @@ class _NavItem extends StatelessWidget {
                 const SizedBox(width: 18),
                 Expanded(
                   child: Text(
-                    dest.label,
+                    label,
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 17,
