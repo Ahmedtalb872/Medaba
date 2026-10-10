@@ -1,28 +1,32 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 
-/// شعار المؤسسة: عربة تسوق ذهبية بورقة، والاسم بخط عريض.
+/// شعار المؤسسة: سنابل قمح ذهبية بجانب اسم المؤسسة.
 ///
-/// الكلمة الأولى من اسم المؤسسة تُكتب كبيرة وبقية الاسم تحتها،
+/// الكلمة الأولى من اسم المؤسسة تُكتب كبيرة، وبقية الاسم تحتها عند [showRest]،
 /// فيتغير الشعار تلقائياً إذا غُيّر الاسم من الإعدادات.
 class BrandLogo extends StatelessWidget {
-  /// على خلفية داكنة (القائمة الجانبية) يكون الاسم أبيض.
+  /// على خلفية داكنة (القائمة الجانبية) يكون الاسم ذهبياً.
   final bool onDark;
   final double size;
-  const BrandLogo({super.key, this.onDark = false, this.size = 40});
+  final bool showRest;
+  const BrandLogo({
+    super.key,
+    this.onDark = false,
+    this.size = 40,
+    this.showRest = true,
+  });
 
   @override
   Widget build(BuildContext context) {
     final name = context.select<AppState, String>((s) => s.company.name).trim();
     final space = name.indexOf(' ');
     final first = space < 0 ? name : name.substring(0, space);
-    final rest = space < 0 ? '' : name.substring(space + 1);
-    final color = onDark ? Colors.white : AppColors.brand;
+    final rest = space < 0 || !showRest ? '' : name.substring(space + 1);
+    final color = onDark ? AppColors.navAccent : AppColors.brand;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -43,7 +47,7 @@ class BrandLogo extends StatelessWidget {
               Text(
                 rest,
                 style: TextStyle(
-                  color: color,
+                  color: onDark ? Colors.white : color,
                   fontSize: size * 0.4,
                   fontWeight: FontWeight.bold,
                   height: 1.0,
@@ -52,40 +56,91 @@ class BrandLogo extends StatelessWidget {
             ],
           ],
         ),
-        SizedBox(width: size * 0.15),
-        _CartMark(size: size * 1.5),
+        SizedBox(width: size * 0.2),
+        WheatMark(size: size * 1.4),
       ],
     );
   }
 }
 
-/// عربة التسوق بورقة نبات: رمز «طيبة».
-class _CartMark extends StatelessWidget {
+/// سنبلتا قمح ذهبيتان: رمز «طيبة».
+class WheatMark extends StatelessWidget {
   final double size;
-  const _CartMark({required this.size});
+  const WheatMark({super.key, required this.size});
 
   @override
   Widget build(BuildContext context) => SizedBox(
-    width: size,
+    width: size * 0.7,
     height: size,
-    child: Stack(
-      children: [
-        Icon(Icons.shopping_cart_outlined, size: size, color: AppColors.gold),
-        PositionedDirectional(
-          top: size * 0.12,
-          start: size * 0.34,
-          child: Transform.rotate(
-            angle: -math.pi / 8,
-            child: Icon(
-              Icons.eco,
-              size: size * 0.42,
-              color: const Color(0xFFD9A43A),
-            ),
-          ),
-        ),
-      ],
-    ),
+    child: CustomPaint(painter: _WheatPainter()),
   );
+}
+
+class _WheatPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final paint = Paint()
+      ..shader = const LinearGradient(
+        colors: [Color(0xFFF6D77A), Color(0xFFC98A1C)],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+      ).createShader(Offset.zero & size);
+    final stroke = Paint()
+      ..shader = paint.shader
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = w * 0.06;
+
+    // سنبلة: ساق منحنية تتوزع عليها حبات على الجانبين.
+    void stalk(Offset base, Offset top, double lean, int grains) {
+      final ctrl = Offset(
+        (base.dx + top.dx) / 2 + lean,
+        (base.dy + top.dy) / 2,
+      );
+      final path = Path()
+        ..moveTo(base.dx, base.dy)
+        ..quadraticBezierTo(ctrl.dx, ctrl.dy, top.dx, top.dy);
+      canvas.drawPath(path, stroke);
+      final metric = path.computeMetrics().first;
+      for (var i = 0; i < grains; i++) {
+        final t = metric.length * (0.42 + i * 0.58 / grains);
+        final tan = metric.getTangentForOffset(t)!;
+        final angle = tan.angle;
+        for (final side in [-1.0, 1.0]) {
+          canvas.save();
+          canvas.translate(tan.position.dx, tan.position.dy);
+          canvas.rotate(-angle + side * 0.55);
+          canvas.drawOval(
+            Rect.fromCenter(
+              center: Offset(0, -w * 0.09 * side),
+              width: w * 0.15,
+              height: w * 0.3,
+            ).shift(Offset(-w * 0.02, 0)),
+            paint,
+          );
+          canvas.restore();
+        }
+      }
+      canvas.drawOval(
+        Rect.fromCenter(center: top, width: w * 0.12, height: w * 0.24),
+        paint,
+      );
+    }
+
+    stalk(Offset(w * 0.45, h), Offset(w * 0.62, h * 0.05), -w * 0.1, 4);
+    stalk(Offset(w * 0.4, h), Offset(w * 0.18, h * 0.3), w * 0.12, 3);
+    // ورقة طويلة تلتف حول الساقين.
+    final leaf = Path()
+      ..moveTo(w * 0.42, h)
+      ..quadraticBezierTo(w * 1.0, h * 0.75, w * 0.95, h * 0.35)
+      ..quadraticBezierTo(w * 0.8, h * 0.75, w * 0.42, h)
+      ..close();
+    canvas.drawPath(leaf, paint);
+  }
+
+  @override
+  bool shouldRepaint(_WheatPainter old) => false;
 }
 
 /// خلفية لافتة الصفحة: موجة خضراء بحافة ذهبية في الجهة اليسرى (بالعربية)،
@@ -105,10 +160,11 @@ class BannerArt extends StatelessWidget {
             mirror: Directionality.of(context) == TextDirection.ltr,
           ),
         ),
-        const Align(
-          alignment: AlignmentDirectional.centerEnd,
-          child: Padding(
-            padding: EdgeInsetsDirectional.only(end: 24, top: 12),
+        const Padding(
+          padding: EdgeInsetsDirectional.only(end: 16, top: 12),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: AlignmentDirectional.bottomEnd,
             child: _Boxes(),
           ),
         ),
@@ -169,100 +225,79 @@ class _WavePainter extends CustomPainter {
   bool shouldRepaint(_WavePainter old) => old.mirror != mirror;
 }
 
-/// صناديق كرتونية وحافظة فواتير وقارئ باركود مرسومة بالأشكال.
+/// كومة صناديق كرتونية ونبتة، مرسومة بالأشكال.
 class _Boxes extends StatelessWidget {
   const _Boxes();
 
-  Widget _box(double size, Color color) => Container(
-    width: size,
-    height: size * 0.8,
+  Widget _box(double w, double h, Color color) => Container(
+    width: w,
+    height: h,
     decoration: BoxDecoration(
-      color: color,
-      borderRadius: BorderRadius.circular(6),
+      gradient: LinearGradient(
+        colors: [Color.lerp(color, Colors.white, 0.18)!, color],
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+      ),
+      borderRadius: BorderRadius.circular(3),
+      border: Border.all(color: const Color(0x33000000), width: 0.6),
       boxShadow: const [
         BoxShadow(
-          color: Color(0x44000000),
-          blurRadius: 6,
+          color: Color(0x40000000),
+          blurRadius: 5,
           offset: Offset(0, 3),
         ),
       ],
     ),
-    child: Center(
+    child: Align(
+      alignment: Alignment.topCenter,
       child: Container(
-        width: size * 0.16,
-        height: size * 0.8,
-        color: const Color(0x22000000),
+        width: w * 0.16,
+        height: h * 0.35,
+        color: const Color(0x26000000),
       ),
     ),
   );
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-    width: 270,
-    height: 140,
-    child: Stack(
-      children: [
-        PositionedDirectional(
-          end: 0,
-          bottom: 0,
-          child: _box(78, const Color(0xFFD9A066)),
-        ),
-        PositionedDirectional(
-          end: 10,
-          bottom: 60,
-          child: _box(60, const Color(0xFFE2B07A)),
-        ),
-        PositionedDirectional(
-          end: 82,
-          bottom: 0,
-          child: _box(66, const Color(0xFF1F6B4B)),
-        ),
-        PositionedDirectional(
-          end: 210,
-          bottom: 0,
-          child: _box(56, const Color(0xFFC98F55)),
-        ),
-        PositionedDirectional(
-          end: 130,
-          bottom: 0,
-          child: Container(
-            width: 78,
-            height: 112,
-            decoration: BoxDecoration(
-              color: const Color(0xFF2A7A57),
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x44000000),
-                  blurRadius: 8,
-                  offset: Offset(0, 4),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.all(7),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(5),
-              ),
-              child: const Icon(
-                Icons.receipt_long,
-                size: 46,
-                color: Color(0xFF9DB7A9),
-              ),
-            ),
+  Widget build(BuildContext context) {
+    const a = Color(0xFFCF9B5E), b = Color(0xFFDDAE72), c = Color(0xFFC48A4E);
+    // صفوف الكومة من الأسفل للأعلى: (المسافة من النهاية، الارتفاع من الأسفل، العرض، الارتفاع، اللون).
+    const boxes = [
+      (0.0, 0.0, 70.0, 64.0, a),
+      (72.0, 0.0, 78.0, 70.0, b),
+      (152.0, 0.0, 72.0, 62.0, c),
+      (226.0, 0.0, 64.0, 56.0, a),
+      (30.0, 64.0, 66.0, 54.0, c),
+      (98.0, 70.0, 74.0, 60.0, a),
+      (174.0, 62.0, 62.0, 52.0, b),
+      (70.0, 130.0, 64.0, 46.0, b),
+      (136.0, 120.0, 58.0, 48.0, c),
+    ];
+    return SizedBox(
+      width: 360,
+      height: 190,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // نبتة خلف الصناديق.
+          const PositionedDirectional(
+            end: 262,
+            bottom: 30,
+            child: Icon(Icons.eco, size: 110, color: Color(0xFF2E6B3F)),
           ),
-        ),
-        const PositionedDirectional(
-          end: 100,
-          bottom: 2,
-          child: Icon(
-            Icons.qr_code_scanner,
-            size: 36,
-            color: Color(0xFF1C1C1C),
+          const PositionedDirectional(
+            end: 290,
+            bottom: 70,
+            child: Icon(Icons.spa, size: 70, color: Color(0xFF3C8250)),
           ),
-        ),
-      ],
-    ),
-  );
+          for (final (end, bottom, w, h, color) in boxes)
+            PositionedDirectional(
+              end: end,
+              bottom: bottom,
+              child: _box(w, h, color),
+            ),
+        ],
+      ),
+    );
+  }
 }

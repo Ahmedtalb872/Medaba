@@ -1,271 +1,457 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/invoice.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
+import '../widgets/brand.dart';
 import '../widgets/common.dart';
-import 'transactions_screen.dart';
+import '../widgets/shell_nav.dart';
+import 'inventory_screen.dart';
+import 'invoices_screen.dart';
 
+/// الصفحة الرئيسية: ترحيب، اختصارات سريعة، ثلاثة أرقام، وآخر المعاملات.
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     final s = context.watch<AppState>();
-    final thisMonth = Period.month(DateTime.now());
-    final report = s.profitReport(thisMonth);
-    final last = s.profitReport(
-      Period.month(DateTime(thisMonth.start.year, thisMonth.start.month - 1)),
-    );
-    final recent = s.transactions.take(5).toList();
-    final lowStock = s.lowStockProducts;
-    final now = DateTime.now();
-    // شحنات تحتاج متابعة: متأخرة، أو تصل خلال أسبوع.
-    final shipments = s.activeShipments
-        .where((x) => x.isDelayed(now) || x.daysToArrival(now) <= 7)
-        .toList();
-
-    final chart = SectionCard(
-      title: 'الإيرادات والمصروفات (آخر 6 أشهر)',
-      icon: Icons.bar_chart,
-      child: IncomeExpenseChart(data: s.monthlySeries()),
-    );
-
-    final distribution = SectionCard(
-      title: 'توزيع أرباح هذا الشهر',
-      icon: Icons.pie_chart_outline,
-      child: report.partners.isEmpty
-          ? const EmptyState(message: 'أضف شركاء لعرض التوزيع')
-          : Column(
-              children: [
-                for (final e in report.partners)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 7),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(child: Text(e.name)),
-                            Text(
-                              fmt.money(e.amount),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        LinearProgressIndicator(
-                          value: (e.percent / 100).clamp(0, 1),
-                          minHeight: 6,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-    );
+    final month = Period.month(DateTime.now());
+    final sales = s.transactions
+        .where((t) => t.category == TxCategory.sales && month.contains(t.date))
+        .fold<double>(0, (a, t) => a + t.amount);
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: pagePadding,
       children: [
-        PageHeader(
-          title: 'مرحباً بك في لوحة التحكم',
-          icon: Icons.space_dashboard_outlined,
-          subtitle: 'ملخص أعمال شهر ${fmt.month(DateTime.now())}',
-          actionLabel: 'معاملة جديدة',
-          onAction: () => showTransactionForm(context),
-        ),
-        StatGrid(
+        const _Welcome(),
+        const SizedBox(height: 20),
+        _Grid(
           children: [
-            StatCard(
-              label: 'إيرادات الشهر',
-              value: fmt.money(report.income),
-              icon: Icons.trending_up,
-              colors: AppColors.income,
-              current: report.income,
-              previous: last.income,
+            _QuickAction(
+              title: 'إضافة منتج',
+              subtitle: 'إدخال منتج جديد',
+              icon: Icons.view_in_ar,
+              color: const Color(0xFF1E6FD9),
+              onTap: () => showProductForm(context),
             ),
-            StatCard(
-              label: 'مصروفات الشهر',
-              value: fmt.money(report.expenses),
-              icon: Icons.trending_down,
-              colors: AppColors.expense,
-              current: report.expenses,
-              previous: last.expenses,
-              upIsGood: false,
+            _QuickAction(
+              title: 'شراء جديد',
+              subtitle: 'إنشاء فاتورة شراء',
+              icon: Icons.inventory_2,
+              color: const Color(0xFFC07F12),
+              onTap: () => openInvoiceEditor(context, InvoiceType.purchase),
             ),
-            StatCard(
-              label: 'صافي ربح الشهر',
-              value: fmt.money(report.netProfit),
-              icon: Icons.account_balance_wallet_outlined,
-              colors: report.netProfit >= 0 ? AppColors.profit : AppColors.loss,
-              current: report.netProfit,
-              previous: last.netProfit,
-            ),
-            StatCard(
-              label: 'الرصيد النقدي',
-              value: fmt.money(s.cashBalance),
-              icon: Icons.savings_outlined,
-              colors: AppColors.cash,
+            _QuickAction(
+              title: 'بيع جديد',
+              subtitle: 'إنشاء فاتورة بيع',
+              icon: Icons.add_shopping_cart,
+              color: const Color(0xFF15803D),
+              onTap: () => openInvoiceEditor(context, InvoiceType.sale),
             ),
           ],
         ),
         const SizedBox(height: 16),
-        LayoutBuilder(
-          builder: (context, c) => c.maxWidth > 900
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 3, child: chart),
-                    const SizedBox(width: 12),
-                    Expanded(flex: 2, child: distribution),
-                  ],
-                )
-              : Column(
-                  children: [chart, const SizedBox(height: 12), distribution],
-                ),
+        _Grid(
+          children: [
+            _Total(
+              label: 'الرصيد المتوفر',
+              value: s.cashBalance,
+              hint: 'أوقية',
+              icon: Icons.savings,
+              color: const Color(0xFFC08A1E),
+            ),
+            _Total(
+              label: 'إجمالي المصروفات',
+              value: s.totalExpenses(month),
+              hint: 'أوقية • هذا الشهر',
+              icon: Icons.account_balance_wallet,
+              color: const Color(0xFFC0392B),
+            ),
+            _Total(
+              label: 'إجمالي المبيعات',
+              value: sales,
+              hint: 'أوقية • هذا الشهر',
+              icon: Icons.trending_up,
+              color: const Color(0xFF15803D),
+            ),
+          ],
         ),
-        if (lowStock.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          _AlertCard(
-            icon: Icons.warning_amber_rounded,
-            color: AppColors.expense.last,
-            title: 'أصناف قاربت على النفاد: ${lowStock.length}',
-            body: lowStock
-                .map((p) => '${p.name} (${fmt.number(s.stockOf(p.id))})')
-                .join('، '),
-          ),
-        ],
-        if (shipments.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          _AlertCard(
-            icon: Icons.directions_boat_outlined,
-            color: AppColors.capital.last,
-            title:
-                'شحنات بحرية تحتاج متابعة: ${shipments.length}'
-                '${s.delayedShipments(now) == 0 ? '' : ' (متأخرة: ${s.delayedShipments(now)})'}',
-            body: shipments
-                .map((x) => '${x.contents} - ${x.status.label}')
-                .join('، '),
-          ),
-        ],
         const SizedBox(height: 16),
-        SectionCard(
-          title: 'آخر المعاملات',
-          icon: Icons.receipt_long_outlined,
-          child: recent.isEmpty
-              ? const EmptyState(message: 'لا توجد معاملات بعد')
-              : Column(
-                  children: [
-                    for (final t in recent)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: _TxIcon(income: t.type == TxType.income),
-                        title: Text(t.note.isEmpty ? t.category.label : t.note),
-                        subtitle: Text(
-                          '${t.category.label} • ${fmt.date(t.date)}',
-                        ),
-                        trailing: Text(
-                          '${t.type == TxType.income ? '+' : '-'}${fmt.money(t.amount)}',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: t.type == TxType.income
-                                ? AppColors.income.last
-                                : AppColors.expense.last,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-        ),
+        _RecentTransactions(items: s.transactions.take(6).toList()),
       ],
     );
   }
 }
 
-/// تنبيه بخلفية ملونة خفيفة وشريط جانبي بلون التنبيه.
-class _AlertCard extends StatelessWidget {
+/// ثلاث بطاقات في صف على الشاشات العريضة، وتحت بعضها على الجوال.
+class _Grid extends StatelessWidget {
+  final List<Widget> children;
+  const _Grid({required this.children});
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, c) {
+      final cols = c.maxWidth > 760 ? 3 : 1;
+      const gap = 16.0;
+      final w = (c.maxWidth - gap * (cols - 1)) / cols;
+      return Wrap(
+        spacing: gap,
+        runSpacing: gap,
+        children: [for (final ch in children) SizedBox(width: w, child: ch)],
+      );
+    },
+  );
+}
+
+/// لافتة الترحيب باسم المستخدم مع رسم الصناديق.
+class _Welcome extends StatelessWidget {
+  const _Welcome();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.select<AppState, CompanyInfo>((s) => s.company);
+    final firstName = c.name.trim().split(' ').first;
+    final t = Theme.of(context).textTheme;
+    return LayoutBuilder(
+      builder: (context, box) {
+        final wide = box.maxWidth >= 760;
+        return Container(
+          clipBehavior: Clip.antiAlias,
+          constraints: BoxConstraints(minHeight: wide ? 210 : 0),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(22),
+            gradient: const LinearGradient(
+              colors: [Color(0xFFFFFCF6), Color(0xFFF8EEDB)],
+              begin: AlignmentDirectional.centerStart,
+              end: AlignmentDirectional.centerEnd,
+            ),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x12000000),
+                blurRadius: 18,
+                offset: Offset(0, 6),
+              ),
+            ],
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.all(wide ? 32 : 20),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'مرحباً بك ${c.ownerName}',
+                          style: (wide ? t.displaySmall : t.headlineSmall)
+                              ?.copyWith(fontWeight: FontWeight.w900),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(c.ownerRole, style: t.headlineSmall),
+                        Text('في لوحة تحكم $firstName', style: t.titleMedium),
+                        const SizedBox(height: 14),
+                        Container(
+                          width: 56,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: AppColors.gold,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (wide) BannerArt(width: box.maxWidth * 0.5),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// اختصار ملون بأيقونة كبيرة وسهم.
+class _QuickAction extends StatelessWidget {
+  final String title;
+  final String subtitle;
   final IconData icon;
   final Color color;
-  final String title;
-  final String body;
-  const _AlertCard({
+  final VoidCallback onTap;
+  const _QuickAction({
+    required this.title,
+    required this.subtitle,
     required this.icon,
     required this.color,
-    required this.title,
-    required this.body,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      decoration: BoxDecoration(
-        color: dark
-            ? Color.alphaBlend(
-                color.withValues(alpha: 0.14),
-                Theme.of(context).colorScheme.surfaceContainer,
-              )
-            : Color.alphaBlend(color.withValues(alpha: 0.07), Colors.white),
-        borderRadius: BorderRadius.circular(16),
-        border: BorderDirectional(start: BorderSide(color: color, width: 5)),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.14),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(icon, color: color),
+    final cs = Theme.of(context).colorScheme;
+    return Material(
+      color: Color.alphaBlend(color.withValues(alpha: 0.07), Colors.white),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: color.withValues(alpha: 0.14)),
           ),
-          const SizedBox(width: 12),
+          child: Row(
+            children: [
+              _IconTile(icon: icon, color: color, badge: true),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(color: cs.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: color.withValues(alpha: 0.14),
+                child: Icon(Icons.chevron_left, color: color),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// مربع أيقونة ملون، مع علامة «+» صغيرة عند [badge].
+class _IconTile extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final bool badge;
+  const _IconTile({
+    required this.icon,
+    required this.color,
+    this.badge = false,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 80,
+    height: 80,
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(18),
+    ),
+    child: Stack(
+      alignment: Alignment.center,
+      children: [
+        Icon(icon, color: color, size: 44),
+        if (badge)
+          PositionedDirectional(
+            end: 12,
+            bottom: 12,
+            child: Container(
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: const Icon(Icons.add, color: Colors.white, size: 16),
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
+/// رقم إجمالي كبير بلون البطاقة.
+class _Total extends StatelessWidget {
+  final String label;
+  final double value;
+  final String hint;
+  final IconData icon;
+  final Color color;
+  const _Total({
+    required this.label,
+    required this.value,
+    required this.hint,
+    required this.icon,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(color.withValues(alpha: 0.05), Colors.white),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.12)),
+      ),
+      child: Row(
+        children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  title,
-                  style: TextStyle(color: color, fontWeight: FontWeight.bold),
+                  label,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                const SizedBox(height: 4),
-                Text(body),
+                const SizedBox(height: 6),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    fmt.number(value),
+                    style: const TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                Text(hint, style: TextStyle(color: cs.onSurfaceVariant)),
               ],
             ),
           ),
+          _IconTile(icon: icon, color: color),
         ],
       ),
     );
   }
 }
 
-class _TxIcon extends StatelessWidget {
-  final bool income;
-  const _TxIcon({required this.income});
+/// جدول آخر المعاملات مع زر «عرض الكل».
+class _RecentTransactions extends StatelessWidget {
+  final List<Transaction> items;
+  const _RecentTransactions({required this.items});
+
+  static (Color, Color) _tone(TxCategory c) => switch (c) {
+    TxCategory.sales || TxCategory.otherIncome => (
+      const Color(0xFF15803D),
+      const Color(0xFFE3F5E9),
+    ),
+    TxCategory.supplies => (const Color(0xFFB7791F), const Color(0xFFFFF3D6)),
+    _ => (const Color(0xFFC0392B), const Color(0xFFFDE8E6)),
+  };
 
   @override
   Widget build(BuildContext context) {
-    final color = income ? AppColors.income.last : AppColors.expense.last;
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(
-        income ? Icons.south_west : Icons.north_east,
-        color: color,
-        size: 20,
+    final cs = Theme.of(context).colorScheme;
+    final head = TextStyle(color: cs.onSurfaceVariant, fontSize: 15);
+    Widget row(List<Widget> cells, {Color? color, bool line = true}) =>
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: color == null ? null : BorderRadius.circular(12),
+            border: line && color == null
+                ? Border(bottom: BorderSide(color: cs.outlineVariant))
+                : null,
+          ),
+          child: Row(
+            children: [
+              for (final (i, c) in cells.indexed)
+                Expanded(
+                  flex: i == 1 ? 3 : 2,
+                  child: Align(alignment: Alignment.center, child: c),
+                ),
+            ],
+          ),
+        );
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.receipt_long_outlined),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'آخر المعاملات',
+                    style: Theme.of(context).textTheme.titleLarge
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () =>
+                      ShellNav.maybeOf(context)?.go(ShellPage.transactions),
+                  icon: const Text('عرض الكل'),
+                  label: const Icon(Icons.chevron_left),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            if (items.isEmpty)
+              const EmptyState(message: 'لا توجد معاملات بعد')
+            else ...[
+              row([
+                Text('التاريخ', style: head),
+                Text('الوصف', style: head),
+                Text('النوع', style: head),
+                Text('المبلغ', style: head),
+              ], color: const Color(0xFFF1F3F5)),
+              for (final (i, t) in items.indexed)
+                row(line: i < items.length - 1, [
+                  Text(fmt.date(t.date)),
+                  Text(
+                    t.note.isEmpty ? t.category.label : t.note,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _tone(t.category).$2,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      t.category.label,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: _tone(t.category).$1),
+                    ),
+                  ),
+                  Text(
+                    fmt.money(t.amount),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ]),
+            ],
+          ],
+        ),
       ),
     );
   }

@@ -24,17 +24,17 @@ void main() {
       await tester.pumpWidget(MedabaApp(state: state));
       await tester.pumpAndSettle();
 
-      expect(find.text('لوحة التحكم'), findsWidgets);
+      expect(find.text('الرئيسية'), findsWidgets);
 
       for (final label in [
         'الشركاء',
         'العمال',
-        'المخازن',
+        'المخزون',
         'الفواتير',
         'الديون',
         'الشحنات البحرية',
         'المعاملات',
-        'توزيع الأرباح',
+        'التقارير والأرباح',
         'الإعدادات',
       ]) {
         if (size.width < 900) {
@@ -62,7 +62,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text(CompanyInfo.defaultOwnerName), findsOneWidget);
-    expect(find.text('إجمالي الأرباح'), findsOneWidget);
+    expect(
+      find.text('مرحباً بك ${CompanyInfo.defaultOwnerName}'),
+      findsOneWidget,
+    );
 
     final invoice = state.invoices.first;
     await tester.enterText(find.byType(TextField).first, invoice.partyName);
@@ -85,7 +88,7 @@ void main() {
     await tester.pumpWidget(MedabaApp(state: state));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('المخازن').first);
+    await tester.tap(find.text('المخزون').first);
     await tester.pumpAndSettle();
     for (final tab in ['الحركات', 'الأصناف', 'المخزون']) {
       await tester.tap(find.widgetWithText(Tab, tab));

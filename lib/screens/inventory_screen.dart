@@ -23,9 +23,9 @@ class InventoryScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 0),
+            padding: EdgeInsets.fromLTRB(20, 12, 20, 0),
             child: PageHeader(
-              title: 'المخازن',
+              title: 'المخزون',
               icon: Icons.warehouse_outlined,
               subtitle: 'أرصدة الأصناف وحركات الوارد والصادر والتحويل',
             ),
@@ -124,7 +124,7 @@ class _StockTabState extends State<_StockTab> {
     final shown = rows.where((r) => matches(r, _filter)).toList();
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: pagePadding,
       children: [
         _Actions(
           children: [
@@ -302,7 +302,7 @@ class _MovesTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.watch<AppState>();
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: pagePadding,
       children: [
         _Actions(
           children: [
@@ -552,7 +552,7 @@ class _ProductsTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.watch<AppState>();
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: pagePadding,
       children: [
         _Actions(
           children: [
@@ -717,7 +717,7 @@ class _WarehousesTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = context.watch<AppState>();
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: pagePadding,
       children: [
         _Actions(
           children: [

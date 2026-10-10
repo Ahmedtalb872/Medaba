@@ -16,7 +16,7 @@ class SettingsScreen extends StatelessWidget {
             .showSnackBar(SnackBar(content: Text(msg)));
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: pagePadding,
       children: [
         const PageHeader(
           title: 'الإعدادات',

@@ -74,11 +74,11 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     }).toList();
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: pagePadding,
       children: [
         PageHeader(
-          title: 'مرحباً بك في لوحة إدارة الفواتير',
-          subtitle: 'إدارة الفواتير والمخزون والمبيعات بسهولة وأمان',
+          title: 'الفواتير',
+          subtitle: 'فواتير البيع والشراء',
           icon: Icons.description_outlined,
           actionLabel: 'فاتورة بيع جديدة',
           actionIcon: Icons.shopping_cart_outlined,

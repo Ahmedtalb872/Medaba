@@ -48,7 +48,7 @@ class _ShipmentsScreenState extends State<ShipmentsScreen> {
     }).toList();
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: pagePadding,
       children: [
         PageHeader(
           title: 'الشحنات البحرية',

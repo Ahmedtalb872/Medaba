@@ -68,7 +68,7 @@ class _ProfitsScreenState extends State<ProfitsScreen> {
         );
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: pagePadding,
       children: [
         const PageHeader(
           title: 'توزيع الأرباح',

@@ -22,7 +22,7 @@ class WorkersScreen extends StatelessWidget {
     final active = s.workers.where((w) => w.active).length;
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: pagePadding,
       children: [
         PageHeader(
           title: 'العمال',

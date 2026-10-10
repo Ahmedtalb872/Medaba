@@ -18,7 +18,7 @@ class PartnersScreen extends StatelessWidget {
     final shareOf = {for (final p in report.partners) p.id: p};
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: pagePadding,
       children: [
         PageHeader(
           title: 'الشركاء',

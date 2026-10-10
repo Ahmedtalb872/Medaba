@@ -1,15 +1,11 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
-import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
-import 'brand.dart';
 
-/// رأس الصفحة: لافتة ترحيب بشعار المؤسسة وعنوان الصفحة ورسم زخرفي،
-/// وتحتها أزرار الإجراءات.
+/// رأس الصفحة البسيط: عنوان ووصف قصير، وأزرار الإجراءات في الجهة الأخرى.
 class PageHeader extends StatelessWidget {
   final String title;
   final String? subtitle;
@@ -38,161 +34,86 @@ class PageHeader extends StatelessWidget {
     final t = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final company = context.select<AppState, String>((s) => s.company.name);
-    return LayoutBuilder(
-      builder: (context, c) {
-        final wide = c.maxWidth >= 900;
-        final showLogo = c.maxWidth >= 1050;
-        final text = Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              title,
-              style: (wide ? t.headlineSmall : t.titleLarge)?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            Text(
-              company,
-              style: t.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: dark ? cs.primary : AppColors.brand,
-              ),
-            ),
-            if (subtitle != null)
-              Text(
-                subtitle!,
-                style: t.bodyMedium?.copyWith(color: cs.onSurfaceVariant),
-              ),
-          ],
-        );
-        final lead = showLogo
-            ? Padding(
-                padding: const EdgeInsetsDirectional.only(end: 20),
-                child: Container(
-                  padding: const EdgeInsetsDirectional.only(end: 20),
-                  decoration: BoxDecoration(
-                    border: BorderDirectional(
-                      end: BorderSide(color: cs.outlineVariant),
-                    ),
-                  ),
-                  child: const BrandLogo(size: 44),
-                ),
-              )
-            : Padding(
-                padding: const EdgeInsetsDirectional.only(end: 14),
-                child: Container(
-                  width: 52,
-                  height: 52,
-                  decoration: BoxDecoration(
-                    color: dark ? AppColors.brand : const Color(0xFFF6E3B5),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(
-                    icon,
-                    size: 28,
-                    color: dark ? Colors.white : AppColors.brand,
-                  ),
-                ),
-              );
-        final banner = Container(
-          clipBehavior: Clip.antiAlias,
-          constraints: BoxConstraints(minHeight: wide ? 150 : 0),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            gradient: LinearGradient(
-              colors: dark
-                  ? [cs.surfaceContainerHigh, cs.surfaceContainer]
-                  : const [Color(0xFFFFFCF5), Color(0xFFF7EEDC)],
-              begin: AlignmentDirectional.centerStart,
-              end: AlignmentDirectional.centerEnd,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x14000000),
-                blurRadius: 18,
-                offset: Offset(0, 6),
-              ),
-            ],
-          ),
-          child: IntrinsicHeight(
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.all(18),
-                    child: Row(
-                      children: [
-                        lead,
-                        Expanded(child: text),
-                      ],
-                    ),
-                  ),
-                ),
-                if (wide) BannerArt(width: math.min(440, c.maxWidth * 0.4)),
-              ],
-            ),
-          ),
-        );
-        final actions = [
-          if (onAction != null)
-            FilledButton.icon(
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.brand,
-                foregroundColor: Colors.white,
-                minimumSize: Size(wide ? 280 : 0, 54),
-                textStyle: const TextStyle(
-                  fontFamily: 'ReadexPro',
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              onPressed: onAction,
-              icon: Icon(actionIcon),
-              label: Text(actionLabel ?? 'إضافة'),
-            ),
-          if (onSecondary != null)
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                backgroundColor: dark ? null : Colors.white,
-                foregroundColor: dark ? cs.primary : AppColors.brand,
-                side: BorderSide(
-                  color: (dark ? cs.primary : AppColors.brand).withValues(
-                    alpha: 0.5,
-                  ),
-                ),
-                minimumSize: Size(wide ? 280 : 0, 54),
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                shape: RoundedRectangleBorder(
+    final accent = dark ? cs.primary : AppColors.brand;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Wrap(
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 16,
+        runSpacing: 14,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                textStyle: const TextStyle(
-                  fontFamily: 'ReadexPro',
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                child: Icon(icon, color: accent),
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: t.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    if (subtitle != null)
+                      Text(
+                        subtitle!,
+                        style: t.bodyMedium?.copyWith(
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
                 ),
               ),
-              onPressed: onSecondary,
-              icon: Icon(secondaryIcon),
-              label: Text(secondaryLabel ?? ''),
-            ),
-        ];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              banner,
-              if (actions.isNotEmpty) ...[
-                const SizedBox(height: 14),
-                Wrap(spacing: 12, runSpacing: 12, children: actions),
-              ],
             ],
           ),
-        );
-      },
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              if (onSecondary != null)
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    backgroundColor: dark ? null : Colors.white,
+                    foregroundColor: accent,
+                    side: BorderSide(color: accent.withValues(alpha: 0.4)),
+                    minimumSize: const Size(0, 48),
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  onPressed: onSecondary,
+                  icon: Icon(secondaryIcon),
+                  label: Text(secondaryLabel ?? ''),
+                ),
+              if (onAction != null)
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.brand,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(0, 48),
+                  ),
+                  onPressed: onAction,
+                  icon: Icon(actionIcon),
+                  label: Text(actionLabel ?? 'إضافة'),
+                ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -244,121 +165,89 @@ class StatCard extends StatelessWidget {
         ? AppColors.income.last
         : AppColors.expense.last;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: tint,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: tone.withValues(alpha: 0.18)),
+        border: Border.all(color: tone.withValues(alpha: 0.14)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
                   label,
-                  style: TextStyle(color: tone, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: tone,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: tone.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: tone, size: 20),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                child: FittedBox(
+                const SizedBox(height: 6),
+                FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: AlignmentDirectional.centerStart,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
+                  child: Text(
+                    value,
+                    style: Theme.of(context).textTheme.headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.w800),
+                  ),
+                ),
+                if (unit != null)
+                  Text(unit!, style: TextStyle(color: cs.onSurfaceVariant)),
+                if (hasTrend) ...[
+                  const SizedBox(height: 4),
+                  Row(
                     children: [
+                      if (change != null)
+                        Icon(
+                          up ? Icons.arrow_upward : Icons.arrow_downward,
+                          size: 14,
+                          color: trendColor,
+                        ),
                       Text(
-                        value,
-                        style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                        change == null ? '—' : '${change.abs()}%',
+                        style: TextStyle(
+                          color: trendColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
                       ),
-                      if (unit != null) ...[
-                        const SizedBox(width: 6),
-                        Text(unit!, style: TextStyle(color: tone)),
-                      ],
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          'عن الشهر الماضي',
+                          style: TextStyle(
+                            color: cs.onSurfaceVariant,
+                            fontSize: 12,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
-                ),
-              ),
-              const SizedBox(width: 10),
-              _MiniBars(color: tone),
-            ],
-          ),
-          if (hasTrend) ...[
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'مقارنة بالشهر الماضي',
-                    style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                Text(
-                  change == null ? '—' : '${change.abs()}%',
-                  style: TextStyle(
-                    color: trendColor,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                if (change != null)
-                  Icon(
-                    up ? Icons.arrow_upward : Icons.arrow_downward,
-                    size: 16,
-                    color: trendColor,
-                  ),
+                ],
               ],
             ),
-          ],
+          ),
+          const SizedBox(width: 12),
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              color: tone.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(icon, color: tone, size: 30),
+          ),
         ],
       ),
     );
   }
-}
-
-/// أعمدة صغيرة متصاعدة تزيّن بطاقات المؤشرات.
-class _MiniBars extends StatelessWidget {
-  final Color color;
-  const _MiniBars({required this.color});
-
-  @override
-  Widget build(BuildContext context) => Row(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.end,
-    children: [
-      for (final (i, f) in const [0.35, 0.55, 0.8, 1.0].indexed)
-        Container(
-          width: 10,
-          height: 40 * f,
-          margin: const EdgeInsetsDirectional.only(start: 4),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.18 + i * 0.22),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(3)),
-          ),
-        ),
-    ],
-  );
 }
 
 /// شبكة متجاوبة لبطاقات المؤشرات.
@@ -694,3 +583,6 @@ Future<void> showFormDialog({
     ),
   );
 }
+
+/// الهامش الموحّد حول محتوى الصفحات.
+const pagePadding = EdgeInsets.fromLTRB(20, 12, 20, 24);

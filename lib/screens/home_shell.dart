@@ -4,8 +4,8 @@ import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
-import '../utils/fullscreen.dart';
 import '../widgets/brand.dart';
+import '../widgets/shell_nav.dart';
 import 'dashboard_screen.dart';
 import 'debts_screen.dart';
 import 'inventory_screen.dart';
@@ -24,26 +24,32 @@ class _Dest {
   const _Dest(this.label, this.icon, this.page);
 }
 
+/// بنفس ترتيب أرقام [ShellPage].
 const _dests = [
-  _Dest('لوحة التحكم', Icons.home_outlined, DashboardScreen()),
+  _Dest('الرئيسية', Icons.home_outlined, DashboardScreen()),
   _Dest('الشركاء', Icons.handshake_outlined, PartnersScreen()),
-  _Dest('العمال', Icons.engineering_outlined, WorkersScreen()),
-  _Dest('المخازن', Icons.warehouse_outlined, InventoryScreen()),
+  _Dest('العمال', Icons.badge_outlined, WorkersScreen()),
+  _Dest('المخزون', Icons.inventory_2_outlined, InventoryScreen()),
   _Dest('الفواتير', Icons.description_outlined, InvoicesScreen()),
   _Dest('الديون', Icons.account_balance_wallet_outlined, DebtsScreen()),
-  _Dest('الشحنات البحرية', Icons.directions_boat_outlined, ShipmentsScreen()),
+  _Dest('الشحنات البحرية', Icons.local_shipping_outlined, ShipmentsScreen()),
   _Dest('المعاملات', Icons.receipt_long_outlined, TransactionsScreen()),
-  _Dest('توزيع الأرباح', Icons.pie_chart_outline, ProfitsScreen()),
+  _Dest('التقارير والأرباح', Icons.bar_chart, ProfitsScreen()),
   _Dest('الإعدادات', Icons.settings_outlined, SettingsScreen()),
 ];
 
-// أرقام الصفحات التي تفتحها نتائج البحث والتنبيهات.
-const _partnersPage = 1;
-const _workersPage = 2;
-const _inventoryPage = 3;
-const _debtsPage = 5;
-const _shipmentsPage = 6;
-const _settingsPage = 9;
+/// خلفية بيضاء بحواف دائرية وظل خفيف لعناصر الشريط العلوي.
+BoxDecoration _panel(BuildContext context) {
+  final cs = Theme.of(context).colorScheme;
+  final dark = Theme.of(context).brightness == Brightness.dark;
+  return BoxDecoration(
+    color: dark ? cs.surfaceContainer : Colors.white,
+    borderRadius: BorderRadius.circular(16),
+    boxShadow: const [
+      BoxShadow(color: Color(0x0F000000), blurRadius: 12, offset: Offset(0, 4)),
+    ],
+  );
+}
 
 /// الهيكل الرئيسي: قائمة جانبية وشريط علوي على الشاشات العريضة،
 /// ودرج (Drawer) على الجوال.
@@ -62,13 +68,12 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    final page = _dests[_index].page;
+    final page = ShellNav(go: _go, child: _dests[_index].page);
 
     if (width >= 900) {
       return Scaffold(
         body: Row(
           children: [
-            _Sidebar(index: _index, onSelect: _go),
             Expanded(
               child: Column(
                 children: [
@@ -77,6 +82,8 @@ class _HomeShellState extends State<HomeShell> {
                 ],
               ),
             ),
+            // القائمة في الجهة اليسرى كما في التصميم.
+            _Sidebar(index: _index, onSelect: _go),
           ],
         ),
       );
@@ -117,7 +124,7 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
-/// القائمة الجانبية الخضراء: الشعار، الصفحات، وبطاقة إجمالي الأرباح.
+/// القائمة الجانبية الخضراء: الشعار والصفحات.
 class _Sidebar extends StatelessWidget {
   final int index;
   final ValueChanged<int> onSelect;
@@ -127,79 +134,44 @@ class _Sidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: 270,
-      clipBehavior: Clip.antiAlias,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [Color(0xFF0D4A36), AppColors.navBackground],
+          colors: [Color(0xFF0B3F2E), Color(0xFF0E4A37), Color(0xFF0A3628)],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
         ),
       ),
-      child: Stack(
-        children: [
-          // دوائر شفافة خفيفة تعطي عمقاً للخلفية.
-          const PositionedDirectional(
-            start: -120,
-            top: 260,
-            child: _Glow(size: 320),
-          ),
-          const PositionedDirectional(
-            end: -140,
-            bottom: 60,
-            child: _Glow(size: 300),
-          ),
-          SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 22, 16, 18),
-                  child: Center(
-                    child: FittedBox(child: BrandLogo(onDark: true, size: 44)),
-                  ),
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 26, 16, 26),
+              child: Center(
+                child: FittedBox(
+                  child: BrandLogo(onDark: true, size: 52, showRest: false),
                 ),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    children: [
-                      for (final (i, d) in _dests.indexed)
-                        _NavItem(
-                          dest: d,
-                          selected: i == index,
-                          onTap: () => onSelect(i),
-                        ),
-                    ],
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: _ProfitCard(),
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                children: [
+                  for (final (i, d) in _dests.indexed)
+                    _NavItem(
+                      dest: d,
+                      selected: i == index,
+                      onTap: () => onSelect(i),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+        ),
       ),
     );
   }
-}
-
-class _Glow extends StatelessWidget {
-  final double size;
-  const _Glow({required this.size});
-
-  @override
-  Widget build(BuildContext context) => Container(
-    width: size,
-    height: size,
-    decoration: BoxDecoration(
-      shape: BoxShape.circle,
-      border: Border.all(
-        color: Colors.white.withValues(alpha: 0.05),
-        width: 40,
-      ),
-    ),
-  );
 }
 
 class _NavItem extends StatelessWidget {
@@ -214,43 +186,43 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.navAccent : AppColors.navText;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         child: InkWell(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(16),
           onTap: onTap,
           child: Ink(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
             decoration: selected
                 ? BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    gradient: LinearGradient(
-                      colors: [
-                        AppColors.navAccent.withValues(alpha: 0.30),
-                        AppColors.navAccent.withValues(alpha: 0.10),
-                      ],
+                    borderRadius: BorderRadius.circular(16),
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFB8893A), Color(0xFFD9AE62)],
                       begin: AlignmentDirectional.centerStart,
                       end: AlignmentDirectional.centerEnd,
                     ),
-                    border: Border.all(
-                      color: AppColors.navAccent.withValues(alpha: 0.35),
-                    ),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x40000000),
+                        blurRadius: 10,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
                   )
                 : null,
             child: Row(
               children: [
-                Icon(dest.icon, color: color, size: 24),
-                const SizedBox(width: 16),
+                Icon(dest.icon, color: Colors.white, size: 26),
+                const SizedBox(width: 18),
                 Expanded(
                   child: Text(
                     dest.label,
                     style: TextStyle(
-                      color: color,
-                      fontSize: 16,
+                      color: Colors.white,
+                      fontSize: 17,
                       fontWeight: selected ? FontWeight.bold : FontWeight.w500,
                     ),
                   ),
@@ -264,63 +236,7 @@ class _NavItem extends StatelessWidget {
   }
 }
 
-/// صافي الأرباح منذ بداية التسجيل.
-class _ProfitCard extends StatelessWidget {
-  const _ProfitCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final net = context.select<AppState, double>(
-      (s) => s.profitReport().netProfit,
-    );
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'إجمالي الأرباح',
-                  style: TextStyle(color: AppColors.navMuted, fontSize: 13),
-                ),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: AlignmentDirectional.centerStart,
-                  child: Text(
-                    fmt.number(net),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.bar_chart, color: Colors.white),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// الشريط العلوي: التاريخ، البحث العام، ملء الشاشة، التنبيهات، والمستخدم.
+/// الشريط العلوي: المستخدم، التنبيهات، والبحث العام.
 class _TopBar extends StatefulWidget {
   final ValueChanged<int> onNavigate;
   const _TopBar({required this.onNavigate});
@@ -332,16 +248,6 @@ class _TopBar extends StatefulWidget {
 class _TopBarState extends State<_TopBar> {
   final _search = TextEditingController();
 
-  static const _weekdays = [
-    'الاثنين',
-    'الثلاثاء',
-    'الأربعاء',
-    'الخميس',
-    'الجمعة',
-    'السبت',
-    'الأحد',
-  ];
-
   @override
   void dispose() {
     _search.dispose();
@@ -351,136 +257,98 @@ class _TopBarState extends State<_TopBar> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final now = DateTime.now();
-    final company = context.select<AppState, (String, String)>(
+    final user = context.select<AppState, (String, String)>(
       (s) => (s.company.ownerName, s.company.ownerRole),
     );
-    final fill = dark ? cs.surfaceContainerHigh : const Color(0xFFF3F4F6);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      decoration: BoxDecoration(
-        color: dark ? cs.surfaceContainer : Colors.white,
-        border: Border(bottom: BorderSide(color: cs.outlineVariant)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
       child: Row(
         children: [
-          Icon(Icons.calendar_month_outlined, color: cs.onSurfaceVariant),
-          const SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _weekdays[now.weekday - 1],
-                style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13),
-              ),
-              Text(
-                fmt.date(now),
-                style: const TextStyle(fontWeight: FontWeight.w600),
+          PopupMenuButton<int>(
+            tooltip: 'الحساب',
+            position: PopupMenuPosition.under,
+            onSelected: widget.onNavigate,
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: ShellPage.settings,
+                child: Row(
+                  children: [
+                    Icon(Icons.settings_outlined),
+                    SizedBox(width: 10),
+                    Text('الإعدادات وبيانات المستخدم'),
+                  ],
+                ),
               ),
             ],
+            child: Container(
+              height: 64,
+              padding: const EdgeInsetsDirectional.fromSTEB(10, 8, 16, 8),
+              decoration: _panel(context),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircleAvatar(
+                    radius: 22,
+                    backgroundColor: const Color(0xFFEDEFF2),
+                    child: Icon(Icons.person, color: cs.onSurface, size: 28),
+                  ),
+                  const SizedBox(width: 12),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        user.$1,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        user.$2,
+                        style: TextStyle(
+                          color: cs.onSurfaceVariant,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 18),
+                  const Icon(Icons.keyboard_arrow_down),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(width: 24),
+          const SizedBox(width: 14),
+          _Bell(onNavigate: widget.onNavigate),
+          const Spacer(),
           Flexible(
+            flex: 3,
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
-              child: TextField(
-                controller: _search,
-                textInputAction: TextInputAction.search,
-                onSubmitted: (q) => _openSearch(context, q, widget.onNavigate),
-                decoration: InputDecoration(
-                  hintText: 'ابحث عن فاتورة أو منتج أو عميل ...',
-                  prefixIcon: const Icon(Icons.search),
-                  filled: true,
-                  fillColor: fill,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 14),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide.none,
+              constraints: const BoxConstraints(maxWidth: 540),
+              child: DecoratedBox(
+                decoration: _panel(context),
+                child: TextField(
+                  controller: _search,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (q) =>
+                      _openSearch(context, q, widget.onNavigate),
+                  decoration: const InputDecoration(
+                    hintText: 'بحث عن منتج، عميل، فاتورة ...',
+                    suffixIcon: Icon(Icons.search, size: 26),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 18,
+                      vertical: 20,
+                    ),
                   ),
                 ),
               ),
             ),
           ),
-          const Spacer(),
-          if (fullscreenSupported) ...[
-            _SquareButton(
-              tooltip: 'ملء الشاشة',
-              icon: Icons.fullscreen,
-              onTap: toggleFullscreen,
-            ),
-            const SizedBox(width: 10),
-          ],
-          _Bell(onNavigate: widget.onNavigate),
-          const SizedBox(width: 10),
-          InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () => widget.onNavigate(_settingsPage),
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(8, 6, 16, 6),
-              decoration: BoxDecoration(
-                color: fill,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  const CircleAvatar(
-                    radius: 20,
-                    backgroundColor: AppColors.brand,
-                    child: Icon(Icons.person, color: Colors.white),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        company.$1,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        company.$2,
-                        style: TextStyle(
-                          color: cs.onSurfaceVariant,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
-      ),
-    );
-  }
-}
-
-class _SquareButton extends StatelessWidget {
-  final String tooltip;
-  final IconData icon;
-  final VoidCallback onTap;
-  const _SquareButton({
-    required this.tooltip,
-    required this.icon,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: dark ? cs.surfaceContainerHigh : const Color(0xFFF3F4F6),
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: SizedBox(width: 50, height: 50, child: Icon(icon)),
-        ),
       ),
     );
   }
@@ -497,7 +365,7 @@ List<_Alert> _alerts(AppState s) {
         icon: Icons.warning_amber_rounded,
         color: AppColors.expense.last,
         text: 'قارب على النفاد: ${p.name} (${fmt.number(s.stockOf(p.id))})',
-        page: _inventoryPage,
+        page: ShellPage.inventory,
       ),
     for (final x in s.activeShipments)
       if (x.isDelayed(now) || x.daysToArrival(now) <= 7)
@@ -507,7 +375,7 @@ List<_Alert> _alerts(AppState s) {
           text: x.isDelayed(now)
               ? 'شحنة متأخرة: ${x.contents}'
               : 'شحنة تصل قريباً: ${x.contents} - ${x.status.label}',
-          page: _shipmentsPage,
+          page: ShellPage.shipments,
         ),
     for (final d in s.debts)
       if (d.isOverdue(now))
@@ -515,7 +383,7 @@ List<_Alert> _alerts(AppState s) {
           icon: Icons.schedule,
           color: AppColors.loss.last,
           text: 'دين متأخر: ${d.personName} (${fmt.money(d.remaining)})',
-          page: _debtsPage,
+          page: ShellPage.debts,
         ),
   ];
 }
@@ -531,16 +399,18 @@ class _Bell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final alerts = _alerts(context.watch<AppState>());
-    final cs = Theme.of(context).colorScheme;
-    final dark = Theme.of(context).brightness == Brightness.dark;
     final icon = Badge(
       isLabelVisible: alerts.isNotEmpty,
-      label: Text('${alerts.length}'),
+      smallSize: 10,
       backgroundColor: AppColors.expense.first,
-      child: Icon(Icons.notifications_none, color: light ? Colors.white : null),
+      child: Icon(
+        Icons.notifications_none,
+        size: 28,
+        color: light ? Colors.white : null,
+      ),
     );
     return PopupMenuButton<int>(
-      tooltip: 'التنبيهات',
+      tooltip: alerts.isEmpty ? 'التنبيهات' : 'التنبيهات (${alerts.length})',
       position: PopupMenuPosition.under,
       onSelected: onNavigate,
       constraints: const BoxConstraints(maxWidth: 380),
@@ -567,12 +437,9 @@ class _Bell extends StatelessWidget {
       child: light
           ? Padding(padding: const EdgeInsets.all(8), child: icon)
           : Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: dark ? cs.surfaceContainerHigh : const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(14),
-              ),
+              width: 58,
+              height: 58,
+              decoration: _panel(context),
               child: Center(child: icon),
             ),
     );
@@ -630,7 +497,7 @@ Future<void> _openSearch(
             icon: Icons.category_outlined,
             title: p.name,
             subtitle: 'صنف • المتوفر: ${fmt.number(s.stockOf(p.id))}',
-            open: () => go(_inventoryPage),
+            open: () => go(ShellPage.inventory),
           ),
       for (final p in s.partners)
         if (has([p.name]))
@@ -638,7 +505,7 @@ Future<void> _openSearch(
             icon: Icons.handshake_outlined,
             title: p.name,
             subtitle: 'شريك',
-            open: () => go(_partnersPage),
+            open: () => go(ShellPage.partners),
           ),
       for (final w in s.workers)
         if (has([w.name]))
@@ -646,7 +513,7 @@ Future<void> _openSearch(
             icon: Icons.engineering_outlined,
             title: w.name,
             subtitle: 'عامل',
-            open: () => go(_workersPage),
+            open: () => go(ShellPage.workers),
           ),
       for (final d in s.debts)
         if (has([d.personName]))
@@ -654,7 +521,7 @@ Future<void> _openSearch(
             icon: Icons.account_balance_wallet_outlined,
             title: d.personName,
             subtitle: 'دين • المتبقي: ${fmt.money(d.remaining)}',
-            open: () => go(_debtsPage),
+            open: () => go(ShellPage.debts),
           ),
       for (final x in s.shipments)
         if (has([x.contents, x.company, x.billOfLading, x.containerNumber]))
@@ -662,7 +529,7 @@ Future<void> _openSearch(
             icon: Icons.directions_boat_outlined,
             title: x.contents,
             subtitle: '${x.company} • ${x.status.label}',
-            open: () => go(_shipmentsPage),
+            open: () => go(ShellPage.shipments),
           ),
     ];
   }

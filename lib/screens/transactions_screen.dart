@@ -28,7 +28,7 @@ class _TransactionsScreenState extends State<TransactionsScreen> {
         .toList();
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: pagePadding,
       children: [
         PageHeader(
           title: 'المعاملات المالية',

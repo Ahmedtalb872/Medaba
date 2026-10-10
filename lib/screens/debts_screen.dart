@@ -30,7 +30,7 @@ class _DebtsScreenState extends State<DebtsScreen> {
         .toList();
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: pagePadding,
       children: [
         PageHeader(
           title: 'الديون',
