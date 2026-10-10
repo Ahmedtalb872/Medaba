@@ -4,8 +4,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'synced_storage.dart';
 
 /// رابط مشروع Supabase ومفتاحه العام (publishable). المفتاح العام مصمَّم ليكون
-/// داخل التطبيق؛ حماية البيانات تأتي من تسجيل الدخول وسياسات RLS في
-/// supabase/schema.sql. يمكن تغييرهما عند البناء بـ --dart-define، والقيمة
+/// داخل التطبيق؛ البيانات محمية باسم المستخدم وكلمة المرور (انظر
+/// supabase/schema.sql). يمكن تغييرهما عند البناء بـ --dart-define، والقيمة
 /// الفارغة تعيد التطبيق إلى الحفظ على الجهاز فقط.
 const supabaseUrl = String.fromEnvironment(
   'SUPABASE_URL',
@@ -24,18 +24,40 @@ final cloudSync = ValueNotifier<SyncStatus?>(null);
 /// يُستدعى من زر «تسجيل الخروج»؛ يعيّنه [CloudGate].
 Future<void> Function()? cloudSignOut;
 
-/// الجدول app_data: صف لكل مفتاح، وعمود value يحمل القائمة.
+SupabaseClient? _client;
+SupabaseClient get cloudClient =>
+    _client ??= SupabaseClient(supabaseUrl, supabaseKey);
+
+/// اسم المستخدم وكلمة المرور كما في الجدول app_users (بدون بريد).
+class CloudLogin {
+  final String username;
+  final String password;
+  const CloudLogin(this.username, this.password);
+
+  Map<String, dynamic> get params => {'p_user': username, 'p_pass': password};
+
+  Map<String, dynamic> toJson() => {'u': username, 'p': password};
+  static CloudLogin? fromJson(Map<String, dynamic> j) =>
+      j['u'] is String && j['p'] is String
+      ? CloudLogin(j['u'] as String, j['p'] as String)
+      : null;
+}
+
+/// صحيح أو خطأ؛ يرمي استثناءً إذا تعذّر الاتصال.
+Future<bool> checkLogin(SupabaseClient client, CloudLogin login) async =>
+    await client.rpc('app_login', params: login.params) == true;
+
+/// الدوال app_fetch و app_put في قاعدة البيانات، تتحقق من الدخول في كل طلب.
 class SupabaseRemoteStore implements RemoteStore {
   final SupabaseClient client;
-  SupabaseRemoteStore(this.client);
-
-  static const table = 'app_data';
+  final CloudLogin login;
+  SupabaseRemoteStore(this.client, this.login);
 
   @override
   Future<Map<String, List<Map<String, dynamic>>>> fetchAll() async {
-    final rows = await client.from(table).select('key, value');
+    final rows = await client.rpc('app_fetch', params: login.params) as List;
     return {
-      for (final r in rows)
+      for (final r in rows.cast<Map>())
         r['key'] as String: [
           for (final e in (r['value'] as List? ?? const []))
             Map<String, dynamic>.from(e as Map),
@@ -44,10 +66,8 @@ class SupabaseRemoteStore implements RemoteStore {
   }
 
   @override
-  Future<void> put(String key, List<Map<String, dynamic>> items) =>
-      client.from(table).upsert({
-        'key': key,
-        'value': items,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      });
+  Future<void> put(String key, List<Map<String, dynamic>> items) => client.rpc(
+    'app_put',
+    params: {...login.params, 'p_key': key, 'p_value': items},
+  );
 }

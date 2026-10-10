@@ -1,9 +1,7 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../data/cloud.dart';
+import '../data/storage.dart';
 import '../data/synced_storage.dart';
 import '../main.dart';
 import '../models/invoice.dart';
@@ -11,7 +9,7 @@ import '../state/app_state.dart';
 import '../widgets/brand.dart';
 
 /// بوابة التطبيق المربوط بقاعدة البيانات: شاشة الدخول، ثم تحميل البيانات،
-/// ثم التطبيق. تسجيل الخروج يعيد إلى شاشة الدخول.
+/// ثم التطبيق. الدخول يبقى محفوظاً على الجهاز حتى «تسجيل الخروج».
 class CloudGate extends StatefulWidget {
   const CloudGate({super.key});
 
@@ -19,27 +17,95 @@ class CloudGate extends StatefulWidget {
   State<CloudGate> createState() => _CloudGateState();
 }
 
+enum _Stage { starting, login, loading, ready }
+
 class _CloudGateState extends State<CloudGate> {
-  final _auth = Supabase.instance.client.auth;
-  late final StreamSubscription<AuthState> _sub;
+  static const _savedKey = 'cloud_login';
+
+  _Stage _stage = _Stage.starting;
   AppState? _state;
   SyncedStorage? _storage;
-  String? _loadedFor;
+  String? _loginError;
 
   @override
   void initState() {
     super.initState();
     cloudSignOut = _signOut;
-    _sub = _auth.onAuthStateChange.listen((_) => _sessionChanged());
-    _sessionChanged();
+    _start();
   }
 
   @override
   void dispose() {
-    _sub.cancel();
     _closeStorage();
     cloudSignOut = null;
     super.dispose();
+  }
+
+  Future<Storage> get _local => openLocalStorage();
+
+  Future<void> _start() async {
+    final saved = await (await _local).readList(_savedKey);
+    final login = saved.isEmpty ? null : CloudLogin.fromJson(saved.first);
+    if (login == null) {
+      setState(() => _stage = _Stage.login);
+      return;
+    }
+    setState(() => _stage = _Stage.loading);
+    bool? ok;
+    try {
+      ok = await checkLogin(cloudClient, login);
+    } catch (_) {
+      // بدون إنترنت: نفتح بآخر نسخة على الجهاز.
+    }
+    if (ok == false) {
+      // تغيّرت كلمة المرور في قاعدة البيانات.
+      await (await _local).writeList(_savedKey, const []);
+      setState(() {
+        _stage = _Stage.login;
+        _loginError = 'تغيّرت كلمة المرور، سجّل الدخول من جديد';
+      });
+      return;
+    }
+    await _open(login);
+  }
+
+  /// يُرجع رسالة خطأ، أو null عند نجاح الدخول.
+  Future<String?> _signIn(String username, String password) async {
+    final login = CloudLogin(username.trim(), password);
+    bool ok;
+    try {
+      ok = await checkLogin(cloudClient, login);
+    } catch (_) {
+      return 'تعذّر الاتصال بالخادم، تحقق من الإنترنت';
+    }
+    if (!ok) return 'اسم المستخدم أو كلمة المرور غير صحيحة';
+    await (await _local).writeList(_savedKey, [login.toJson()]);
+    setState(() {
+      _stage = _Stage.loading;
+      _loginError = null;
+    });
+    await _open(login);
+    return null;
+  }
+
+  Future<void> _open(CloudLogin login) async {
+    final storage = SyncedStorage(
+      local: await _local,
+      remote: SupabaseRemoteStore(cloudClient, login),
+    );
+    await storage.init(AppState.storageKeys);
+    final state = AppState(storage);
+    await state.load();
+    if (!mounted) {
+      storage.dispose();
+      return;
+    }
+    _storage = storage..status.addListener(_publishStatus);
+    _publishStatus();
+    setState(() {
+      _state = state;
+      _stage = _Stage.ready;
+    });
   }
 
   void _closeStorage() {
@@ -51,87 +117,50 @@ class _CloudGateState extends State<CloudGate> {
 
   void _publishStatus() => cloudSync.value = _storage?.status.value;
 
-  Future<void> _sessionChanged() async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      if (_state != null || _loadedFor != null) {
-        _closeStorage();
-        setState(() {
-          _state = null;
-          _loadedFor = null;
-        });
-      }
-      return;
-    }
-    // تجديد الجلسة يرسل نفس المستخدم مرة أخرى؛ لا نعيد التحميل.
-    if (_loadedFor == user.id) return;
-    _loadedFor = user.id;
-    setState(() => _state = null);
-
-    final storage = SyncedStorage(
-      local: await openLocalStorage(),
-      remote: SupabaseRemoteStore(Supabase.instance.client),
-    );
-    await storage.init(AppState.storageKeys);
-    final state = AppState(storage);
-    await state.load();
-    if (!mounted || _loadedFor != user.id) {
-      storage.dispose();
-      return;
-    }
-    _storage = storage..status.addListener(_publishStatus);
-    _publishStatus();
-    setState(() => _state = state);
-  }
-
   /// يرفع ما لم يُرفع بعد (بحد أقصى بضع ثوانٍ) ثم يخرج.
   Future<void> _signOut() async {
     try {
       await _storage?.flush().timeout(const Duration(seconds: 8));
     } catch (_) {}
-    await _auth.signOut();
+    await (await _local).writeList(_savedKey, const []);
+    _closeStorage();
+    setState(() {
+      _state = null;
+      _stage = _Stage.login;
+    });
   }
 
   @override
-  Widget build(BuildContext context) {
-    if (_auth.currentUser == null) {
-      return buildMaterialApp(home: const LoginScreen());
-    }
-    final state = _state;
-    if (state == null) {
-      return buildMaterialApp(
-        home: const Scaffold(
-          body: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                BrandLogo(size: 44, name: CompanyInfo.defaultName),
-                SizedBox(height: 24),
-                CircularProgressIndicator(),
-                SizedBox(height: 12),
-                Text('جارٍ تحميل البيانات...'),
-              ],
-            ),
+  Widget build(BuildContext context) => switch (_stage) {
+    _Stage.ready => MedabaApp(state: _state!),
+    _Stage.login => buildMaterialApp(
+      home: LoginScreen(onSubmit: _signIn, initialError: _loginError),
+    ),
+    _ => buildMaterialApp(
+      home: const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              BrandLogo(size: 44, name: CompanyInfo.defaultName),
+              SizedBox(height: 24),
+              CircularProgressIndicator(),
+              SizedBox(height: 12),
+              Text('جارٍ تحميل البيانات...'),
+            ],
           ),
         ),
-      );
-    }
-    return MedabaApp(state: state);
-  }
+      ),
+    ),
+  };
 }
 
-/// نطاق البريد الذي يُكمل به اسم المستخدم (حسابات Supabase تحتاج بريداً).
-const loginDomain = 'taiba.app';
-
-/// اسم المستخدم «36933636» يصبح «36933636@taiba.app»؛ والبريد الكامل يبقى كما هو.
-String loginEmail(String username) {
-  final u = username.trim().toLowerCase();
-  return u.contains('@') ? u : '$u@$loginDomain';
-}
-
-/// تسجيل الدخول باسم المستخدم وكلمة المرور (الحسابات يضيفها المدير من Supabase).
+/// تسجيل الدخول باسم المستخدم وكلمة المرور (الحسابات في الجدول app_users).
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  /// يُرجع رسالة الخطأ، أو null عند النجاح.
+  final Future<String?> Function(String username, String password) onSubmit;
+  final String? initialError;
+  const LoginScreen({super.key, required this.onSubmit, this.initialError});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -143,7 +172,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _password = TextEditingController();
   bool _busy = false;
   bool _hide = true;
-  String? _error;
+  late String? _error = widget.initialError;
 
   @override
   void dispose() {
@@ -158,30 +187,13 @@ class _LoginScreenState extends State<LoginScreen> {
       _busy = true;
       _error = null;
     });
-    try {
-      await Supabase.instance.client.auth.signInWithPassword(
-        email: loginEmail(_email.text),
-        password: _password.text,
-      );
-    } on AuthException catch (e) {
-      setState(() => _error = _message(e));
-    } catch (_) {
-      setState(() => _error = 'تعذّر الاتصال بالخادم، تحقق من الإنترنت');
-    } finally {
-      if (mounted) setState(() => _busy = false);
+    final error = await widget.onSubmit(_email.text, _password.text);
+    if (mounted) {
+      setState(() {
+        _busy = false;
+        _error = error;
+      });
     }
-  }
-
-  static String _message(AuthException e) {
-    if (e is AuthRetryableFetchException) {
-      return 'تعذّر الاتصال بالخادم، تحقق من الإنترنت';
-    }
-    final m = e.message.toLowerCase();
-    if (m.contains('invalid login')) {
-      return 'اسم المستخدم أو كلمة المرور غير صحيحة';
-    }
-    if (m.contains('not confirmed')) return 'الحساب لم يُفعَّل بعد';
-    return 'تعذّر تسجيل الدخول: ${e.message}';
   }
 
   @override

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'data/cloud.dart';
 import 'data/storage.dart';
@@ -17,7 +16,6 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   if (cloudConfigured) {
     // البيانات في قاعدة البيانات: تسجيل الدخول أولاً ثم تحميلها.
-    await Supabase.initialize(url: supabaseUrl, publishableKey: supabaseKey);
     runApp(const CloudGate());
     return;
   }

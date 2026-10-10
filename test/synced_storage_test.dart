@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:medaba/data/storage.dart';
 import 'package:medaba/data/synced_storage.dart';
 import 'package:medaba/models/models.dart';
-import 'package:medaba/screens/cloud_gate.dart';
+import 'package:medaba/data/cloud.dart';
 import 'package:medaba/state/app_state.dart';
 
 /// قاعدة بيانات وهمية يمكن قطع الاتصال بها.
@@ -150,8 +150,10 @@ void main() {
     expect(remote.rows['workers']!.single['name'], 'عمر');
   });
 
-  test('a username becomes the account email', () {
-    expect(loginEmail(' 36933636 '), '36933636@taiba.app');
-    expect(loginEmail('Boss@Example.com'), 'boss@example.com');
+  test('saved logins round-trip and reject bad data', () {
+    final l = CloudLogin.fromJson(const CloudLogin('36933636', 'x').toJson())!;
+    expect((l.username, l.password), ('36933636', 'x'));
+    expect(l.params, {'p_user': '36933636', 'p_pass': 'x'});
+    expect(CloudLogin.fromJson(const {'u': 1}), isNull);
   });
 }
