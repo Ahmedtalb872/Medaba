@@ -13,6 +13,7 @@ import 'debts_screen.dart';
 import 'inventory_screen.dart';
 import 'invoices_screen.dart';
 import 'partners_screen.dart';
+import 'plots_screen.dart';
 import 'profits_screen.dart';
 import 'settings_screen.dart';
 import 'shipments_screen.dart';
@@ -35,6 +36,7 @@ const _dests = [
   _Dest('الفواتير', Icons.description_outlined, InvoicesScreen()),
   _Dest('الديون', Icons.account_balance_wallet_outlined, DebtsScreen()),
   _Dest('الشحنات البحرية', Icons.local_shipping_outlined, ShipmentsScreen()),
+  _Dest('القطع الأرضية', Icons.landscape_outlined, PlotsScreen()),
   _Dest('المعاملات', Icons.receipt_long_outlined, TransactionsScreen()),
   _Dest('التقارير والأرباح', Icons.bar_chart, ProfitsScreen()),
   _Dest('الإعدادات', Icons.settings_outlined, SettingsScreen()),
@@ -160,7 +162,7 @@ class _Sidebar extends StatelessWidget {
           builder: (context, c) {
             // على الشاشات القصيرة (مثل MacBook Air) نصغّر الشعار والأزرار
             // حتى تظهر كل الصفحات دون تمرير.
-            final compact = c.maxHeight < 790;
+            final compact = c.maxHeight < 860;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -616,6 +618,15 @@ Future<void> _openSearch(
             title: x.contents,
             subtitle: '${x.company} • ${x.status.label}',
             open: () => go(ShellPage.shipments),
+          ),
+      for (final x in s.plots)
+        if (has([x.name, x.location, x.buyer]))
+          (
+            icon: Icons.landscape_outlined,
+            title: x.name,
+            subtitle:
+                '${x.location.isEmpty ? 'قطعة أرضية' : x.location} • ${x.status.label}',
+            open: () => go(ShellPage.plots),
           ),
     ];
   }

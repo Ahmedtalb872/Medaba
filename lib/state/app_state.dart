@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../data/storage.dart';
 import '../models/debt.dart';
+import '../models/plot.dart';
 import '../models/shipment.dart';
 import '../models/inventory.dart';
 import '../models/invoice.dart';
@@ -68,6 +69,7 @@ class AppState extends ChangeNotifier {
   static const _kCompany = 'company';
   static const _kDebts = 'debts';
   static const _kShipments = 'shipments';
+  static const _kPlots = 'plots';
 
   /// كل مفاتيح التخزين، لمزامنتها مع قاعدة البيانات.
   static const storageKeys = [
@@ -81,6 +83,7 @@ class AppState extends ChangeNotifier {
     _kCompany,
     _kDebts,
     _kShipments,
+    _kPlots,
   ];
 
   final Storage _storage;
@@ -95,6 +98,7 @@ class AppState extends ChangeNotifier {
   List<Invoice> _invoices = [];
   List<Debt> _debts = [];
   List<Shipment> _shipments = [];
+  List<Plot> _plots = [];
   CompanyInfo _company = const CompanyInfo();
   bool loaded = false;
 
@@ -158,6 +162,7 @@ class AppState extends ChangeNotifier {
     _invoices = await _read(_kInvoices, Invoice.fromJson);
     _debts = await _read(_kDebts, Debt.fromJson);
     _shipments = await _read(_kShipments, Shipment.fromJson);
+    _plots = await _read(_kPlots, Plot.fromJson);
     final company = await _storage.readList(_kCompany);
     if (company.isNotEmpty) _company = CompanyInfo.fromJson(company.first);
     loaded = true;
@@ -231,7 +236,11 @@ class AppState extends ChangeNotifier {
     _shipments.map((e) => e.toJson()).toList(),
   );
 
+  Future<void> _savePlots() =>
+      _storage.writeList(_kPlots, _plots.map((e) => e.toJson()).toList());
+
   Future<void> _saveAll() => Future.wait([
+    _savePlots(),
     _saveInvoices(),
     _saveDebts(),
     _saveShipments(),
@@ -761,6 +770,42 @@ class AppState extends ChangeNotifier {
   int overdueDebts(DateTime now) =>
       _debts.where((d) => d.isOverdue(now)).length;
 
+  // ---------- القطع الأرضية ----------
+
+  /// القطع غير المباعة أولاً، ثم الأحدث شراءً.
+  List<Plot> get plots => List.unmodifiable(
+    [..._plots]..sort((a, b) {
+      if (a.isSold != b.isSold) return a.isSold ? 1 : -1;
+      return b.purchaseDate.compareTo(a.purchaseDate);
+    }),
+  );
+
+  Plot? plotById(String id) => _plots.where((x) => x.id == id).firstOrNull;
+
+  /// يحفظ القطعة. يرمي [StateError] إذا بيعت قبل شرائها.
+  Future<void> savePlot(Plot x) async {
+    final sold = x.saleDate;
+    if (x.isSold && sold != null && sold.isBefore(x.purchaseDate)) {
+      throw StateError('تاريخ البيع قبل تاريخ الشراء');
+    }
+    _upsert(_plots, x, (e) => e.id);
+    notifyListeners();
+    await _savePlots();
+  }
+
+  Future<void> deletePlot(String id) async {
+    _plots.removeWhere((x) => x.id == id);
+    notifyListeners();
+    await _savePlots();
+  }
+
+  /// يضيف تكلفة (بناء، رسوم...) إلى قطعة.
+  Future<void> addPlotCost(String id, PlotCost cost) async {
+    final x = plotById(id);
+    if (x == null) return;
+    await savePlot(x.copyWith(costs: [...x.costs, cost]));
+  }
+
   // ---------- الشحنات البحرية ----------
 
   Shipment? shipmentById(String id) =>
@@ -1166,6 +1211,42 @@ class AppState extends ChangeNotifier {
         note: 'تأخير بسبب ازدحام ميناء الترانزيت',
       ),
     ]);
+
+    _plots.addAll([
+      Plot(
+        id: newId(),
+        name: 'قطعة 112',
+        location: 'تفرغ زينة',
+        area: 300,
+        purchaseDate: DateTime(now.year, now.month - 7, 3),
+        purchasePrice: 4500000,
+        status: PlotStatus.building,
+        costs: [
+          PlotCost(
+            'أساسات وحفر',
+            650000,
+            DateTime(now.year, now.month - 5, 10),
+          ),
+          PlotCost('أسمنت وحديد', 900000, DateTime(now.year, now.month - 3, 2)),
+        ],
+      ),
+      Plot(
+        id: newId(),
+        name: 'قطعة 47',
+        location: 'توجنين',
+        area: 240,
+        purchaseDate: DateTime(now.year - 1, 9, 15),
+        purchasePrice: 2800000,
+        costs: [
+          PlotCost('بناء كامل', 3200000, DateTime(now.year - 1, 12, 1)),
+          PlotCost('توصيل الكهرباء والماء', 250000, DateTime(now.year, 2, 5)),
+        ],
+        status: PlotStatus.sold,
+        buyer: 'سيدي محمد',
+        salePrice: 7600000,
+        saleDate: DateTime(now.year, now.month - 1, 20),
+      ),
+    ]);
     if (_company.phone.isEmpty) {
       _company = const CompanyInfo();
       await _storage.writeList(_kCompany, [_company.toJson()]);
@@ -1185,6 +1266,7 @@ class AppState extends ChangeNotifier {
     _invoices.clear();
     _debts.clear();
     _shipments.clear();
+    _plots.clear();
     notifyListeners();
     await _saveAll();
   }
