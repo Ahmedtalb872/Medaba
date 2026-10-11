@@ -106,6 +106,61 @@ void main() {
     expect(state.company.inventoryLabel, CompanyInfo.defaultInventoryLabel);
   });
 
+  testWidgets('a new item is stored in the chosen warehouse', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await state.seedDemoData();
+    final branch = state.warehouses.last;
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('المخزون').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(Tab, 'الأصناف'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('إضافة صنف'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'اسم الصنف'),
+      'رمل',
+    );
+    // الوحدة تُختار من الأزرار.
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'طن'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'طن'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'سعر الشراء'),
+      '100',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'سعر البيع'),
+      '150',
+    );
+    await tester.ensureVisible(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButtonFormField<String>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(branch.name).last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'الكمية الموجودة الآن'),
+      '12',
+    );
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+
+    final sand = state.products.singleWhere((p) => p.name == 'رمل');
+    expect(sand.unit, 'طن');
+    expect(state.stockOf(sand.id, warehouseId: branch.id), 12);
+    expect(state.stockOf(sand.id), 12);
+  });
+
   testWidgets('inventory tabs and new stock movement form', (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;

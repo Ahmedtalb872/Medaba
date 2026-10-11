@@ -658,6 +658,21 @@ Future<void> showProductForm(BuildContext context, {Product? existing}) {
   final min = TextEditingController(text: num(existing?.minQty));
   const decimal = TextInputType.numberWithOptions(decimal: true);
   var image = existing?.image;
+  // الوحدات الشائعة مع ما استُعمل من قبل.
+  final units = {
+    'قطعة',
+    'كرتون',
+    'كيس',
+    'طن',
+    'كيلو',
+    'متر',
+    'لتر',
+    'جالون',
+    for (final p in s.products) p.unit,
+  }.where((u) => u.trim().isNotEmpty).toList();
+  // الصنف الجديد يُسجَّل في مخزن بكميته الموجودة الآن.
+  var warehouseId = s.warehouses.isEmpty ? null : s.warehouses.first.id;
+  final openingQty = TextEditingController();
 
   return showFormDialog(
     context: context,
@@ -702,12 +717,70 @@ Future<void> showProductForm(BuildContext context, {Product? existing}) {
       ),
       TextFormField(
         controller: unit,
+        onChanged: (_) => setState(() {}),
         decoration: const InputDecoration(
           labelText: 'الوحدة',
-          hintText: 'قطعة، كرتون، كيلو...',
+          helperText: 'اختر من الأزرار أو اكتب وحدة أخرى',
         ),
         validator: requiredText,
       ),
+      Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          for (final u in units)
+            ChoiceChip(
+              label: Text(u),
+              selected: unit.text.trim() == u,
+              onSelected: (_) => setState(() => unit.text = u),
+            ),
+        ],
+      ),
+      if (existing == null) ...[
+        if (s.warehouses.isEmpty)
+          const Text(
+            'لا توجد مخازن بعد: أضف مخزناً من تبويب «المخازن» لتسجيل كمية الصنف',
+            style: TextStyle(color: Colors.orange),
+          )
+        else ...[
+          DropdownButtonFormField<String>(
+            initialValue: warehouseId,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'المخزن'),
+            items: [
+              for (final w in s.warehouses)
+                DropdownMenuItem(value: w.id, child: Text(w.name)),
+            ],
+            onChanged: (v) => setState(() => warehouseId = v),
+          ),
+          TextFormField(
+            controller: openingQty,
+            decoration: InputDecoration(
+              labelText: 'الكمية الموجودة الآن',
+              suffixText: unit.text.trim(),
+              helperText:
+                  'تُسجَّل في المخزن المختار؛ اتركها فارغة إن لم يصل بعد',
+            ),
+            keyboardType: decimal,
+            validator: numberValidator(required: false),
+          ),
+        ],
+      ] else
+        Builder(
+          builder: (_) {
+            final where = [
+              for (final w in s.warehouses)
+                if (s.stockOf(existing.id, warehouseId: w.id) != 0)
+                  '${w.name}: ${fmt.number(s.stockOf(existing.id, warehouseId: w.id))}',
+            ];
+            return Text(
+              where.isEmpty
+                  ? 'غير موجود في أي مخزن حالياً'
+                  : 'موجود في: ${where.join('، ')}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            );
+          },
+        ),
       TextFormField(
         controller: cost,
         decoration: const InputDecoration(labelText: 'سعر الشراء'),
@@ -730,8 +803,8 @@ Future<void> showProductForm(BuildContext context, {Product? existing}) {
         validator: numberValidator(required: false),
       ),
     ],
-    onSave: () => s.saveProduct(
-      Product(
+    onSave: () async {
+      final product = Product(
         id: existing?.id ?? newId(),
         name: name.text.trim(),
         code: code.text.trim(),
@@ -740,8 +813,25 @@ Future<void> showProductForm(BuildContext context, {Product? existing}) {
         salePrice: fmt.parseNumber(sale.text)!,
         minQty: fmt.parseNumber(min.text) ?? 0,
         image: image,
-      ),
-    ),
+      );
+      await s.saveProduct(product);
+      final qty = fmt.parseNumber(openingQty.text) ?? 0;
+      if (existing == null && warehouseId != null && qty > 0) {
+        // «وارد - إضافة» لا يُنشئ مصروفاً: الكمية كانت موجودة قبل التطبيق.
+        await s.saveMove(
+          StockMove(
+            id: newId(),
+            type: MoveType.stockIn,
+            productId: product.id,
+            warehouseId: warehouseId!,
+            qty: qty,
+            unitPrice: product.costPrice,
+            date: DateTime.now(),
+            note: 'رصيد أول عند إضافة الصنف',
+          ),
+        );
+      }
+    },
   );
 }
 
