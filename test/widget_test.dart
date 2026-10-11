@@ -130,7 +130,7 @@ void main() {
     final stockBefore = state.stockOf(productId);
     await tester.tap(find.text('حركة جديدة'));
     await tester.pumpAndSettle();
-    // النوع الافتراضي "وارد - شراء" والسعر مملوء تلقائياً من سعر التكلفة.
+    // النوع الافتراضي "وارد - شراء" والسعر مملوء تلقائياً من سعر الشراء.
     await tester.enterText(find.widgetWithText(TextFormField, 'الكمية'), '5');
     await tester.tap(find.text('حفظ'));
     await tester.pumpAndSettle();

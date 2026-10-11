@@ -488,7 +488,7 @@ class AppState extends ChangeNotifier {
         .fold(0.0, (s, m) => s + m.effectOn(null));
   }
 
-  /// قيمة المخزون بسعر التكلفة.
+  /// قيمة المخزون بسعر الشراء.
   double stockValue({String? warehouseId}) => _products.fold(
     0,
     (s, p) => s + stockOf(p.id, warehouseId: warehouseId) * p.costPrice,
