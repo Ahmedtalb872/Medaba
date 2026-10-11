@@ -204,7 +204,19 @@ void main() {
     });
     expect(c.name, 'طيبة للتجارة العامة');
     expect(c.address, 'انواكشوط - تفرغ زينة');
-    expect(c.phone, '');
+    expect(c.phone, '36 93 36 36');
+  });
+
+  test('the company phone replaces an old one once, then stays editable', () {
+    final old = CompanyInfo.fromJson({'name': 'X', 'phone': '45 25 00 00'});
+    expect(old.phone, CompanyInfo.defaultPhone);
+    final edited = CompanyInfo.fromJson({
+      ...old.toJson(),
+      'phone': '22 11 00 99',
+    });
+    expect(edited.phone, '22 11 00 99');
+    final cleared = CompanyInfo.fromJson({...old.toJson(), 'phone': ''});
+    expect(cleared.phone, '');
   });
 
   test('saved invoices with tax are brought in line on load', () async {

@@ -1167,7 +1167,7 @@ class AppState extends ChangeNotifier {
       ),
     ]);
     if (_company.phone.isEmpty) {
-      _company = const CompanyInfo(phone: '45 25 00 00');
+      _company = const CompanyInfo();
       await _storage.writeList(_kCompany, [_company.toJson()]);
     }
 

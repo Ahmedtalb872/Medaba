@@ -185,12 +185,12 @@ class CompanyInfo {
     'الرياض - المنطقة الصناعية',
   };
 
-  /// هاتف تجريبي من نسخة قديمة؛ يُمسح ليكتب المدير بياناته.
-  static const _oldPhones = {'0500000000'};
+  /// هاتف المؤسسة على الفواتير.
+  static const defaultPhone = '36 93 36 36';
 
   const CompanyInfo({
     this.name = defaultName,
-    this.phone = '',
+    this.phone = defaultPhone,
     this.address = defaultAddress,
     this.ownerName = defaultOwnerName,
     this.ownerRole = defaultOwnerRole,
@@ -211,6 +211,7 @@ class CompanyInfo {
   Map<String, dynamic> toJson() => {
     'name': name,
     'phone': phone,
+    'phoneSet': true,
     'address': address,
     'ownerName': ownerName,
     'ownerRole': ownerRole,
@@ -223,10 +224,9 @@ class CompanyInfo {
       final n? when !_oldNames.contains(n) => n,
       _ => defaultName,
     },
-    phone: switch (j['phone'] as String?) {
-      final p? when !_oldPhones.contains(p) => p,
-      _ => '',
-    },
+    // الأرقام المحفوظة قبل اعتماد رقم المؤسسة (تجريبية أو قديمة) تُستبدل به
+    // مرة واحدة؛ بعدها يبقى ما يكتبه المدير في الإعدادات.
+    phone: j['phoneSet'] == true ? j['phone'] as String? ?? '' : defaultPhone,
     address: switch (j['address'] as String?) {
       final a? when !_oldAddresses.contains(a) => a,
       _ => defaultAddress,
