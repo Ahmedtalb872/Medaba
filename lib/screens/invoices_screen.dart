@@ -973,16 +973,7 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
               onChanged: (_) => setState(() {}),
             ),
           ),
-          SizedBox(
-            width: 120,
-            child: TextFormField(
-              controller: l.price,
-              decoration: const InputDecoration(labelText: 'سعر الفرد'),
-              keyboardType: decimal,
-              validator: numberValidator(),
-              onChanged: (_) => setState(() {}),
-            ),
-          ),
+          SizedBox(width: 170, child: _priceField(l, product)),
           SizedBox(
             width: 120,
             child: Text(
@@ -1004,6 +995,56 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
           ),
         ],
       ),
+    );
+  }
+
+  /// سعر الفرد قابل للتعديل لكل عميل؛ تحته الفرق عن السعر المسجل للصنف،
+  /// وتحذير إذا صار سعر البيع أقل من سعر الشراء.
+  Widget _priceField(_LineDraft l, Product? product) {
+    final base = product == null
+        ? null
+        : (_isSale ? product.salePrice : product.costPrice);
+    final current = fmt.parseNumber(l.price.text);
+    final diff = base == null || current == null ? 0.0 : current - base;
+    final belowCost =
+        _isSale &&
+        product != null &&
+        current != null &&
+        current < product.costPrice;
+    final (String? helper, Color? color) = belowCost
+        ? (
+            'أقل من سعر الشراء (${fmt.number(product.costPrice)})',
+            AppColors.expense.last,
+          )
+        : diff > 0
+        ? (
+            'زيادة ${fmt.number(diff)} عن ${fmt.number(base!)}',
+            AppColors.income.last,
+          )
+        : diff < 0
+        ? ('تخفيض ${fmt.number(-diff)} عن ${fmt.number(base!)}', AppColors.gold)
+        : (base == null ? null : 'السعر المسجل', null);
+    return TextFormField(
+      controller: l.price,
+      decoration: InputDecoration(
+        labelText: 'سعر الفرد',
+        helperText: helper,
+        helperMaxLines: 2,
+        helperStyle: color == null
+            ? null
+            : TextStyle(color: color, fontWeight: FontWeight.bold),
+        suffixIcon: diff == 0
+            ? null
+            : IconButton(
+                tooltip: 'إرجاع السعر المسجل',
+                icon: const Icon(Icons.restart_alt, size: 20),
+                onPressed: () =>
+                    setState(() => l.price.text = fmt.number(base!)),
+              ),
+      ),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      validator: numberValidator(),
+      onChanged: (_) => setState(() {}),
     );
   }
 

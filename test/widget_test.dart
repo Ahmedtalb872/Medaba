@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:medaba/data/storage.dart';
 import 'package:medaba/main.dart';
 import 'package:medaba/models/invoice.dart';
+import 'package:medaba/utils/format.dart' as fmt;
 import 'package:medaba/utils/product_image.dart';
 
 import 'product_image_test.dart' show pngOf;
@@ -192,6 +193,59 @@ void main() {
 
     expect(state.moves.length, movesBefore + 1);
     expect(state.stockOf(productId), stockBefore + 5);
+  });
+
+  testWidgets('the selling price can be changed for one customer', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await state.seedDemoData();
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+    final product = state.products.first;
+
+    await tester.tap(find.text('الفواتير').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('فاتورة بيع جديدة'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'العميل'),
+      'عميل خاص',
+    );
+    await tester.enterText(find.widgetWithText(TextFormField, 'الكمية'), '1');
+    final price = find.widgetWithText(TextFormField, 'سعر الفرد');
+    expect(find.text('السعر المسجل'), findsOneWidget);
+
+    // تخفيض للعميل يظهر تحت السعر، وزر الإرجاع يعيد السعر المسجل.
+    await tester.enterText(price, fmt.number(product.salePrice - 30));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('تخفيض 30 عن ${fmt.number(product.salePrice)}'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byTooltip('إرجاع السعر المسجل'));
+    await tester.pumpAndSettle();
+    expect(find.text('السعر المسجل'), findsOneWidget);
+
+    // أقل من سعر الشراء: تحذير، لكن الحفظ مسموح.
+    await tester.enterText(price, fmt.number(product.costPrice - 1));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('أقل من سعر الشراء'), findsOneWidget);
+
+    await tester.enterText(price, fmt.number(product.salePrice + 20));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('حفظ الفاتورة'));
+    await tester.pumpAndSettle();
+
+    final inv = state.invoices.firstWhere((i) => i.partyName == 'عميل خاص');
+    expect(inv.lines.single.unitPrice, product.salePrice + 20);
+    // السعر المسجل للصنف لا يتغير.
+    expect(state.productById(product.id)!.salePrice, product.salePrice);
   });
 
   testWidgets('create a sale invoice through the editor', (tester) async {
