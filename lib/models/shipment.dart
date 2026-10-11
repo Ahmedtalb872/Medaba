@@ -18,6 +18,21 @@ enum ShipmentStatus {
       index + 1 < values.length ? values[index + 1] : null;
 }
 
+/// تكلفة إضافية على الشحنة (تفريغ، تخزين في الميناء، نقل، غرامة...).
+class ShipmentExtraCost {
+  final String label;
+  final double amount;
+  const ShipmentExtraCost(this.label, this.amount);
+
+  Map<String, dynamic> toJson() => {'label': label, 'amount': amount};
+
+  factory ShipmentExtraCost.fromJson(Map<String, dynamic> j) =>
+      ShipmentExtraCost(
+        j['label'] as String? ?? '',
+        (j['amount'] as num? ?? 0).toDouble(),
+      );
+}
+
 /// شحنة بحرية واحدة (حاوية أو أكثر ببوليصة شحن واحدة).
 class Shipment {
   final String id;
@@ -46,6 +61,9 @@ class Shipment {
 
   /// رسوم الجمارك والتخليص والنقل من الميناء.
   final double customsCost;
+
+  /// تكاليف أخرى يضيفها المدير بأسمائها.
+  final List<ShipmentExtraCost> extraCosts;
   final String note;
 
   const Shipment({
@@ -63,11 +81,15 @@ class Shipment {
     this.goodsValue = 0,
     this.freightCost = 0,
     this.customsCost = 0,
+    this.extraCosts = const [],
     this.note = '',
   });
 
-  /// التكلفة الكاملة: قيمة البضاعة + الشحن + الجمارك.
-  double get totalCost => goodsValue + freightCost + customsCost;
+  double get extraCostTotal => extraCosts.fold(0, (t, c) => t + c.amount);
+
+  /// التكلفة الكاملة: قيمة البضاعة + الشحن + الجمارك + التكاليف الإضافية.
+  double get totalCost =>
+      goodsValue + freightCost + customsCost + extraCostTotal;
 
   bool get isReceived => status == ShipmentStatus.received;
 
@@ -98,6 +120,7 @@ class Shipment {
     'goodsValue': goodsValue,
     'freightCost': freightCost,
     'customsCost': customsCost,
+    'extraCosts': [for (final c in extraCosts) c.toJson()],
     'note': note,
   };
 
@@ -118,6 +141,10 @@ class Shipment {
     goodsValue: (j['goodsValue'] as num? ?? 0).toDouble(),
     freightCost: (j['freightCost'] as num? ?? 0).toDouble(),
     customsCost: (j['customsCost'] as num? ?? 0).toDouble(),
+    extraCosts: [
+      for (final c in (j['extraCosts'] as List? ?? const []))
+        ShipmentExtraCost.fromJson(Map<String, dynamic>.from(c as Map)),
+    ],
     note: j['note'] as String? ?? '',
   );
 }

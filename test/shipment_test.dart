@@ -116,4 +116,29 @@ void main() {
     expect(find.text('رخام'), findsNothing);
     expect(find.text('حديد تسليح 12 مم - 25 طن'), findsOneWidget);
   });
+
+  test('extra costs add to the total and survive saving', () {
+    final x = Shipment(
+      id: 'x',
+      company: 'C',
+      contents: 'حديد',
+      departureDate: DateTime(2026, 1, 1),
+      expectedArrival: DateTime(2026, 1, 20),
+      goodsValue: 1000,
+      freightCost: 200,
+      customsCost: 100,
+      extraCosts: const [
+        ShipmentExtraCost('تفريغ', 50),
+        ShipmentExtraCost('تخزين في الميناء', 25),
+      ],
+    );
+    expect(x.extraCostTotal, 75);
+    expect(x.totalCost, 1375);
+    final back = Shipment.fromJson(x.toJson());
+    expect(back.extraCosts.map((c) => c.label), ['تفريغ', 'تخزين في الميناء']);
+    expect(back.totalCost, 1375);
+    // الشحنات المحفوظة قبل هذه الميزة تُقرأ بدون تكاليف إضافية.
+    final old = Shipment.fromJson(x.toJson()..remove('extraCosts'));
+    expect(old.extraCosts, isEmpty);
+  });
 }

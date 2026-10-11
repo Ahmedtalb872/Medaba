@@ -148,7 +148,21 @@ class _ShipmentsScreenState extends State<ShipmentsScreen> {
             ),
             Text(x.originPort.isEmpty ? '-' : x.originPort),
             _Arrival(shipment: x, now: now),
-            Text(fmt.money(x.totalCost)),
+            Tooltip(
+              message: [
+                'البضاعة: ${fmt.money(x.goodsValue)}',
+                'الشحن: ${fmt.money(x.freightCost)}',
+                'الجمارك والتخليص: ${fmt.money(x.customsCost)}',
+                for (final c in x.extraCosts)
+                  '${c.label}: ${fmt.money(c.amount)}',
+              ].join('\n'),
+              child: Text(
+                fmt.money(x.totalCost),
+                style: x.extraCosts.isEmpty
+                    ? null
+                    : const TextStyle(decoration: TextDecoration.underline),
+              ),
+            ),
             _StatusChip(shipment: x, now: now),
           ],
           extraActions: (x) => [
@@ -323,6 +337,13 @@ Future<void> showShipmentForm(BuildContext context, {Shipment? existing}) {
   final freight = TextEditingController(text: money(existing?.freightCost));
   final customs = TextEditingController(text: money(existing?.customsCost));
   final note = TextEditingController(text: existing?.note);
+  final extras = [
+    for (final c in existing?.extraCosts ?? const <ShipmentExtraCost>[])
+      (
+        label: TextEditingController(text: c.label),
+        amount: TextEditingController(text: money(c.amount)),
+      ),
+  ];
   final today = DateTime.now();
   var departure = existing?.departureDate ?? today;
   var arrival =
@@ -429,6 +450,57 @@ Future<void> showShipmentForm(BuildContext context, {Shipment? existing}) {
           validator: numberValidator(required: false),
         ),
       ),
+      if (extras.isNotEmpty)
+        const Text(
+          'تكاليف إضافية',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+      for (final (i, e) in extras.indexed)
+        Row(
+          key: ObjectKey(e),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: TextFormField(
+                controller: e.label,
+                decoration: const InputDecoration(
+                  labelText: 'البيان',
+                  hintText: 'تفريغ، تخزين، نقل...',
+                ),
+                validator: requiredText,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
+              child: TextFormField(
+                controller: e.amount,
+                decoration: const InputDecoration(labelText: 'المبلغ'),
+                keyboardType: decimal,
+                validator: numberValidator(),
+              ),
+            ),
+            IconButton(
+              tooltip: 'حذف التكلفة',
+              icon: const Icon(Icons.remove_circle_outline),
+              onPressed: () => setState(() => extras.removeAt(i)),
+            ),
+          ],
+        ),
+      Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: OutlinedButton.icon(
+          onPressed: () => setState(
+            () => extras.add((
+              label: TextEditingController(),
+              amount: TextEditingController(),
+            )),
+          ),
+          icon: const Icon(Icons.add),
+          label: const Text('إضافة تكاليف إضافية'),
+        ),
+      ),
       TextFormField(
         controller: note,
         decoration: const InputDecoration(labelText: 'ملاحظات'),
@@ -456,6 +528,13 @@ Future<void> showShipmentForm(BuildContext context, {Shipment? existing}) {
             goodsValue: fmt.parseNumber(goods.text) ?? 0,
             freightCost: fmt.parseNumber(freight.text) ?? 0,
             customsCost: fmt.parseNumber(customs.text) ?? 0,
+            extraCosts: [
+              for (final e in extras)
+                ShipmentExtraCost(
+                  e.label.text.trim(),
+                  fmt.parseNumber(e.amount.text) ?? 0,
+                ),
+            ],
             note: note.text.trim(),
           ),
         );
