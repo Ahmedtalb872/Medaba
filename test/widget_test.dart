@@ -235,6 +235,45 @@ void main() {
     expect(find.textContaining('فاتورة شراء'), findsWidgets);
   });
 
+  testWidgets('many items are added from one pasted list', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('المخزون').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(Tab, 'الأصناف'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('إضافة عدة أصناف'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'الأصناف (سطر لكل صنف)'),
+      '[١٢/١٠، ٢١:١٣] محمد آبا: 0.66 غ\n'
+      '[١٢/١٠، ٢١:٢١] محمد آبا: #13\n'
+      '[١٢/١٠، ٢١:٢٢] محمد آبا: 24# green',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'اسم يسبق كل صنف (اختياري)'),
+      'زنك',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('سيُضاف 3 صنف'), findsOneWidget);
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+
+    expect(state.products.map((p) => p.name), [
+      'زنك 0.66 غ',
+      'زنك #13',
+      'زنك 24# green',
+    ]);
+  });
+
   testWidgets('inventory tabs and new stock movement form', (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;

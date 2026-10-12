@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
+import '../utils/item_list.dart';
 import '../widgets/common.dart';
 import '../utils/product_image.dart';
 import '../widgets/data_table_card.dart';
@@ -598,6 +599,11 @@ class _ProductsTab extends StatelessWidget {
               icon: const Icon(Icons.add),
               label: const Text('إضافة صنف'),
             ),
+            OutlinedButton.icon(
+              onPressed: () => showBulkProductsForm(context),
+              icon: const Icon(Icons.playlist_add),
+              label: const Text('إضافة عدة أصناف'),
+            ),
           ],
         ),
         DataTableCard<Product>(
@@ -644,6 +650,114 @@ class _ProductsTab extends StatelessWidget {
       ],
     );
   }
+}
+
+/// يضيف أصنافاً كثيرة دفعة واحدة من قائمة ملصوقة، سطر لكل صنف.
+/// الأسعار تبقى صفراً ليكملها المدير من زر التعديل.
+Future<void> showBulkProductsForm(BuildContext context) {
+  final s = context.read<AppState>();
+  final key = GlobalKey<FormState>();
+  final list = TextEditingController();
+  final prefix = TextEditingController();
+  final unit = TextEditingController(text: 'قطعة');
+  final existing = {for (final p in s.products) p.name.trim().toLowerCase()};
+  const units = ['قطعة', 'كرتون', 'كيس', 'طن', 'كيلو', 'متر', 'لتر', 'لفة'];
+
+  List<String> names() => [
+    for (final n in parseItemList(list.text))
+      [prefix.text.trim(), n].where((t) => t.isNotEmpty).join(' '),
+  ];
+
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'إضافة عدة أصناف',
+    fields: (setState) {
+      final all = names();
+      final fresh = all
+          .where((n) => !existing.contains(n.toLowerCase()))
+          .toList();
+      return [
+        TextFormField(
+          controller: list,
+          onChanged: (_) => setState(() {}),
+          minLines: 6,
+          maxLines: 12,
+          decoration: const InputDecoration(
+            labelText: 'الأصناف (سطر لكل صنف)',
+            hintText: 'الصق القائمة هنا، ولو منسوخة من واتساب',
+            alignLabelWithHint: true,
+          ),
+          validator: (_) =>
+              names().isEmpty ? 'اكتب صنفاً واحداً على الأقل' : null,
+        ),
+        TextFormField(
+          controller: prefix,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            labelText: 'اسم يسبق كل صنف (اختياري)',
+            hintText: 'مثل: زنك، أنبوب، دهان',
+          ),
+        ),
+        TextFormField(
+          controller: unit,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(labelText: 'الوحدة'),
+          validator: requiredText,
+        ),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final u in units)
+              ChoiceChip(
+                label: Text(u),
+                selected: unit.text.trim() == u,
+                onSelected: (_) => setState(() => unit.text = u),
+              ),
+          ],
+        ),
+        if (all.isNotEmpty) ...[
+          Text(
+            fresh.length == all.length
+                ? 'سيُضاف ${fresh.length} صنف'
+                : 'سيُضاف ${fresh.length} صنف '
+                      '(${all.length - fresh.length} موجود من قبل ولن يتكرر)',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final n in all)
+                Chip(
+                  label: Text(n, textDirection: TextDirection.ltr),
+                  visualDensity: VisualDensity.compact,
+                  backgroundColor: existing.contains(n.toLowerCase())
+                      ? Colors.grey.shade300
+                      : null,
+                ),
+            ],
+          ),
+          const Text(
+            'الأسعار تبدأ صفراً؛ أكملها لكل صنف من زر التعديل ✏️',
+            style: TextStyle(fontSize: 12),
+          ),
+        ],
+      ];
+    },
+    onSave: () async {
+      final fresh = names()
+          .where((n) => !existing.contains(n.toLowerCase()))
+          .toList();
+      for (final n in fresh) {
+        await s.saveProduct(
+          Product(id: newId(), name: n, unit: unit.text.trim()),
+        );
+      }
+      if (context.mounted) _snack(context, 'تمت إضافة ${fresh.length} صنف');
+    },
+  );
 }
 
 Future<void> showProductForm(BuildContext context, {Product? existing}) {
