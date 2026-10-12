@@ -13,6 +13,7 @@ import '../utils/format.dart' as fmt;
 import '../utils/product_image.dart';
 import '../widgets/common.dart';
 import '../widgets/data_table_card.dart';
+import 'business_actions.dart';
 
 enum _View {
   open('غير المباعة'),
@@ -156,6 +157,12 @@ class _CarsScreenState extends State<CarsScreen> {
               icon: Icons.badge_outlined,
               color: AppColors.capital.last,
               onTap: () => openCarCard(context, x),
+            ),
+            TableAction(
+              tooltip: 'بيع السيارة',
+              icon: Icons.sell_outlined,
+              color: AppColors.income.last,
+              onTap: x.isSold ? null : () => showSellCarForm(context, car: x),
             ),
             TableAction(
               tooltip: 'إضافة مصروف',

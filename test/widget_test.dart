@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:medaba/data/storage.dart';
 import 'package:medaba/main.dart';
+import 'package:medaba/models/car.dart';
 import 'package:medaba/models/invoice.dart';
 import 'package:medaba/utils/format.dart' as fmt;
 import 'package:medaba/utils/product_image.dart';
@@ -185,6 +186,53 @@ void main() {
     expect(find.text('سعر شراء السيارة'), findsOneWidget);
     expect(find.text('إجمالي التكلفة'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('buy and sell ask which business first', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await state.seedDemoData();
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+
+    // البيع: يظهر الاختيار بين الأنشطة الثلاثة.
+    await tester.tap(find.text('بيع جديد'));
+    await tester.pumpAndSettle();
+    expect(find.text('طيبة للسيارات'), findsOneWidget);
+    expect(find.text('طيبة للقطع الأرضية'), findsOneWidget);
+    expect(find.text('طيبة للتجارة العامة'), findsOneWidget);
+
+    // بيع سيارة: المعروضة في المعرض تأتي أولاً.
+    await tester.tap(find.text('طيبة للسيارات'));
+    await tester.pumpAndSettle();
+    final car = state.cars.firstWhere((c) => c.status == CarStatus.inStock);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'المشتري'),
+      'زبون السيارة',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'سعر البيع'),
+      fmt.number(car.totalCost + 100000),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('الربح: 100,000'), findsOneWidget);
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+    final sold = state.carById(car.id)!;
+    expect(sold.isSold, isTrue);
+    expect(sold.buyer, 'زبون السيارة');
+    expect(sold.profit, 100000);
+
+    // الشراء للتجارة العامة يفتح فاتورة شراء.
+    await tester.tap(find.text('شراء جديد'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('طيبة للتجارة العامة'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('فاتورة شراء'), findsWidgets);
   });
 
   testWidgets('inventory tabs and new stock movement form', (tester) async {

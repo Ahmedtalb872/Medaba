@@ -9,8 +9,8 @@ import '../utils/format.dart' as fmt;
 import '../widgets/brand.dart';
 import '../widgets/common.dart';
 import '../widgets/shell_nav.dart';
+import 'business_actions.dart';
 import 'inventory_screen.dart';
-import 'invoices_screen.dart';
 
 /// الصفحة الرئيسية: ترحيب، اختصارات سريعة، ثلاثة أرقام، وآخر المعاملات.
 class DashboardScreen extends StatelessWidget {
@@ -40,17 +40,17 @@ class DashboardScreen extends StatelessWidget {
             ),
             _QuickAction(
               title: 'شراء جديد',
-              subtitle: 'إنشاء فاتورة شراء',
+              subtitle: 'سيارة، قطعة أرضية أو بضاعة',
               icon: Icons.inventory_2,
               color: const Color(0xFFC07F12),
-              onTap: () => openInvoiceEditor(context, InvoiceType.purchase),
+              onTap: () => startDeal(context, sale: false),
             ),
             _QuickAction(
               title: 'بيع جديد',
-              subtitle: 'إنشاء فاتورة بيع',
+              subtitle: 'سيارة، قطعة أرضية أو بضاعة',
               icon: Icons.add_shopping_cart,
               color: const Color(0xFF15803D),
-              onTap: () => openInvoiceEditor(context, InvoiceType.sale),
+              onTap: () => startDeal(context, sale: true),
             ),
           ],
         ),
