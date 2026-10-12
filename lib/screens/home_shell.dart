@@ -3,11 +3,13 @@ import 'package:provider/provider.dart';
 
 import '../data/cloud.dart';
 import '../data/synced_storage.dart';
+import '../models/car.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
 import '../widgets/brand.dart';
 import '../widgets/shell_nav.dart';
+import 'cars_screen.dart';
 import 'dashboard_screen.dart';
 import 'debts_screen.dart';
 import 'inventory_screen.dart';
@@ -16,7 +18,6 @@ import 'partners_screen.dart';
 import 'plots_screen.dart';
 import 'profits_screen.dart';
 import 'settings_screen.dart';
-import 'shipments_screen.dart';
 import 'transactions_screen.dart';
 import 'workers_screen.dart';
 
@@ -35,7 +36,7 @@ const _dests = [
   _Dest('المخزون', Icons.inventory_2_outlined, InventoryScreen()),
   _Dest('الفواتير', Icons.description_outlined, InvoicesScreen()),
   _Dest('الديون', Icons.account_balance_wallet_outlined, DebtsScreen()),
-  _Dest('الشحنات البحرية', Icons.local_shipping_outlined, ShipmentsScreen()),
+  _Dest('السيارات', Icons.directions_car_outlined, CarsScreen()),
   _Dest('القطع الأرضية', Icons.landscape_outlined, PlotsScreen()),
   _Dest('المعاملات', Icons.receipt_long_outlined, TransactionsScreen()),
   _Dest('التقارير والأرباح', Icons.bar_chart, ProfitsScreen()),
@@ -455,15 +456,15 @@ List<_Alert> _alerts(AppState s) {
         text: 'قارب على النفاد: ${p.name} (${fmt.number(s.stockOf(p.id))})',
         page: ShellPage.inventory,
       ),
-    for (final x in s.activeShipments)
-      if (x.isDelayed(now) || x.daysToArrival(now) <= 7)
+    for (final x in s.carsOnTheWay)
+      if (x.status == CarStatus.atSea && (x.daysToArrival(now) ?? 99) <= 7)
         (
-          icon: Icons.directions_boat_outlined,
-          color: AppColors.capital.last,
-          text: x.isDelayed(now)
-              ? 'شحنة متأخرة: ${x.contents}'
-              : 'شحنة تصل قريباً: ${x.contents} - ${x.status.label}',
-          page: ShellPage.shipments,
+          icon: Icons.directions_car_outlined,
+          color: x.isLate(now) ? AppColors.loss.last : AppColors.capital.last,
+          text: x.isLate(now)
+              ? 'سيارة متأخرة في البحر: ${x.title}'
+              : 'سيارة تصل قريباً: ${x.title}',
+          page: ShellPage.cars,
         ),
     for (final d in s.debts)
       if (d.isOverdue(now))
@@ -611,13 +612,17 @@ Future<void> _openSearch(
             subtitle: 'دين • المتبقي: ${fmt.money(d.remaining)}',
             open: () => go(ShellPage.debts),
           ),
-      for (final x in s.shipments)
-        if (has([x.contents, x.company, x.billOfLading, x.containerNumber]))
+      for (final x in s.cars)
+        if (has([x.title, x.vin, x.plate, x.container, x.buyer]))
           (
-            icon: Icons.directions_boat_outlined,
-            title: x.contents,
-            subtitle: '${x.company} • ${x.status.label}',
-            open: () => go(ShellPage.shipments),
+            icon: Icons.directions_car_outlined,
+            title: x.title,
+            subtitle:
+                '${x.plate.isEmpty ? x.vin : x.plate} • ${x.status.label}',
+            open: () {
+              Navigator.pop(dialog);
+              openCarCard(context, x);
+            },
           ),
       for (final x in s.plots)
         if (has([x.name, x.location, x.buyer]))

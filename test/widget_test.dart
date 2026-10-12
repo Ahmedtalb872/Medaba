@@ -33,7 +33,7 @@ void main() {
         'المخزون',
         'الفواتير',
         'الديون',
-        'الشحنات البحرية',
+        'السيارات',
         'القطع الأرضية',
         'المعاملات',
         'التقارير والأرباح',
@@ -161,6 +161,30 @@ void main() {
     expect(sand.unit, 'طن');
     expect(state.stockOf(sand.id, warehouseId: branch.id), 12);
     expect(state.stockOf(sand.id), 12);
+  });
+
+  testWidgets('a car opens its expense card', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await state.seedDemoData();
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('السيارات').first);
+    await tester.pumpAndSettle();
+    final car = state.carsOnTheWay.first;
+    await tester.tap(find.text(car.title));
+    await tester.pumpAndSettle();
+
+    expect(find.text('بطاقة ${car.title}'), findsOneWidget);
+    expect(find.text('المصاريف منذ الشراء'), findsOneWidget);
+    expect(find.text('سعر شراء السيارة'), findsOneWidget);
+    expect(find.text('إجمالي التكلفة'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('inventory tabs and new stock movement form', (tester) async {

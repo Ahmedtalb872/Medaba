@@ -20,7 +20,7 @@ abstract final class ShellPage {
   static const inventory = 3;
   static const invoices = 4;
   static const debts = 5;
-  static const shipments = 6;
+  static const cars = 6;
   static const plots = 7;
   static const transactions = 8;
   static const profits = 9;
