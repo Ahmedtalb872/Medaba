@@ -1293,6 +1293,139 @@ class AppState extends ChangeNotifier {
     await _saveAll();
   }
 
+  /// يحذف ما أضافته البيانات التجريبية فقط (الأسمنت والحديد والشركاء
+  /// والعمال التجريبيون...) ويُبقي بيانات المؤسسة الحقيقية. يُعرف كل سجل
+  /// تجريبي بأكثر من حقل معاً، وما عُدِّل منه أو استُخدم في فاتورة حقيقية يبقى.
+  /// يُرجع عدد السجلات المحذوفة.
+  Future<int> removeDemoData() async {
+    var removed = 0;
+    int drop<T>(List<T> list, bool Function(T) test) {
+      final before = list.length;
+      list.removeWhere(test);
+      removed += before - list.length;
+      return before - list.length;
+    }
+
+    final demoProducts = {
+      ('أسمنت', 'C-01', 230.0),
+      ('حديد تسليح 12مم', 'S-12', 34000.0),
+      ('بلاط سيراميك', 'T-60', 320.0),
+      ('دهان أبيض', 'P-W', 950.0),
+      ('أنابيب PVC', 'PVC-4', 260.0),
+    };
+    final productIds = {
+      for (final p in _products)
+        if (demoProducts.contains((p.name, p.code, p.costPrice))) p.id,
+    };
+
+    // الفواتير التجريبية: أطرافها التجريبية وكل أصنافها تجريبية.
+    const demoParties = {
+      'مؤسسة الحديد المتحدة',
+      'شركة البناء الحديث',
+      'عميل نقدي',
+    };
+    final invoices = [
+      for (final inv in _invoices)
+        if (demoParties.contains(inv.partyName) &&
+            inv.lines.isNotEmpty &&
+            inv.lines.every((l) => productIds.contains(l.productId)))
+          inv,
+    ];
+    final invoiceIds = {for (final inv in invoices) inv.id};
+    final invoiceTx = {for (final inv in invoices) inv.txId};
+    drop(_invoices, (inv) => invoiceIds.contains(inv.id));
+    _moves.removeWhere((m) => invoiceIds.contains(m.invoiceId));
+    _transactions.removeWhere((x) => invoiceTx.contains(x.id));
+    _debts.removeWhere((d) => invoiceIds.contains(d.invoiceId));
+
+    // الأصناف التجريبية غير المستخدمة في فواتير حقيقية، مع حركاتها اليدوية.
+    productIds.removeWhere(
+      (id) => _moves.any((m) => m.productId == id && m.invoiceId != null),
+    );
+    final moveTx = {
+      for (final m in _moves)
+        if (productIds.contains(m.productId) && m.txId != null) m.txId,
+    };
+    _moves.removeWhere((m) => productIds.contains(m.productId));
+    _transactions.removeWhere((x) => moveTx.contains(x.id));
+    drop(_products, (p) => productIds.contains(p.id));
+
+    // مخزن الفرع التجريبي إن لم يبقَ عليه شيء.
+    drop(
+      _warehouses,
+      (w) =>
+          w.name == 'مخزن الفرع' &&
+          w.location == 'نواذيبو - وسط المدينة' &&
+          !_moves.any((m) => m.warehouseId == w.id || m.toWarehouseId == w.id),
+    );
+
+    const demoPartners = {
+      ('أحمد علي', '22 45 67 01'),
+      ('محمد حسن', '36 45 67 02'),
+      ('خالد سعيد', '46 45 67 03'),
+    };
+    const demoWorkers = {
+      ('سالم يوسف', '1234567890'),
+      ('يوسف إبراهيم', '2345678901'),
+      ('عمر فاروق', '3456789012'),
+    };
+    final people = {
+      for (final p in _partners)
+        if (demoPartners.contains((p.name, p.phone))) p.id,
+      for (final w in _workers)
+        if (demoWorkers.contains((w.name, w.nationalId))) w.id,
+    };
+    drop(_partners, (p) => people.contains(p.id));
+    drop(_workers, (w) => people.contains(w.id));
+    drop(
+      _transactions,
+      (x) =>
+          (x.personId != null && people.contains(x.personId)) ||
+          (x.category == TxCategory.sales &&
+              x.note == 'مبيعات الشهر' &&
+              x.amount >= 600000 &&
+              x.amount <= 800000 &&
+              x.amount % 40000 == 0) ||
+          (x.category == TxCategory.rent &&
+              x.note == 'إيجار المقر' &&
+              x.amount == 60000),
+    );
+
+    final demoDebts = {
+      ('سيدي محمد', '22 33 44 55', 85000.0),
+      ('مقاولات الأمل', '36 10 20 30', 140000.0),
+      ('مؤسسة الحديد المتحدة', '45 25 10 10', 120000.0),
+    };
+    drop(
+      _debts,
+      (d) =>
+          d.invoiceId == null &&
+          demoDebts.contains((d.personName, d.phone, d.amount)),
+    );
+
+    const demoVins = {
+      'MR0FA3CD200123456',
+      'KMHJ381ABJU765432',
+      'WDD2050421F112233',
+    };
+    drop(_cars, (c) => demoVins.contains(c.vin));
+    drop(
+      _plots,
+      (p) =>
+          (p.name == 'قطعة 112' &&
+              p.location == 'تفرغ زينة' &&
+              p.purchasePrice == 4500000) ||
+          (p.name == 'قطعة 47' &&
+              p.location == 'توجنين' &&
+              p.purchasePrice == 2800000),
+    );
+
+    if (removed == 0 && invoices.isEmpty) return 0;
+    notifyListeners();
+    await _saveAll();
+    return removed;
+  }
+
   Future<void> clearAll() async {
     _partners.clear();
     _workers.clear();

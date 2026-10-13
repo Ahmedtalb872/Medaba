@@ -96,6 +96,8 @@ class _CloudGateState extends State<CloudGate> {
     await storage.init(AppState.storageKeys);
     final state = AppState(storage);
     await state.load();
+    // قاعدة بيانات المؤسسة لا تحتاج البيانات التجريبية القديمة.
+    await state.removeDemoData();
     if (!mounted) {
       storage.dispose();
       return;

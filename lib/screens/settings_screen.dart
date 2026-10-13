@@ -53,6 +53,22 @@ class SettingsScreen extends StatelessWidget {
                 const Divider(height: 1),
               ],
               ListTile(
+                leading: const Icon(Icons.cleaning_services_outlined),
+                title: const Text('حذف البيانات التجريبية'),
+                subtitle: const Text(
+                  'يحذف الأسمنت والحديد والشركاء والعمال والفواتير التجريبية ويُبقي بياناتك',
+                ),
+                onTap: () async {
+                  final n = await s.removeDemoData();
+                  done(
+                    n == 0
+                        ? 'لا توجد بيانات تجريبية'
+                        : 'تم حذف البيانات التجريبية ($n)',
+                  );
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
                 leading: Icon(
                   Icons.delete_forever_outlined,
                   color: Theme.of(context).colorScheme.error,

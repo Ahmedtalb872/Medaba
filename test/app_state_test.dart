@@ -213,6 +213,34 @@ void main() {
     expect(s.products.any((p) => p.id == used.id), isTrue);
   });
 
+  test('removing demo data keeps the real records', () async {
+    await s.seedDemoData();
+    final wh = s.warehouses.first.id;
+    await s.saveProduct(const Product(id: 'real', name: '0.66 غ'));
+    await s.saveMove(
+      StockMove(
+        id: 'rm',
+        type: MoveType.stockIn,
+        productId: 'real',
+        warehouseId: wh,
+        qty: 10,
+        date: DateTime(2026),
+      ),
+    );
+    expect(await s.removeDemoData(), greaterThan(0));
+    expect(s.products.map((p) => p.id), ['real']);
+    expect(s.moves.map((m) => m.id), ['rm']);
+    expect(s.invoices, isEmpty);
+    expect(s.partners, isEmpty);
+    expect(s.workers, isEmpty);
+    expect(s.transactions, isEmpty);
+    expect(s.debts, isEmpty);
+    expect(s.cars, isEmpty);
+    expect(s.plots, isEmpty);
+    expect(s.warehouses.map((w) => w.id), [wh]);
+    expect(await s.removeDemoData(), 0);
+  });
+
   test('demo data seeds without errors', () async {
     await s.seedDemoData();
     expect(s.warehouses, isNotEmpty);
