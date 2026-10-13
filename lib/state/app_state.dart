@@ -1306,16 +1306,17 @@ class AppState extends ChangeNotifier {
       return before - list.length;
     }
 
-    final demoProducts = {
-      ('أسمنت', 'C-01', 230.0),
-      ('حديد تسليح 12مم', 'S-12', 34000.0),
-      ('بلاط سيراميك', 'T-60', 320.0),
-      ('دهان أبيض', 'P-W', 950.0),
-      ('أنابيب PVC', 'PVC-4', 260.0),
+    // الأسعار تغيّرت بين نسخ البيانات التجريبية، فيكفي الاسم مع الكود.
+    const demoProducts = {
+      ('أسمنت', 'C-01'),
+      ('حديد تسليح 12مم', 'S-12'),
+      ('بلاط سيراميك', 'T-60'),
+      ('دهان أبيض', 'P-W'),
+      ('أنابيب PVC', 'PVC-4'),
     };
     final productIds = {
       for (final p in _products)
-        if (demoProducts.contains((p.name, p.code, p.costPrice))) p.id,
+        if (demoProducts.contains((p.name.trim(), p.code.trim()))) p.id,
     };
 
     // الفواتير التجريبية: أطرافها التجريبية وكل أصنافها تجريبية.
@@ -1355,25 +1356,37 @@ class AppState extends ChangeNotifier {
       _warehouses,
       (w) =>
           w.name == 'مخزن الفرع' &&
-          w.location == 'نواذيبو - وسط المدينة' &&
           !_moves.any((m) => m.warehouseId == w.id || m.toWarehouseId == w.id),
     );
 
-    const demoPartners = {
-      ('أحمد علي', '22 45 67 01'),
-      ('محمد حسن', '36 45 67 02'),
-      ('خالد سعيد', '46 45 67 03'),
+    // هواتف الشركاء والدائنين في نسخ البيانات التجريبية المتتالية.
+    const demoPhones = {
+      '22 45 67 01',
+      '36 45 67 02',
+      '46 45 67 03',
+      '0500000001',
+      '0500000002',
+      '0500000003',
+      '22 33 44 55',
+      '36 10 20 30',
+      '45 25 10 10',
+      '45 25 00 00',
+      '0500000000',
+      '0500000010',
     };
+    const demoPartners = {'أحمد علي', 'محمد حسن', 'خالد سعيد'};
     const demoWorkers = {
-      ('سالم يوسف', '1234567890'),
-      ('يوسف إبراهيم', '2345678901'),
-      ('عمر فاروق', '3456789012'),
+      'سالم يوسف': '1234567890',
+      'يوسف إبراهيم': '2345678901',
+      'عمر فاروق': '3456789012',
     };
     final people = {
       for (final p in _partners)
-        if (demoPartners.contains((p.name, p.phone))) p.id,
+        if (demoPartners.contains(p.name) && demoPhones.contains(p.phone)) p.id,
       for (final w in _workers)
-        if (demoWorkers.contains((w.name, w.nationalId))) w.id,
+        if (demoWorkers.containsKey(w.name) &&
+            (w.nationalId.isEmpty || w.nationalId == demoWorkers[w.name]))
+          w.id,
     };
     drop(_partners, (p) => people.contains(p.id));
     drop(_workers, (w) => people.contains(w.id));
@@ -1381,26 +1394,17 @@ class AppState extends ChangeNotifier {
       _transactions,
       (x) =>
           (x.personId != null && people.contains(x.personId)) ||
-          (x.category == TxCategory.sales &&
-              x.note == 'مبيعات الشهر' &&
-              x.amount >= 600000 &&
-              x.amount <= 800000 &&
-              x.amount % 40000 == 0) ||
-          (x.category == TxCategory.rent &&
-              x.note == 'إيجار المقر' &&
-              x.amount == 60000),
+          (x.category == TxCategory.sales && x.note == 'مبيعات الشهر') ||
+          (x.category == TxCategory.rent && x.note == 'إيجار المقر'),
     );
 
-    final demoDebts = {
-      ('سيدي محمد', '22 33 44 55', 85000.0),
-      ('مقاولات الأمل', '36 10 20 30', 140000.0),
-      ('مؤسسة الحديد المتحدة', '45 25 10 10', 120000.0),
-    };
+    const demoDebtors = {'سيدي محمد', 'مقاولات الأمل', 'مؤسسة الحديد المتحدة'};
     drop(
       _debts,
       (d) =>
           d.invoiceId == null &&
-          demoDebts.contains((d.personName, d.phone, d.amount)),
+          demoDebtors.contains(d.personName) &&
+          demoPhones.contains(d.phone),
     );
 
     const demoVins = {
