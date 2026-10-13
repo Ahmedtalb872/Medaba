@@ -211,6 +211,12 @@ void main() {
     );
     expect(await s.deleteProduct(used.id), isFalse);
     expect(s.products.any((p) => p.id == used.id), isTrue);
+
+    final invoices = s.invoicesUsingProduct(used.id);
+    expect(await s.deleteProduct(used.id, withInvoices: true), isTrue);
+    expect(s.products.any((p) => p.id == used.id), isFalse);
+    expect(s.invoices.where((i) => invoices.contains(i.number)), isEmpty);
+    expect(s.moves.any((m) => m.productId == used.id), isFalse);
   });
 
   test('removing demo data keeps the real records', () async {

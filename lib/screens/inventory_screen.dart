@@ -787,24 +787,20 @@ class _ProductsTab extends StatelessWidget {
           onEdit: (p) => showProductForm(context, existing: p),
           onDelete: (p) async {
             final invoices = s.invoicesUsingProduct(p.id);
-            if (invoices.isNotEmpty) {
-              _snack(
-                context,
-                'الصنف "${p.name}" موجود في الفواتير: ${invoices.join('، ')}. '
-                'احذف هذه الفواتير أولاً ثم احذف الصنف.',
-              );
-              return;
-            }
             final moves = s.manualMovesOf(p.id);
+            final detail = [
+              if (invoices.isNotEmpty)
+                'ستُحذف معه الفواتير المرتبطة به كاملة '
+                    '(${invoices.length}): ${invoices.join('، ')}.',
+              if (moves > 0) 'وستُحذف حركات المخزون الخاصة به ($moves).',
+            ];
             final ok = await confirmDelete(
               context,
               p.name,
-              detail: moves == 0
-                  ? null
-                  : 'ستُحذف معه حركات المخزون الخاصة به ($moves).',
+              detail: detail.isEmpty ? null : detail.join('\n'),
             );
             if (!ok) return;
-            await s.deleteProduct(p.id);
+            await s.deleteProduct(p.id, withInvoices: true);
           },
         ),
       ],

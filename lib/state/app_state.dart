@@ -460,9 +460,24 @@ class AppState extends ChangeNotifier {
       _moves.where((m) => m.productId == id && m.invoiceId == null).length;
 
   /// يحذف الصنف مع حركاته اليدوية وقيودها المالية.
-  /// لا يُحذف صنف مستخدم في فواتير، ويُرجع false في هذه الحالة.
-  Future<bool> deleteProduct(String id) async {
-    if (invoicesUsingProduct(id).isNotEmpty) return false;
+  /// الصنف المستخدم في فواتير لا يُحذف (ويُرجع false) إلا مع
+  /// [withInvoices]، فتُحذف تلك الفواتير كاملة مع معاملاتها وديونها.
+  Future<bool> deleteProduct(String id, {bool withInvoices = false}) async {
+    final invoiceIds = {
+      for (final m in _moves)
+        if (m.productId == id && m.invoiceId != null) m.invoiceId!,
+      for (final inv in _invoices)
+        if (inv.lines.any((l) => l.productId == id)) inv.id,
+    };
+    if (invoiceIds.isNotEmpty && !withInvoices) return false;
+    final invoiceTx = {
+      for (final inv in _invoices)
+        if (invoiceIds.contains(inv.id)) inv.txId,
+    };
+    _invoices.removeWhere((inv) => invoiceIds.contains(inv.id));
+    _moves.removeWhere((m) => invoiceIds.contains(m.invoiceId));
+    _transactions.removeWhere((t) => invoiceTx.contains(t.id));
+    _debts.removeWhere((d) => invoiceIds.contains(d.invoiceId));
     final txIds = {
       for (final m in _moves)
         if (m.productId == id && m.txId != null) m.txId,
@@ -471,7 +486,13 @@ class AppState extends ChangeNotifier {
     _transactions.removeWhere((t) => txIds.contains(t.id));
     _products.removeWhere((e) => e.id == id);
     notifyListeners();
-    await Future.wait([_saveProducts(), _saveMoves(), _saveTx()]);
+    await Future.wait([
+      _saveProducts(),
+      _saveMoves(),
+      _saveTx(),
+      _saveInvoices(),
+      _saveDebts(),
+    ]);
     return true;
   }
 
