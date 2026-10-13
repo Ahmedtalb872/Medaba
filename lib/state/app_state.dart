@@ -448,12 +448,30 @@ class AppState extends ChangeNotifier {
     await _saveProducts();
   }
 
-  /// لا يُحذف صنف عليه حركات، ويُرجع false في هذه الحالة.
+  /// أرقام الفواتير التي فيها هذا الصنف (تمنع حذفه).
+  List<String> invoicesUsingProduct(String id) => {
+    for (final m in _moves)
+      if (m.productId == id && m.invoiceId != null)
+        invoiceById(m.invoiceId)?.number ?? '?',
+  }.toList()..sort();
+
+  /// عدد حركات المخزون اليدوية (غير الفواتير) على الصنف.
+  int manualMovesOf(String id) =>
+      _moves.where((m) => m.productId == id && m.invoiceId == null).length;
+
+  /// يحذف الصنف مع حركاته اليدوية وقيودها المالية.
+  /// لا يُحذف صنف مستخدم في فواتير، ويُرجع false في هذه الحالة.
   Future<bool> deleteProduct(String id) async {
-    if (_moves.any((m) => m.productId == id)) return false;
+    if (invoicesUsingProduct(id).isNotEmpty) return false;
+    final txIds = {
+      for (final m in _moves)
+        if (m.productId == id && m.txId != null) m.txId,
+    };
+    _moves.removeWhere((m) => m.productId == id);
+    _transactions.removeWhere((t) => txIds.contains(t.id));
     _products.removeWhere((e) => e.id == id);
     notifyListeners();
-    await _saveProducts();
+    await Future.wait([_saveProducts(), _saveMoves(), _saveTx()]);
     return true;
   }
 

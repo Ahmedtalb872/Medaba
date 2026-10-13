@@ -187,10 +187,30 @@ void main() {
     test('low stock and delete guards', () async {
       await s.saveMove(move(MoveType.stockIn, 20));
       expect(s.lowStockProducts.single.id, 'p');
-      expect(await s.deleteProduct('p'), isFalse);
       expect(await s.deleteWarehouse('w1'), isFalse);
       expect(await s.deleteWarehouse('w2'), isTrue);
     });
+
+    test('deleting a product removes its manual moves', () async {
+      await s.saveMove(move(MoveType.purchase, 5, price: 10));
+      await s.saveMove(move(MoveType.stockIn, 3));
+      expect(s.manualMovesOf('p'), 2);
+      expect(s.transactions, hasLength(1));
+      expect(s.invoicesUsingProduct('p'), isEmpty);
+      expect(await s.deleteProduct('p'), isTrue);
+      expect(s.products, isEmpty);
+      expect(s.moves, isEmpty);
+      expect(s.transactions, isEmpty);
+    });
+  });
+
+  test('a product used in invoices cannot be deleted', () async {
+    await s.seedDemoData();
+    final used = s.products.firstWhere(
+      (p) => s.invoicesUsingProduct(p.id).isNotEmpty,
+    );
+    expect(await s.deleteProduct(used.id), isFalse);
+    expect(s.products.any((p) => p.id == used.id), isTrue);
   });
 
   test('demo data seeds without errors', () async {

@@ -216,7 +216,24 @@ class _StockTabState extends State<_StockTab> {
           cells: (r) {
             final p = r.product;
             return [
-              Text(p.name),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(p.name),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: 'زيادة المخزون',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      Icons.add_circle_outline,
+                      color: AppColors.income.last,
+                      size: 20,
+                    ),
+                    onPressed: () =>
+                        showAddStockForm(context, p, warehouseId: _warehouseId),
+                  ),
+                ],
+              ),
               Text(p.code),
               Text(fmt.number(r.received)),
               Text(fmt.number(r.issued)),
@@ -328,6 +345,7 @@ class _MovesTab extends StatelessWidget {
             'الكمية',
             'سعر الفرد',
             'الإجمالي',
+            'العميل / المسؤول',
             'ملاحظات',
           ],
           items: s.moves,
@@ -347,6 +365,7 @@ class _MovesTab extends StatelessWidget {
                 m.type.hasPrice ? fmt.money(m.total) : '-',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
+              Text(m.person.isEmpty ? '-' : m.person),
               Text(m.note),
             ];
           },
@@ -450,6 +469,7 @@ Future<void> showMoveForm(BuildContext context, {StockMove? existing}) async {
     text: existing == null ? '' : fmt.number(existing.unitPrice),
   );
   final note = TextEditingController(text: existing?.note);
+  final person = TextEditingController(text: existing?.person);
 
   void fillPrice() {
     final p = s.productById(productId);
@@ -560,6 +580,12 @@ Future<void> showMoveForm(BuildContext context, {StockMove? existing}) async {
         onChanged: (d) => setState(() => date = d),
       ),
       TextFormField(
+        controller: person,
+        decoration: const InputDecoration(
+          labelText: 'العميل / المسؤول عن الحركة',
+        ),
+      ),
+      TextFormField(
         controller: note,
         decoration: const InputDecoration(labelText: 'ملاحظات'),
       ),
@@ -575,9 +601,128 @@ Future<void> showMoveForm(BuildContext context, {StockMove? existing}) async {
         unitPrice: type.hasPrice ? fmt.parseNumber(price.text)! : 0,
         date: date,
         note: note.text.trim(),
+        person: person.text.trim(),
         txId: existing?.txId,
       ),
     ),
+  );
+}
+
+/// زيادة كمية صنف في مخزن، مع اسم العميل أو المسؤول عن الزيادة.
+///
+/// «إضافة» لا تُنشئ مصروفاً (بضاعة وصلت أو رُدّت)، و«شراء» تُسجَّل مصروفاً
+/// بسعر الشراء.
+Future<void> showAddStockForm(
+  BuildContext context,
+  Product product, {
+  String? warehouseId,
+}) {
+  final s = context.read<AppState>();
+  if (s.warehouses.isEmpty) {
+    _snack(context, 'أضف مخزناً أولاً من تبويب «المخازن»');
+    return Future.value();
+  }
+  final key = GlobalKey<FormState>();
+  final qty = TextEditingController();
+  final person = TextEditingController();
+  final note = TextEditingController();
+  final price = TextEditingController(
+    text: product.costPrice == 0 ? '' : fmt.number(product.costPrice),
+  );
+  var warehouse = warehouseId ?? s.warehouses.first.id;
+  var type = MoveType.stockIn;
+  var date = DateTime.now();
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'زيادة مخزون: ${product.name}',
+    fields: (setState) => [
+      Text(
+        'المتوفر الآن: ${fmt.number(s.stockOf(product.id, warehouseId: warehouse))} ${product.unit}',
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+      DropdownButtonFormField<String>(
+        initialValue: warehouse,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: 'المخزن'),
+        items: [
+          for (final w in s.warehouses)
+            DropdownMenuItem(value: w.id, child: Text(w.name)),
+        ],
+        onChanged: (v) => setState(() => warehouse = v!),
+      ),
+      TextFormField(
+        controller: qty,
+        autofocus: true,
+        decoration: InputDecoration(
+          labelText: 'الكمية المضافة',
+          suffixText: product.unit,
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(min: 0.001),
+      ),
+      TextFormField(
+        controller: person,
+        decoration: const InputDecoration(
+          labelText: 'العميل / المسؤول عن الزيادة',
+        ),
+        validator: requiredText,
+      ),
+      SegmentedButton<MoveType>(
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(
+            value: MoveType.stockIn,
+            label: Text('إضافة بدون مصروف'),
+          ),
+          ButtonSegment(
+            value: MoveType.purchase,
+            label: Text('شراء (يُسجَّل مصروفاً)'),
+          ),
+        ],
+        selected: {type},
+        onSelectionChanged: (v) => setState(() => type = v.first),
+      ),
+      if (type == MoveType.purchase)
+        TextFormField(
+          controller: price,
+          decoration: const InputDecoration(labelText: 'سعر الشراء للوحدة'),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          validator: numberValidator(),
+        ),
+      DateField(
+        label: 'التاريخ',
+        value: date,
+        onChanged: (d) => setState(() => date = d),
+      ),
+      TextFormField(
+        controller: note,
+        decoration: const InputDecoration(labelText: 'ملاحظات'),
+      ),
+    ],
+    onSave: () async {
+      await s.saveMove(
+        StockMove(
+          id: newId(),
+          type: type,
+          productId: product.id,
+          warehouseId: warehouse,
+          qty: fmt.parseNumber(qty.text)!,
+          unitPrice: type == MoveType.purchase
+              ? fmt.parseNumber(price.text)!
+              : product.costPrice,
+          date: date,
+          note: note.text.trim(),
+          person: person.text.trim(),
+        ),
+      );
+      if (context.mounted) {
+        _snack(
+          context,
+          'تمت إضافة ${qty.text} ${product.unit} إلى ${product.name}',
+        );
+      }
+    },
   );
 }
 
@@ -641,10 +786,25 @@ class _ProductsTab extends StatelessWidget {
           ],
           onEdit: (p) => showProductForm(context, existing: p),
           onDelete: (p) async {
-            if (!await confirmDelete(context, p.name)) return;
-            if (!await s.deleteProduct(p.id) && context.mounted) {
-              _snack(context, 'لا يمكن حذف صنف عليه حركات مخزون');
+            final invoices = s.invoicesUsingProduct(p.id);
+            if (invoices.isNotEmpty) {
+              _snack(
+                context,
+                'الصنف "${p.name}" موجود في الفواتير: ${invoices.join('، ')}. '
+                'احذف هذه الفواتير أولاً ثم احذف الصنف.',
+              );
+              return;
             }
+            final moves = s.manualMovesOf(p.id);
+            final ok = await confirmDelete(
+              context,
+              p.name,
+              detail: moves == 0
+                  ? null
+                  : 'ستُحذف معه حركات المخزون الخاصة به ($moves).',
+            );
+            if (!ok) return;
+            await s.deleteProduct(p.id);
           },
         ),
       ],

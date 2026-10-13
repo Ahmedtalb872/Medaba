@@ -140,6 +140,9 @@ class StockMove {
   final DateTime date;
   final String note;
 
+  /// العميل أو الشخص المسؤول عن هذه الحركة (مثل من أضاف الكمية).
+  final String person;
+
   /// المعاملة المالية المرتبطة (للشراء والبيع خارج الفواتير).
   final String? txId;
 
@@ -156,6 +159,7 @@ class StockMove {
     this.unitPrice = 0,
     required this.date,
     this.note = '',
+    this.person = '',
     this.txId,
     this.invoiceId,
   });
@@ -184,6 +188,7 @@ class StockMove {
     unitPrice: unitPrice,
     date: date,
     note: note,
+    person: person,
     txId: clearTx ? null : (txId ?? this.txId),
     invoiceId: invoiceId,
   );
@@ -198,6 +203,7 @@ class StockMove {
     'unitPrice': unitPrice,
     'date': date.toIso8601String(),
     'note': note,
+    'person': person,
     'txId': txId,
     'invoiceId': invoiceId,
   };
@@ -212,6 +218,7 @@ class StockMove {
     unitPrice: (j['unitPrice'] as num?)?.toDouble() ?? 0,
     date: parseDate(j['date']),
     note: j['note'] as String? ?? '',
+    person: j['person'] as String? ?? '',
     txId: j['txId'] as String?,
     invoiceId: j['invoiceId'] as String?,
   );

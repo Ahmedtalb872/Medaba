@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:medaba/data/storage.dart';
 import 'package:medaba/main.dart';
 import 'package:medaba/models/car.dart';
+import 'package:medaba/models/inventory.dart';
 import 'package:medaba/models/invoice.dart';
 import 'package:medaba/utils/format.dart' as fmt;
 import 'package:medaba/utils/product_image.dart';
@@ -272,6 +273,43 @@ void main() {
       'زنك #13',
       'زنك 24# green',
     ]);
+  });
+
+  testWidgets('stock is increased with the person responsible', (tester) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await state.saveWarehouse(const Warehouse(id: 'w', name: 'المخزن'));
+    await state.saveProduct(
+      const Product(id: 'z', name: 'زنك 0.66 غ', costPrice: 100),
+    );
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('المخزون').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('زيادة المخزون'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'الكمية المضافة'),
+      '40',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'العميل / المسؤول عن الزيادة'),
+      'سيدي',
+    );
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+
+    expect(state.stockOf('z', warehouseId: 'w'), 40);
+    final move = state.moves.single;
+    expect(move.person, 'سيدي');
+    expect(move.type, MoveType.stockIn);
+    // «إضافة» لا تُسجّل مصروفاً.
+    expect(state.transactions, isEmpty);
   });
 
   testWidgets('inventory tabs and new stock movement form', (tester) async {

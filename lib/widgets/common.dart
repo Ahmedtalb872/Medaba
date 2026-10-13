@@ -458,12 +458,19 @@ class SectionCard extends StatelessWidget {
   }
 }
 
-Future<bool> confirmDelete(BuildContext context, String name) async {
+Future<bool> confirmDelete(
+  BuildContext context,
+  String name, {
+  String? detail,
+}) async {
   final ok = await showDialog<bool>(
     context: context,
     builder: (c) => AlertDialog(
       title: const Text('تأكيد الحذف'),
-      content: Text('هل تريد حذف "$name"؟ لا يمكن التراجع عن هذه العملية.'),
+      content: Text(
+        'هل تريد حذف "$name"؟${detail == null ? '' : '\n$detail'}'
+        '\nلا يمكن التراجع عن هذه العملية.',
+      ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(c, false),
