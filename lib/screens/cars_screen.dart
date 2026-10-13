@@ -9,6 +9,7 @@ import '../models/models.dart';
 import '../pdf/car_card_pdf.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
+import '../utils/share_pdf.dart';
 import '../utils/format.dart' as fmt;
 import '../utils/product_image.dart';
 import '../widgets/common.dart';
@@ -939,8 +940,7 @@ class _CarPdfPage extends StatelessWidget {
           child: FilledButton.icon(
             icon: const Icon(Icons.download),
             label: const Text('تنزيل PDF'),
-            onPressed: () async =>
-                Printing.sharePdf(bytes: await _build(), filename: fileName),
+            onPressed: () async => sharePdfFile(await _build(), fileName),
           ),
         ),
       ],
