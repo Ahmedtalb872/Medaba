@@ -77,6 +77,7 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
+    if (isStockWorker) return const _StockWorkerShell();
     final width = MediaQuery.sizeOf(context).width;
     final page = ShellNav(go: _go, child: _dests[_index].page);
 
@@ -139,6 +140,39 @@ class _HomeShellState extends State<HomeShell> {
       body: page,
     );
   }
+}
+
+/// حساب عامل المخزون: صفحة المخزون وحدها بدون القائمة والصفحات الأخرى.
+class _StockWorkerShell extends StatelessWidget {
+  const _StockWorkerShell();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: Text(_label(context, ShellPage.inventory)),
+      foregroundColor: Colors.white,
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(color: AppColors.navBackground),
+      ),
+      actions: [
+        Center(
+          child: Text(
+            cloudLogin?.username ?? '',
+            style: const TextStyle(color: Colors.white70),
+          ),
+        ),
+        const SizedBox(width: 8),
+        const SyncIndicator(light: true),
+        IconButton(
+          tooltip: 'تسجيل الخروج',
+          icon: const Icon(Icons.logout),
+          onPressed: () => cloudSignOut?.call(),
+        ),
+        const SizedBox(width: 8),
+      ],
+    ),
+    body: ShellNav(go: (_) {}, child: const InventoryScreen()),
+  );
 }
 
 /// القائمة الجانبية الخضراء: الشعار والصفحات.

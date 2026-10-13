@@ -51,13 +51,15 @@ class _CloudGateState extends State<CloudGate> {
       return;
     }
     setState(() => _stage = _Stage.loading);
-    bool? ok;
+    CloudLogin? checked = login;
+    var online = true;
     try {
-      ok = await checkLogin(cloudClient, login);
+      checked = await checkLogin(cloudClient, login);
     } catch (_) {
       // بدون إنترنت: نفتح بآخر نسخة على الجهاز.
+      online = false;
     }
-    if (ok == false) {
+    if (online && checked == null) {
       // تغيّرت كلمة المرور في قاعدة البيانات.
       await (await _local).writeList(_savedKey, const []);
       setState(() {
@@ -66,19 +68,22 @@ class _CloudGateState extends State<CloudGate> {
       });
       return;
     }
-    await _open(login);
+    if (online) await (await _local).writeList(_savedKey, [checked!.toJson()]);
+    await _open(checked ?? login);
   }
 
   /// يُرجع رسالة خطأ، أو null عند نجاح الدخول.
   Future<String?> _signIn(String username, String password) async {
-    final login = CloudLogin(username.trim(), password);
-    bool ok;
+    CloudLogin? login;
     try {
-      ok = await checkLogin(cloudClient, login);
+      login = await checkLogin(
+        cloudClient,
+        CloudLogin(username.trim(), password),
+      );
     } catch (_) {
       return 'تعذّر الاتصال بالخادم، تحقق من الإنترنت';
     }
-    if (!ok) return 'اسم المستخدم أو كلمة المرور غير صحيحة';
+    if (login == null) return 'اسم المستخدم أو كلمة المرور غير صحيحة';
     await (await _local).writeList(_savedKey, [login.toJson()]);
     setState(() {
       _stage = _Stage.loading;
@@ -94,10 +99,14 @@ class _CloudGateState extends State<CloudGate> {
       remote: SupabaseRemoteStore(cloudClient, login),
     );
     await storage.init(AppState.storageKeys);
+    cloudLogin = login;
     final state = AppState(storage);
     await state.load();
-    // قاعدة بيانات المؤسسة لا تحتاج البيانات التجريبية القديمة.
-    await state.removeDemoData();
+    if (!isStockWorker) {
+      // قاعدة بيانات المؤسسة لا تحتاج البيانات التجريبية القديمة.
+      await state.removeDemoData();
+      await state.ensureDefaultWarehouses();
+    }
     if (!mounted) {
       storage.dispose();
       return;
@@ -115,6 +124,7 @@ class _CloudGateState extends State<CloudGate> {
     _storage?.dispose();
     _storage = null;
     cloudSync.value = null;
+    cloudLogin = null;
   }
 
   void _publishStatus() => cloudSync.value = _storage?.status.value;

@@ -922,7 +922,12 @@ class _CarPdfPage extends StatelessWidget {
 
   String get fileName => 'بطاقة-${car.title}.pdf';
 
-  Future<Uint8List> _build() => buildCarCardPdf(car: car, company: company);
+  /// الملف يُبنى مرة واحدة، فيكون جاهزاً عند الضغط على «تنزيل» وتفتح
+  /// المشاركة مباشرة على الهاتف.
+  static final _pdf = Expando<Future<Uint8List>>();
+
+  Future<Uint8List> _build() =>
+      _pdf[this] ??= buildCarCardPdf(car: car, company: company);
 
   @override
   Widget build(BuildContext context) => Scaffold(

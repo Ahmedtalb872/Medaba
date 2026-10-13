@@ -24,28 +24,90 @@ final cloudSync = ValueNotifier<SyncStatus?>(null);
 /// يُستدعى من زر «تسجيل الخروج»؛ يعيّنه [CloudGate].
 Future<void> Function()? cloudSignOut;
 
+/// الحساب الداخل حالياً، أو null عند العمل على الجهاز فقط.
+CloudLogin? cloudLogin;
+
+/// عامل المخزون يرى المخزون فقط؛ المدير يرى كل شيء.
+bool get isStockWorker => cloudLogin?.role == CloudLogin.stockRole;
+
 SupabaseClient? _client;
 SupabaseClient get cloudClient =>
     _client ??= SupabaseClient(supabaseUrl, supabaseKey);
 
 /// اسم المستخدم وكلمة المرور كما في الجدول app_users (بدون بريد).
 class CloudLogin {
+  static const adminRole = 'admin';
+  static const stockRole = 'stock';
+
   final String username;
   final String password;
-  const CloudLogin(this.username, this.password);
+
+  /// admin أو stock (عامل المخزون).
+  final String role;
+  const CloudLogin(this.username, this.password, [this.role = adminRole]);
 
   Map<String, dynamic> get params => {'p_user': username, 'p_pass': password};
 
-  Map<String, dynamic> toJson() => {'u': username, 'p': password};
+  Map<String, dynamic> toJson() => {'u': username, 'p': password, 'r': role};
   static CloudLogin? fromJson(Map<String, dynamic> j) =>
       j['u'] is String && j['p'] is String
-      ? CloudLogin(j['u'] as String, j['p'] as String)
+      ? CloudLogin(
+          j['u'] as String,
+          j['p'] as String,
+          j['r'] as String? ?? adminRole,
+        )
       : null;
 }
 
-/// صحيح أو خطأ؛ يرمي استثناءً إذا تعذّر الاتصال.
-Future<bool> checkLogin(SupabaseClient client, CloudLogin login) async =>
-    await client.rpc('app_login', params: login.params) == true;
+/// الحساب مع دوره، أو null إذا كان الدخول خاطئاً؛ يرمي استثناءً إذا تعذّر
+/// الاتصال. قاعدة بيانات بدون أدوار (قبل تحديث SQL) تعامل الجميع كمدير.
+Future<CloudLogin?> checkLogin(SupabaseClient client, CloudLogin login) async {
+  try {
+    final role = await client.rpc('app_role', params: login.params);
+    return role is String
+        ? CloudLogin(login.username, login.password, role)
+        : null;
+  } on PostgrestException catch (e) {
+    if (e.code != 'PGRST202') rethrow;
+  }
+  final ok = await client.rpc('app_login', params: login.params) == true;
+  return ok ? CloudLogin(login.username, login.password) : null;
+}
+
+/// حساب في قاعدة البيانات كما تعرضه صفحة «حسابات العمال».
+typedef CloudUser = ({String username, String role});
+
+/// إدارة حسابات العمال (للمدير فقط).
+class CloudUsers {
+  final SupabaseClient client;
+  final CloudLogin admin;
+  CloudUsers(this.client, this.admin);
+
+  Future<List<CloudUser>> list() async {
+    final rows =
+        await client.rpc('app_users_list', params: admin.params) as List;
+    return [
+      for (final r in rows.cast<Map>())
+        (username: r['username'] as String, role: r['role'] as String),
+    ];
+  }
+
+  Future<void> save(String username, String password, String role) =>
+      client.rpc(
+        'app_user_save',
+        params: {
+          ...admin.params,
+          'p_name': username,
+          'p_password': password,
+          'p_role': role,
+        },
+      );
+
+  Future<void> delete(String username) => client.rpc(
+    'app_user_delete',
+    params: {...admin.params, 'p_name': username},
+  );
+}
 
 /// الدوال app_fetch و app_put في قاعدة البيانات، تتحقق من الدخول في كل طلب.
 class SupabaseRemoteStore implements RemoteStore {

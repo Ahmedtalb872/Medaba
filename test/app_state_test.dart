@@ -247,6 +247,21 @@ void main() {
     expect(await s.removeDemoData(), 0);
   });
 
+  test('the four default warehouses are added once', () async {
+    await s.saveWarehouse(const Warehouse(id: 'x', name: 'مخزن 2'));
+    await s.ensureDefaultWarehouses();
+    expect(s.warehouses.map((w) => w.name).toSet(), {
+      'مخزن 1',
+      'مخزن 2',
+      'مخزن 3',
+      'مخزن 4',
+    });
+    expect(s.company.warehousesSet, isTrue);
+    await s.deleteWarehouse(s.warehouses.firstWhere((w) => w.id != 'x').id);
+    await s.ensureDefaultWarehouses();
+    expect(s.warehouses, hasLength(3));
+  });
+
   test('demo data seeds without errors', () async {
     await s.seedDemoData();
     expect(s.warehouses, isNotEmpty);

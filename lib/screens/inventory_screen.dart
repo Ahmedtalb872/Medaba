@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../data/cloud.dart';
 import '../models/inventory.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
@@ -31,9 +32,11 @@ class InventoryScreen extends StatelessWidget {
               ),
               icon: Icons.warehouse_outlined,
               subtitle: 'أرصدة الأصناف وحركات الوارد والصادر والتحويل',
-              secondaryLabel: 'تغيير الاسم',
+              secondaryLabel: isStockWorker ? null : 'تغيير الاسم',
               secondaryIcon: Icons.edit_outlined,
-              onSecondary: () => showRenameInventory(context),
+              onSecondary: isStockWorker
+                  ? null
+                  : () => showRenameInventory(context),
             ),
           ),
           const TabBar(
@@ -457,7 +460,12 @@ Future<void> showMoveForm(BuildContext context, {StockMove? existing}) async {
     return;
   }
   final key = GlobalKey<FormState>();
-  var type = existing?.type ?? MoveType.purchase;
+  // عامل المخزون لا يسجّل بيعاً أو شراءً (لهما أثر مالي يراه المدير فقط).
+  final types = [
+    for (final t in MoveType.values)
+      if (!isStockWorker || t.financial == null || t == existing?.type) t,
+  ];
+  var type = existing?.type ?? types.first;
   var productId = existing?.productId ?? s.products.first.id;
   var warehouseId = existing?.warehouseId ?? s.warehouses.first.id;
   String? toWarehouseId = existing?.toWarehouseId;
@@ -494,7 +502,7 @@ Future<void> showMoveForm(BuildContext context, {StockMove? existing}) async {
         initialValue: type,
         decoration: const InputDecoration(labelText: 'نوع الحركة'),
         items: [
-          for (final t in MoveType.values)
+          for (final t in types)
             DropdownMenuItem(value: t, child: Text(t.label)),
         ],
         onChanged: (t) => setState(() {
@@ -668,21 +676,22 @@ Future<void> showAddStockForm(
         ),
         validator: requiredText,
       ),
-      SegmentedButton<MoveType>(
-        showSelectedIcon: false,
-        segments: const [
-          ButtonSegment(
-            value: MoveType.stockIn,
-            label: Text('إضافة بدون مصروف'),
-          ),
-          ButtonSegment(
-            value: MoveType.purchase,
-            label: Text('شراء (يُسجَّل مصروفاً)'),
-          ),
-        ],
-        selected: {type},
-        onSelectionChanged: (v) => setState(() => type = v.first),
-      ),
+      if (!isStockWorker)
+        SegmentedButton<MoveType>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(
+              value: MoveType.stockIn,
+              label: Text('إضافة بدون مصروف'),
+            ),
+            ButtonSegment(
+              value: MoveType.purchase,
+              label: Text('شراء (يُسجَّل مصروفاً)'),
+            ),
+          ],
+          selected: {type},
+          onSelectionChanged: (v) => setState(() => type = v.first),
+        ),
       if (type == MoveType.purchase)
         TextFormField(
           controller: price,
@@ -787,6 +796,10 @@ class _ProductsTab extends StatelessWidget {
           onEdit: (p) => showProductForm(context, existing: p),
           onDelete: (p) async {
             final invoices = s.invoicesUsingProduct(p.id);
+            if (isStockWorker && invoices.isNotEmpty) {
+              _snack(context, 'الصنف مستخدم في فواتير؛ حذفه للمدير فقط');
+              return;
+            }
             final moves = s.manualMovesOf(p.id);
             final detail = [
               if (invoices.isNotEmpty)

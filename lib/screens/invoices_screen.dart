@@ -474,7 +474,11 @@ class _InvoicePdfPageState extends State<InvoicePdfPage> {
       ? '${invoice.number}.pdf'
       : '${invoice.number}-${_language.name}.pdf';
 
-  Future<Uint8List> _build() => buildInvoicePdf(
+  /// ملف كل لغة يُبنى مرة واحدة، فيكون جاهزاً عند الضغط على «تنزيل»
+  /// وتفتح المشاركة مباشرة على الهاتف بدل تنزيل يُرفق معه رابط blob.
+  final _pdf = <InvoiceLanguage, Future<Uint8List>>{};
+
+  Future<Uint8List> _build() => _pdf[_language] ??= buildInvoicePdf(
     invoice: invoice,
     company: widget.company,
     productOf: widget.productOf,

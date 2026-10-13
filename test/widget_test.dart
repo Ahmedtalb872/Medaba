@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:medaba/data/cloud.dart';
 import 'package:medaba/data/storage.dart';
 import 'package:medaba/main.dart';
 import 'package:medaba/models/car.dart';
@@ -51,6 +52,25 @@ void main() {
       }
     });
   }
+
+  testWidgets('a stock worker sees only the inventory', (tester) async {
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    cloudLogin = const CloudLogin('w', 'p', CloudLogin.stockRole);
+    addTearDown(() => cloudLogin = null);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await state.seedDemoData();
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+
+    expect(find.text('الحركات'), findsOneWidget);
+    expect(find.byIcon(Icons.menu), findsNothing);
+    expect(find.text('الفواتير'), findsNothing);
+    expect(find.text('تغيير الاسم'), findsNothing);
+  });
 
   testWidgets('top bar shows the user and finds invoices by party', (
     tester,

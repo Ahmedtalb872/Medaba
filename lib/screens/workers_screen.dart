@@ -357,8 +357,12 @@ class WorkerCardPage extends StatelessWidget {
 
   String get fileName => 'بطاقة-${worker.name}.pdf';
 
+  /// الملف يُبنى مرة واحدة، فيكون جاهزاً عند الضغط على «تنزيل» وتفتح
+  /// المشاركة مباشرة على الهاتف.
+  static final _pdf = Expando<Future<Uint8List>>();
+
   Future<Uint8List> _build() =>
-      buildWorkerCardPdf(worker: worker, company: company);
+      _pdf[this] ??= buildWorkerCardPdf(worker: worker, company: company);
 
   @override
   Widget build(BuildContext context) => Scaffold(

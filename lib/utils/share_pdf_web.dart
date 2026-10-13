@@ -24,10 +24,12 @@ Future<void> sharePdfFile(Uint8List bytes, String filename) async {
     if (canShare) {
       try {
         await web.window.navigator.share(data).toDart;
-      } catch (_) {
+        return;
+      } catch (e) {
         // أغلق المستخدم قائمة المشاركة.
+        if ('$e'.contains('AbortError')) return;
+        // رفض المتصفح المشاركة (مثلاً انتهت مهلة الضغطة): ننزّل الملف.
       }
-      return;
     }
   }
   await Printing.sharePdf(bytes: bytes, filename: filename);

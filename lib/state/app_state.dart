@@ -1314,6 +1314,20 @@ class AppState extends ChangeNotifier {
     await _saveAll();
   }
 
+  /// المخازن الأربعة التي طلبها المدير؛ تُضاف مرة واحدة (ما كان موجوداً
+  /// باسمه يبقى)، ثم يعدّلها أو يحذفها بحرية من صفحة المخازن.
+  static const defaultWarehouses = ['مخزن 1', 'مخزن 2', 'مخزن 3', 'مخزن 4'];
+
+  Future<void> ensureDefaultWarehouses() async {
+    if (_company.warehousesSet) return;
+    final names = {for (final w in _warehouses) w.name.trim()};
+    for (final n in defaultWarehouses) {
+      if (!names.contains(n)) _warehouses.add(Warehouse(id: newId(), name: n));
+    }
+    await _saveWarehouses();
+    await saveCompany(_company.copyWith(warehousesSet: true));
+  }
+
   /// يحذف ما أضافته البيانات التجريبية فقط (الأسمنت والحديد والشركاء
   /// والعمال التجريبيون...) ويُبقي بيانات المؤسسة الحقيقية. يُعرف كل سجل
   /// تجريبي بأكثر من حقل معاً، وما عُدِّل منه أو استُخدم في فاتورة حقيقية يبقى.

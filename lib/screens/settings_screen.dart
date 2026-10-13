@@ -5,6 +5,7 @@ import '../data/cloud.dart';
 import '../models/invoice.dart';
 import '../state/app_state.dart';
 import '../widgets/common.dart';
+import 'accounts_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -33,6 +34,24 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => _editCompany(context, s),
           ),
         ),
+        if (cloudLogin case final login?) ...[
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.manage_accounts_outlined),
+              title: const Text('حسابات العمال'),
+              subtitle: const Text('حساب دخول لعامل المخزون يرى المخزون فقط'),
+              trailing: const Icon(Icons.chevron_left),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      AccountsScreen(users: CloudUsers(cloudClient, login)),
+                ),
+              ),
+            ),
+          ),
+        ],
         const SizedBox(height: 12),
         Card(
           child: Column(
@@ -204,6 +223,7 @@ Future<void> _editCompany(BuildContext context, AppState s) {
           for (final a in accounts)
             PaymentAccount(a.name.text.trim(), a.number.text.trim()),
         ],
+        warehousesSet: c.warehousesSet,
       ),
     ),
   );
