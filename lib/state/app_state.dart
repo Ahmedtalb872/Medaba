@@ -267,10 +267,55 @@ class AppState extends ChangeNotifier {
 
   // ---------- الشركاء ----------
 
-  /// مجموع نسب الشركاء باستثناء شريك معيّن (للتحقق عند التعديل).
+  /// شركاء الشركة كلها (يتقاسمون صافي ربح الشركة).
+  List<Partner> get companyPartners =>
+      _partners.where((p) => p.isCompanyPartner).toList();
+
+  /// المستثمرون في صفقات محددة (سيارة، قطعة، حاوية...).
+  List<Partner> get dealPartners =>
+      _partners.where((p) => !p.isCompanyPartner).toList();
+
+  /// مجموع نسب شركاء الشركة باستثناء شريك معيّن (للتحقق عند التعديل).
   double partnersShareTotal({String? excludeId}) => _partners
-      .where((p) => p.id != excludeId)
+      .where((p) => p.isCompanyPartner && p.id != excludeId)
       .fold(0, (s, p) => s + p.sharePercent);
+
+  /// مجموع نسب المستثمرين في نفس الصفقة باستثناء شريك معيّن.
+  double dealShareTotal(String dealKey, {String? excludeId}) => _partners
+      .where((p) => p.dealKey == dealKey && p.id != excludeId)
+      .fold(0, (s, p) => s + p.sharePercent);
+
+  /// المستثمرون في سيارة أو قطعة معيّنة.
+  List<Partner> investorsIn(PartnerScope scope, String dealId) => [
+    for (final p in _partners)
+      if (p.scope == scope && p.dealId == dealId) p,
+  ];
+
+  /// اسم الصفقة كما يظهر في جدول الشركاء.
+  String dealLabel(Partner p) => switch (p.scope) {
+    PartnerScope.company => PartnerScope.company.label,
+    PartnerScope.car =>
+      'سيارة: ${carById(p.dealId ?? '')?.title ?? '(محذوفة)'}',
+    PartnerScope.plot =>
+      'قطعة: ${plotById(p.dealId ?? '')?.name ?? '(محذوفة)'}',
+    PartnerScope.container =>
+      'حاوية${p.dealTitle.isEmpty ? '' : ': ${p.dealTitle}'}',
+    PartnerScope.other => p.dealTitle.isEmpty ? 'صفقة' : p.dealTitle,
+  };
+
+  /// ربح الصفقة كلها، أو null قبل انتهائها (السيارة أو القطعة لم تُبع).
+  double? dealProfitOf(Partner p) => switch (p.scope) {
+    PartnerScope.company => null,
+    PartnerScope.car => carById(p.dealId ?? '')?.profit,
+    PartnerScope.plot => plotById(p.dealId ?? '')?.profit,
+    PartnerScope.container || PartnerScope.other => p.dealProfit,
+  };
+
+  /// نصيب المستثمر من ربح صفقته، أو null قبل انتهائها.
+  double? dealShareOf(Partner p) {
+    final profit = dealProfitOf(p);
+    return profit == null ? null : profit * p.sharePercent / 100;
+  }
 
   Future<void> savePartner(Partner p) async {
     _upsert(_partners, p, (e) => e.id);
@@ -384,7 +429,7 @@ class AppState extends ChangeNotifier {
       income: income,
       expenses: expenses,
       partners: [
-        for (final x in _partners)
+        for (final x in companyPartners)
           ProfitShare(
             x.id,
             x.name,

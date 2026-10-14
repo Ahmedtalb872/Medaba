@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:medaba/data/storage.dart';
 import 'package:medaba/models/car.dart';
 import 'package:medaba/models/invoice.dart';
+import 'package:medaba/models/models.dart';
 import 'package:medaba/pdf/car_card_pdf.dart';
 import 'package:medaba/state/app_state.dart';
 import 'package:medaba/utils/product_image.dart';
@@ -80,5 +81,55 @@ void main() {
       final bytes = await buildCarCardPdf(car: c, company: const CompanyInfo());
       expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
     }
+  });
+
+  test('an investor in one car shares only that car\'s profit', () async {
+    final a = AppState(MemoryStorage());
+    await a.load();
+    await a.saveCar(car());
+    await a.savePartner(
+      Partner(id: 'co', name: 'شريك', sharePercent: 100, joinedAt: bought),
+    );
+    final investor = Partner(
+      id: 'inv',
+      name: 'مستثمر',
+      sharePercent: 40,
+      capital: 200000,
+      joinedAt: bought,
+      scope: PartnerScope.car,
+      dealId: 'c',
+    );
+    await a.savePartner(investor);
+
+    // لا يأخذ من نسب شركاء الشركة ولا من أرباحها.
+    expect(a.partnersShareTotal(), 100);
+    expect(a.profitReport().partners.map((p) => p.id), ['co']);
+    expect(a.dealShareTotal(investor.dealKey), 40);
+    expect(a.investorsIn(PartnerScope.car, 'c').single.id, 'inv');
+    expect(a.dealLabel(investor), 'سيارة: تويوتا هايلكس 2019');
+    expect(a.dealShareOf(investor), isNull);
+
+    await a.saveCar(car(status: CarStatus.sold, sale: 700000));
+    expect(a.dealProfitOf(investor), 140000);
+    expect(a.dealShareOf(investor), 56000);
+
+    final json = Partner.fromJson(investor.toJson());
+    expect(json.scope, PartnerScope.car);
+    expect(json.dealId, 'c');
+  });
+
+  test('a container deal uses the profit the admin writes', () {
+    final p = Partner(
+      id: 'x',
+      name: 'مستثمر',
+      sharePercent: 25,
+      joinedAt: bought,
+      scope: PartnerScope.container,
+      dealTitle: 'MSCU 123',
+      dealProfit: 400000,
+    );
+    final a = AppState(MemoryStorage());
+    expect(a.dealLabel(p), 'حاوية: MSCU 123');
+    expect(a.dealShareOf(p), 100000);
   });
 }

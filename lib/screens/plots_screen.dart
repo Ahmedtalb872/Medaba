@@ -7,6 +7,7 @@ import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
 import '../widgets/common.dart';
+import 'partners_screen.dart';
 import '../widgets/data_table_card.dart';
 
 enum _View {
@@ -101,6 +102,7 @@ class _PlotsScreenState extends State<PlotsScreen> {
             'الحالة',
             'سعر البيع',
             'الربح',
+            'المستثمرون',
           ],
           items: items,
           emptyMessage: 'لا توجد قطع هنا',
@@ -135,8 +137,30 @@ class _PlotsScreenState extends State<PlotsScreen> {
                           : AppColors.expense.last,
                     ),
                   ),
+            Text(
+              s
+                  .investorsIn(PartnerScope.plot, x.id)
+                  .map((p) {
+                    final share = x.profit == null
+                        ? fmt.percent(p.sharePercent)
+                        : fmt.money(x.profit! * p.sharePercent / 100);
+                    return '${p.name} ($share)';
+                  })
+                  .join('، ')
+                  .orDash,
+            ),
           ],
           extraActions: (x) => [
+            TableAction(
+              tooltip: 'إضافة مستثمر',
+              icon: Icons.person_add_alt_1,
+              color: AppColors.capital.last,
+              onTap: () => showPartnerForm(
+                context,
+                scope: PartnerScope.plot,
+                dealId: x.id,
+              ),
+            ),
             TableAction(
               tooltip: 'إضافة تكلفة',
               icon: Icons.add_card_outlined,
@@ -417,4 +441,8 @@ Future<void> showPlotForm(BuildContext context, {Plot? existing}) {
       }
     },
   );
+}
+
+extension on String {
+  String get orDash => isEmpty ? '-' : this;
 }

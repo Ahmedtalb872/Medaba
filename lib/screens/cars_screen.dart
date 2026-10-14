@@ -13,6 +13,7 @@ import '../utils/share_pdf.dart';
 import '../utils/format.dart' as fmt;
 import '../utils/product_image.dart';
 import '../widgets/common.dart';
+import 'partners_screen.dart';
 import '../widgets/data_table_card.dart';
 import 'business_actions.dart';
 
@@ -898,6 +899,44 @@ class CarCardPage extends StatelessWidget {
                     ),
                   ),
                 ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SectionCard(
+            title: 'المستثمرون في هذه السيارة',
+            icon: Icons.handshake_outlined,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final p in s.investorsIn(PartnerScope.car, car.id))
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(p.name),
+                    subtitle: Text(
+                      'استثمر ${fmt.money(p.capital)} • '
+                      'نسبته ${fmt.percent(p.sharePercent)}',
+                    ),
+                    trailing: Text(
+                      car.profit == null
+                          ? 'لم تُبع بعد'
+                          : 'نصيبه ${fmt.money(car.profit! * p.sharePercent / 100)}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    onTap: () => showPartnerForm(context, existing: p),
+                  ),
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    onPressed: () => showPartnerForm(
+                      context,
+                      scope: PartnerScope.car,
+                      dealId: car.id,
+                    ),
+                    icon: const Icon(Icons.person_add_alt_1),
+                    label: const Text('إضافة مستثمر'),
+                  ),
+                ),
               ],
             ),
           ),

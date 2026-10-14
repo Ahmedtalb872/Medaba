@@ -6,6 +6,7 @@ import 'package:medaba/main.dart';
 import 'package:medaba/models/car.dart';
 import 'package:medaba/models/inventory.dart';
 import 'package:medaba/models/invoice.dart';
+import 'package:medaba/models/models.dart';
 import 'package:medaba/utils/format.dart' as fmt;
 import 'package:medaba/utils/product_image.dart';
 
@@ -52,6 +53,46 @@ void main() {
       }
     });
   }
+
+  testWidgets('an investor is added to one container deal', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('الشركاء').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('إضافة شريك'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('حاوية'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'رقم الحاوية أو وصفها'),
+      'MSCU 123',
+    );
+    await tester.enterText(find.widgetWithText(TextFormField, 'الاسم'), 'سالم');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'المبلغ المستثمر'),
+      '300000',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'نسبته من ربح الصفقة %'),
+      '30',
+    );
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+
+    final p = state.partners.single;
+    expect(p.scope, PartnerScope.container);
+    expect(p.dealTitle, 'MSCU 123');
+    expect(p.capital, 300000);
+    expect(find.text('حاوية: MSCU 123'), findsOneWidget);
+    expect(find.text('لم تنتهِ بعد'), findsOneWidget);
+  });
 
   testWidgets('a stock worker sees only the inventory', (tester) async {
     tester.view.physicalSize = const Size(400, 800);

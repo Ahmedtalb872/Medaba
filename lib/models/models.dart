@@ -7,17 +7,49 @@ int _counter = 0;
 DateTime parseDate(Object? v) =>
     v is String ? DateTime.parse(v) : DateTime.now();
 
+/// أين يستثمر الشريك: في الشركة كلها، أو في صفقة واحدة محددة.
+enum PartnerScope {
+  company('الشركة كلها'),
+  car('سيارة'),
+  plot('قطعة أرضية'),
+  container('حاوية'),
+  other('صفقة أخرى');
+
+  final String label;
+  const PartnerScope(this.label);
+
+  /// الصفقة مختارة من السيارات أو القطع المسجلة (وليست نصاً يكتبه المدير).
+  bool get linked => this == car || this == plot;
+}
+
 /// شريك في المشروع يملك نسبة من الأرباح ويساهم برأس مال.
+///
+/// شريك الشركة يأخذ نسبته من صافي ربح الشركة كلها. أما المستثمر في صفقة
+/// محددة (سيارة، قطعة أرضية، حاوية...) فيأخذ نسبته من ربح تلك الصفقة فقط.
 class Partner {
   final String id;
   final String name;
   final String phone;
 
-  /// نسبة الشريك من أرباح الشركاء (0 - 100).
+  /// نسبة الشريك من الأرباح (0 - 100): من أرباح الشركة أو من ربح صفقته.
   final double sharePercent;
+
+  /// رأس المال، أو المبلغ المستثمر في الصفقة.
   final double capital;
   final DateTime joinedAt;
   final String notes;
+
+  final PartnerScope scope;
+
+  /// السيارة أو القطعة المرتبطة (عند [PartnerScope.linked]).
+  final String? dealId;
+
+  /// وصف الصفقة للحاوية والصفقات الأخرى (رقم الحاوية، البضاعة...).
+  final String dealTitle;
+
+  /// ربح الحاوية أو الصفقة الأخرى بعد انتهائها، يكتبه المدير.
+  /// (ربح السيارة والقطعة يُحسب تلقائياً عند بيعها.)
+  final double? dealProfit;
 
   const Partner({
     required this.id,
@@ -27,7 +59,17 @@ class Partner {
     this.capital = 0,
     required this.joinedAt,
     this.notes = '',
+    this.scope = PartnerScope.company,
+    this.dealId,
+    this.dealTitle = '',
+    this.dealProfit,
   });
+
+  bool get isCompanyPartner => scope == PartnerScope.company;
+
+  /// مفتاح الصفقة: المستثمرون بنفس المفتاح يتقاسمون نفس الربح.
+  String get dealKey =>
+      '${scope.name}:${scope.linked ? dealId : dealTitle.trim()}';
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -37,6 +79,10 @@ class Partner {
     'capital': capital,
     'joinedAt': joinedAt.toIso8601String(),
     'notes': notes,
+    'scope': scope.name,
+    'dealId': dealId,
+    'dealTitle': dealTitle,
+    'dealProfit': dealProfit,
   };
 
   factory Partner.fromJson(Map<String, dynamic> j) => Partner(
@@ -47,6 +93,10 @@ class Partner {
     capital: (j['capital'] as num?)?.toDouble() ?? 0,
     joinedAt: parseDate(j['joinedAt']),
     notes: j['notes'] as String? ?? '',
+    scope: PartnerScope.values.asNameMap()[j['scope']] ?? PartnerScope.company,
+    dealId: j['dealId'] as String?,
+    dealTitle: j['dealTitle'] as String? ?? '',
+    dealProfit: (j['dealProfit'] as num?)?.toDouble(),
   );
 }
 
