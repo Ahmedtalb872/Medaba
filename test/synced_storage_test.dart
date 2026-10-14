@@ -156,4 +156,10 @@ void main() {
     expect(l.params, {'p_user': '36933636', 'p_pass': 'x'});
     expect(CloudLogin.fromJson(const {'u': 1}), isNull);
   });
+
+  test('login fields ignore keyboard digits, spaces and case', () {
+    expect(cleanCredential(' ٢٠٣٠٤٠٥٠ '), '20304050');
+    expect(cleanCredential('۱۲۳'), '123');
+    expect(cleanUsername(' Med '), 'med');
+  });
 }

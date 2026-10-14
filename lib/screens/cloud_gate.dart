@@ -75,11 +75,17 @@ class _CloudGateState extends State<CloudGate> {
   /// يُرجع رسالة خطأ، أو null عند نجاح الدخول.
   Future<String?> _signIn(String username, String password) async {
     CloudLogin? login;
+    // الصيغة الموحّدة أولاً، ثم كما كُتبت (لحسابات أُنشئت قبل التوحيد).
+    final users = {cleanUsername(username), cleanCredential(username)};
+    final passwords = {cleanCredential(password), password};
     try {
-      login = await checkLogin(
-        cloudClient,
-        CloudLogin(username.trim(), password),
-      );
+      search:
+      for (final u in users) {
+        for (final p in passwords) {
+          login = await checkLogin(cloudClient, CloudLogin(u, p));
+          if (login != null) break search;
+        }
+      }
     } catch (_) {
       return 'تعذّر الاتصال بالخادم، تحقق من الإنترنت';
     }

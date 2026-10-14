@@ -74,6 +74,26 @@ Future<CloudLogin?> checkLogin(SupabaseClient client, CloudLogin login) async {
   return ok ? CloudLogin(login.username, login.password) : null;
 }
 
+/// يوحّد ما يُكتب في خانات الدخول: الأرقام العربية (٠١٢) والفارسية تصبح
+/// 0-9 وتُحذف المسافات حول النص، حتى يتطابق ما كُتب عند إنشاء الحساب وعند
+/// الدخول مهما كانت لوحة المفاتيح.
+String cleanCredential(String s) {
+  final out = StringBuffer();
+  for (final c in s.trim().runes) {
+    if (c >= 0x0660 && c <= 0x0669) {
+      out.writeCharCode(0x30 + c - 0x0660);
+    } else if (c >= 0x06F0 && c <= 0x06F9) {
+      out.writeCharCode(0x30 + c - 0x06F0);
+    } else {
+      out.writeCharCode(c);
+    }
+  }
+  return out.toString();
+}
+
+/// اسم المستخدم لا يفرّق بين الحروف الكبيرة والصغيرة (Med = med).
+String cleanUsername(String s) => cleanCredential(s).toLowerCase();
+
 /// حساب في قاعدة البيانات كما تعرضه صفحة «حسابات العمال».
 typedef CloudUser = ({String username, String role});
 
@@ -97,8 +117,8 @@ class CloudUsers {
         'app_user_save',
         params: {
           ...admin.params,
-          'p_name': username,
-          'p_password': password,
+          'p_name': cleanUsername(username),
+          'p_password': cleanCredential(password),
           'p_role': role,
         },
       );
