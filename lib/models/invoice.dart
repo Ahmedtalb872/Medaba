@@ -167,6 +167,9 @@ class CompanyInfo {
   /// أُنشئت المخازن الأربعة الافتراضية (مرة واحدة، ثم يعدّلها المدير بحرية).
   final bool warehousesSet;
 
+  /// أُضيفت أصناف البضاعة الأساسية (مرة واحدة).
+  final bool productsSet;
+
   /// حسابات المدير، وتُستخدم حتى يغيّرها من الإعدادات.
   static const defaultPaymentAccounts = [
     PaymentAccount('Click', '36933636'),
@@ -200,19 +203,24 @@ class CompanyInfo {
     this.inventoryLabel = defaultInventoryLabel,
     this.paymentAccounts = defaultPaymentAccounts,
     this.warehousesSet = false,
+    this.productsSet = false,
   });
 
-  CompanyInfo copyWith({String? inventoryLabel, bool? warehousesSet}) =>
-      CompanyInfo(
-        name: name,
-        phone: phone,
-        address: address,
-        ownerName: ownerName,
-        ownerRole: ownerRole,
-        inventoryLabel: inventoryLabel ?? this.inventoryLabel,
-        paymentAccounts: paymentAccounts,
-        warehousesSet: warehousesSet ?? this.warehousesSet,
-      );
+  CompanyInfo copyWith({
+    String? inventoryLabel,
+    bool? warehousesSet,
+    bool? productsSet,
+  }) => CompanyInfo(
+    name: name,
+    phone: phone,
+    address: address,
+    ownerName: ownerName,
+    ownerRole: ownerRole,
+    inventoryLabel: inventoryLabel ?? this.inventoryLabel,
+    paymentAccounts: paymentAccounts,
+    warehousesSet: warehousesSet ?? this.warehousesSet,
+    productsSet: productsSet ?? this.productsSet,
+  );
 
   Map<String, dynamic> toJson() => {
     'name': name,
@@ -224,6 +232,7 @@ class CompanyInfo {
     'inventoryLabel': inventoryLabel,
     'paymentAccounts': [for (final a in paymentAccounts) a.toJson()],
     'warehousesSet': warehousesSet,
+    'productsSet': productsSet,
   };
 
   factory CompanyInfo.fromJson(Map<String, dynamic> j) => CompanyInfo(
@@ -252,5 +261,6 @@ class CompanyInfo {
               PaymentAccount.fromJson(a as Map<String, dynamic>),
           ],
     warehousesSet: j['warehousesSet'] == true,
+    productsSet: j['productsSet'] == true,
   );
 }

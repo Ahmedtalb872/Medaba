@@ -224,6 +224,7 @@ Future<void> _editCompany(BuildContext context, AppState s) {
             PaymentAccount(a.name.text.trim(), a.number.text.trim()),
         ],
         warehousesSet: c.warehousesSet,
+        productsSet: c.productsSet,
       ),
     ),
   );

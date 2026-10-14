@@ -1328,6 +1328,41 @@ class AppState extends ChangeNotifier {
     await saveCompany(_company.copyWith(warehousesSet: true));
   }
 
+  /// أصناف البضاعة كما أرسلها المدير؛ تُضاف مرة واحدة (ما كان موجوداً باسمه
+  /// يبقى)، وتظهر في كل المخازن برصيد مستقل لكل مخزن.
+  static const defaultProducts = [
+    '0.66 غ',
+    '0.9 غ',
+    '0.98 غ',
+    '1.533 غ',
+    '1.63 غ',
+    '2 غ',
+    '2.22 غ',
+    '3.20 غ',
+    '4 غ',
+    '17.875 غ',
+    '#5.5',
+    '#7.5',
+    '#9.5',
+    '#13',
+    '24# green',
+    '25# white',
+    '2040# glass',
+  ];
+
+  Future<void> ensureDefaultProducts() async {
+    if (_company.productsSet) return;
+    String key(String n) => n.replaceAll(' ', '').toLowerCase();
+    final names = {for (final p in _products) key(p.name)};
+    for (final n in defaultProducts) {
+      if (!names.contains(key(n))) {
+        _products.add(Product(id: newId(), name: n));
+      }
+    }
+    await _saveProducts();
+    await saveCompany(_company.copyWith(productsSet: true));
+  }
+
   /// يحذف ما أضافته البيانات التجريبية فقط (الأسمنت والحديد والشركاء
   /// والعمال التجريبيون...) ويُبقي بيانات المؤسسة الحقيقية. يُعرف كل سجل
   /// تجريبي بأكثر من حقل معاً، وما عُدِّل منه أو استُخدم في فاتورة حقيقية يبقى.

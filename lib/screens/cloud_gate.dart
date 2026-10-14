@@ -106,6 +106,7 @@ class _CloudGateState extends State<CloudGate> {
       // قاعدة بيانات المؤسسة لا تحتاج البيانات التجريبية القديمة.
       await state.removeDemoData();
       await state.ensureDefaultWarehouses();
+      await state.ensureDefaultProducts();
     }
     if (!mounted) {
       storage.dispose();

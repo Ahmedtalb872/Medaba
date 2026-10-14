@@ -262,6 +262,15 @@ void main() {
     expect(s.warehouses, hasLength(3));
   });
 
+  test('the goods list is added once without duplicates', () async {
+    await s.saveProduct(const Product(id: 'x', name: '0.66غ'));
+    await s.ensureDefaultProducts();
+    expect(s.products, hasLength(AppState.defaultProducts.length));
+    expect(s.company.productsSet, isTrue);
+    await s.ensureDefaultProducts();
+    expect(s.products, hasLength(AppState.defaultProducts.length));
+  });
+
   test('demo data seeds without errors', () async {
     await s.seedDemoData();
     expect(s.warehouses, isNotEmpty);
