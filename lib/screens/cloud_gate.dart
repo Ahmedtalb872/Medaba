@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show PostgrestException;
 
 import '../data/cloud.dart';
 import '../data/storage.dart';
@@ -25,12 +26,14 @@ class _CloudGateState extends State<CloudGate> {
   _Stage _stage = _Stage.starting;
   AppState? _state;
   SyncedStorage? _storage;
+  SupabaseRemoteStore? _remote;
   String? _loginError;
 
   @override
   void initState() {
     super.initState();
     cloudSignOut = _signOut;
+    cloudChangePassword = _changePassword;
     _start();
   }
 
@@ -38,6 +41,7 @@ class _CloudGateState extends State<CloudGate> {
   void dispose() {
     _closeStorage();
     cloudSignOut = null;
+    cloudChangePassword = null;
     super.dispose();
   }
 
@@ -100,10 +104,8 @@ class _CloudGateState extends State<CloudGate> {
   }
 
   Future<void> _open(CloudLogin login) async {
-    final storage = SyncedStorage(
-      local: await _local,
-      remote: SupabaseRemoteStore(cloudClient, login),
-    );
+    final remote = SupabaseRemoteStore(cloudClient, login);
+    final storage = SyncedStorage(local: await _local, remote: remote);
     await storage.init(AppState.storageKeys);
     cloudLogin = login;
     final state = AppState(storage);
@@ -118,6 +120,7 @@ class _CloudGateState extends State<CloudGate> {
       storage.dispose();
       return;
     }
+    _remote = remote;
     _storage = storage..status.addListener(_publishStatus);
     _publishStatus();
     setState(() {
@@ -130,11 +133,46 @@ class _CloudGateState extends State<CloudGate> {
     _storage?.status.removeListener(_publishStatus);
     _storage?.dispose();
     _storage = null;
+    _remote = null;
     cloudSync.value = null;
     cloudLogin = null;
   }
 
   void _publishStatus() => cloudSync.value = _storage?.status.value;
+
+  /// يُرجع رسالة خطأ، أو null بعد تغيير كلمة المرور. يبقى المستخدم داخلاً.
+  Future<String?> _changePassword(String current, String next) async {
+    final login = cloudLogin;
+    final remote = _remote;
+    if (login == null || remote == null) return 'سجّل الدخول أولاً';
+    if (current != login.password &&
+        cleanCredential(current) != login.password) {
+      return 'كلمة المرور الحالية غير صحيحة';
+    }
+    final password = cleanCredential(next);
+    if (password.length < 4) return '4 أحرف أو أرقام على الأقل';
+    // يُرفع ما لم يُرفع بكلمة المرور القديمة قبل تغييرها.
+    try {
+      await _storage?.flush().timeout(const Duration(seconds: 8));
+    } catch (_) {}
+    try {
+      await cloudClient.rpc(
+        'app_change_password',
+        params: {...login.params, 'p_new': password},
+      );
+    } on PostgrestException catch (e) {
+      return e.code == 'PGRST202'
+          ? 'شغّل كود SQL الجديد في Supabase أولاً'
+          : 'تعذّر تغيير كلمة المرور';
+    } catch (_) {
+      return 'تعذّر الاتصال بالخادم، تحقق من الإنترنت';
+    }
+    final updated = CloudLogin(login.username, password, login.role);
+    remote.login = updated;
+    cloudLogin = updated;
+    await (await _local).writeList(_savedKey, [updated.toJson()]);
+    return null;
+  }
 
   /// يرفع ما لم يُرفع بعد (بحد أقصى بضع ثوانٍ) ثم يخرج.
   Future<void> _signOut() async {

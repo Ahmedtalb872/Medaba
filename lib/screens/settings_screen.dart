@@ -38,6 +38,16 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: 12),
           Card(
             child: ListTile(
+              leading: const Icon(Icons.lock_reset_outlined),
+              title: const Text('تغيير كلمة المرور'),
+              subtitle: Text('حساب الدخول: ${login.username}'),
+              trailing: const Icon(Icons.chevron_left),
+              onTap: () => _changePassword(context),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
               leading: const Icon(Icons.manage_accounts_outlined),
               title: const Text('حسابات العمال'),
               subtitle: const Text('حساب دخول لعامل المخزون يرى المخزون فقط'),
@@ -225,6 +235,98 @@ Future<void> _editCompany(BuildContext context, AppState s) {
         ],
         warehousesSet: c.warehousesSet,
         productsSet: c.productsSet,
+      ),
+    ),
+  );
+}
+
+/// تغيير كلمة مرور الحساب الداخل (تُحفظ في قاعدة البيانات).
+Future<void> _changePassword(BuildContext context) {
+  final key = GlobalKey<FormState>();
+  final current = TextEditingController();
+  final next = TextEditingController();
+  final confirm = TextEditingController();
+  String? error;
+  return showDialog(
+    context: context,
+    builder: (c) => StatefulBuilder(
+      builder: (c, setState) => AlertDialog(
+        title: const Text('تغيير كلمة المرور'),
+        content: SizedBox(
+          width: 420,
+          child: Form(
+            key: key,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: current,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'كلمة المرور الحالية',
+                  ),
+                  validator: requiredText,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: next,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'كلمة المرور الجديدة',
+                    helperText: '4 أحرف أو أرقام على الأقل',
+                  ),
+                  validator: (v) => cleanCredential(v ?? '').length < 4
+                      ? '4 أحرف أو أرقام على الأقل'
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: confirm,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'أعد كتابة كلمة المرور الجديدة',
+                  ),
+                  validator: (v) =>
+                      cleanCredential(v ?? '') != cleanCredential(next.text)
+                      ? 'كلمتا المرور غير متطابقتين'
+                      : null,
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    error!,
+                    style: TextStyle(color: Theme.of(c).colorScheme.error),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('إلغاء'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              if (!key.currentState!.validate()) return;
+              final change = cloudChangePassword;
+              final result = change == null
+                  ? 'سجّل الدخول أولاً'
+                  : await change(current.text, next.text);
+              if (!c.mounted) return;
+              if (result != null) {
+                setState(() => error = result);
+                return;
+              }
+              Navigator.pop(c);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('تم تغيير كلمة المرور')),
+              );
+            },
+            child: const Text('حفظ'),
+          ),
+        ],
       ),
     ),
   );

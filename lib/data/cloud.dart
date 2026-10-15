@@ -24,6 +24,9 @@ final cloudSync = ValueNotifier<SyncStatus?>(null);
 /// يُستدعى من زر «تسجيل الخروج»؛ يعيّنه [CloudGate].
 Future<void> Function()? cloudSignOut;
 
+/// يغيّر كلمة مرور الحساب الداخل؛ يُرجع رسالة خطأ أو null. يعيّنه [CloudGate].
+Future<String?> Function(String current, String next)? cloudChangePassword;
+
 /// الحساب الداخل حالياً، أو null عند العمل على الجهاز فقط.
 CloudLogin? cloudLogin;
 
@@ -132,7 +135,9 @@ class CloudUsers {
 /// الدوال app_fetch و app_put في قاعدة البيانات، تتحقق من الدخول في كل طلب.
 class SupabaseRemoteStore implements RemoteStore {
   final SupabaseClient client;
-  final CloudLogin login;
+
+  /// يتغيّر بعد تغيير كلمة المرور حتى يستمر الحفظ بدون إعادة الدخول.
+  CloudLogin login;
   SupabaseRemoteStore(this.client, this.login);
 
   @override

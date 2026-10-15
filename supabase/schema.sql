@@ -161,6 +161,27 @@ begin
 end;
 $$;
 
+-- يغيّر المستخدم كلمة مروره بنفسه (من التطبيق: الإعدادات ← تغيير كلمة المرور).
+create or replace function public.app_change_password(
+  p_user text, p_pass text, p_new text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if app_role(p_user, p_pass) is null then
+    raise exception 'invalid login' using errcode = '28P01';
+  end if;
+  if length(p_new) < 4 then
+    raise exception 'invalid password' using errcode = '22023';
+  end if;
+  update app_users set password_hash = crypt(p_new, gen_salt('bf'))
+  where username = p_user;
+end;
+$$;
+
 revoke all on function public.app_login(text, text) from public;
 revoke all on function public.app_fetch(text, text) from public;
 revoke all on function public.app_put(text, text, text, jsonb) from public;
@@ -168,6 +189,7 @@ revoke all on function public.app_role(text, text) from public;
 revoke all on function public.app_users_list(text, text) from public;
 revoke all on function public.app_user_save(text, text, text, text, text) from public;
 revoke all on function public.app_user_delete(text, text, text) from public;
+revoke all on function public.app_change_password(text, text, text) from public;
 grant execute on function public.app_login(text, text) to anon, authenticated;
 grant execute on function public.app_fetch(text, text) to anon, authenticated;
 grant execute on function public.app_put(text, text, text, jsonb) to anon, authenticated;
@@ -175,10 +197,10 @@ grant execute on function public.app_role(text, text) to anon, authenticated;
 grant execute on function public.app_users_list(text, text) to anon, authenticated;
 grant execute on function public.app_user_save(text, text, text, text, text) to anon, authenticated;
 grant execute on function public.app_user_delete(text, text, text) to anon, authenticated;
+grant execute on function public.app_change_password(text, text, text) to anon, authenticated;
 
--- حساب المدير. حسابات العمال تُضاف من التطبيق: الإعدادات ← حسابات العمال.
--- لتغيير كلمة مرور المدير: غيّر الرقم الثاني وشغّل هذا السطر وحده.
+-- حساب المدير (أول مرة فقط). كلمة المرور تُغيَّر من التطبيق:
+-- الإعدادات ← تغيير كلمة المرور. إعادة تشغيل الملف لا تعيدها إلى الرقم الأول.
 insert into public.app_users (username, password_hash, role)
 values ('36933636', extensions.crypt('36933636', extensions.gen_salt('bf')), 'admin')
-on conflict (username) do update
-  set password_hash = excluded.password_hash, role = 'admin';
+on conflict (username) do update set role = 'admin';
