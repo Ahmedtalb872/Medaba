@@ -28,6 +28,20 @@ class Period {
   }
 }
 
+/// عملية بيع واحدة وربحها.
+typedef ProfitEntry = ({
+  DateTime date,
+  String kind,
+  String title,
+  double sale,
+  double cost,
+  List<String> details,
+  bool missingCost,
+});
+
+/// دين جديد ([payment] = null) أو تسديد دفعة منه.
+typedef DebtEvent = ({DateTime date, Debt debt, DebtPayment? payment});
+
 class ProfitShare {
   final String id;
   final String name;
@@ -686,6 +700,29 @@ class AppState extends ChangeNotifier {
   /// يرمي [StateError] إذا كانت الفاتورة فارغة أو الكمية المباعة أكبر من المتاح.
   Future<void> saveInvoice(Invoice inv) async {
     if (inv.lines.isEmpty) throw StateError('أضف صنفاً واحداً على الأقل');
+    if (inv.type == InvoiceType.sale) {
+      // يُثبَّت سعر الشراء لحظة البيع حتى يبقى ربح الفاتورة صحيحاً.
+      final old = invoiceById(inv.id);
+      inv = Invoice.fromJson({
+        ...inv.toJson(),
+        'lines': [
+          for (final l in inv.lines)
+            InvoiceLine(
+              productId: l.productId,
+              qty: l.qty,
+              unitPrice: l.unitPrice,
+              unitCost:
+                  l.unitCost ??
+                  old?.lines
+                      .where((o) => o.productId == l.productId)
+                      .firstOrNull
+                      ?.unitCost ??
+                  productById(l.productId)?.costPrice ??
+                  0,
+            ).toJson(),
+        ],
+      });
+    }
     if (inv.debt < 0 || inv.debt > inv.total + 0.0001) {
       throw StateError('مبلغ الدين يجب أن يكون بين 0 وإجمالي الفاتورة');
     }
@@ -777,6 +814,119 @@ class AppState extends ChangeNotifier {
 
     notifyListeners();
     await Future.wait([_saveInvoices(), _saveMoves(), _saveTx(), _saveDebts()]);
+  }
+
+  // ---------- الأرباح ----------
+
+  /// كل عمليات البيع وربحها (سعر البيع - سعر الشراء)، الأحدث أولاً:
+  /// فواتير البيع، البيع من المخزون، السيارات والقطع المباعة.
+  List<ProfitEntry> profitEntries([Period? p]) {
+    bool inP(DateTime d) => p == null || p.contains(d);
+    String name(String id) => productById(id)?.name ?? 'صنف محذوف';
+    double cost(String productId) => productById(productId)?.costPrice ?? 0;
+    final out = <ProfitEntry>[];
+    for (final inv in _invoices) {
+      if (inv.type != InvoiceType.sale || !inPeriodDate(inv.date, p)) continue;
+      var c = 0.0;
+      var missing = false;
+      final details = <String>[];
+      for (final l in inv.lines) {
+        final unit = l.unitCost ?? cost(l.productId);
+        if (unit <= 0) missing = true;
+        c += unit * l.qty;
+        details.add(
+          '${name(l.productId)}: ${fmt.number(l.qty)} × ${fmt.money(l.unitPrice)}'
+          ' • شراء ${fmt.money(unit)} • ربح ${fmt.money((l.unitPrice - unit) * l.qty)}',
+        );
+      }
+      if (inv.discount > 0) details.add('خصم: ${fmt.money(inv.discount)}');
+      out.add((
+        date: inv.date,
+        kind: 'فاتورة بيع',
+        title:
+            '${inv.number}${inv.partyName.isEmpty ? '' : ' • ${inv.partyName}'}',
+        sale: inv.total,
+        cost: c,
+        details: details,
+        missingCost: missing,
+      ));
+    }
+    for (final m in _moves) {
+      if (m.type != MoveType.sale || m.invoiceId != null || !inP(m.date)) {
+        continue;
+      }
+      final unit = cost(m.productId);
+      out.add((
+        date: m.date,
+        kind: 'بيع من المخزون',
+        title: name(m.productId),
+        sale: m.qty * m.unitPrice,
+        cost: m.qty * unit,
+        details: [
+          '${fmt.number(m.qty)} × ${fmt.money(m.unitPrice)} • شراء ${fmt.money(unit)}',
+          if (m.person.isNotEmpty) 'العميل: ${m.person}',
+          if (m.note.isNotEmpty) m.note,
+        ],
+        missingCost: unit <= 0,
+      ));
+    }
+    for (final x in _cars) {
+      final d = x.saleDate;
+      if (!x.isSold || d == null || !inP(d)) continue;
+      out.add((
+        date: d,
+        kind: 'سيارة',
+        title: '${x.title}${x.buyer.isEmpty ? '' : ' • ${x.buyer}'}',
+        sale: x.salePrice,
+        cost: x.totalCost,
+        details: [
+          'سعر الشراء: ${fmt.money(x.purchasePrice)}',
+          for (final c in x.costs) '${c.label}: ${fmt.money(c.amount)}',
+        ],
+        missingCost: x.purchasePrice <= 0,
+      ));
+    }
+    for (final x in _plots) {
+      final d = x.saleDate;
+      if (!x.isSold || d == null || !inP(d)) continue;
+      out.add((
+        date: d,
+        kind: 'قطعة أرضية',
+        title: '${x.name}${x.buyer.isEmpty ? '' : ' • ${x.buyer}'}',
+        sale: x.salePrice,
+        cost: x.totalCost,
+        details: [
+          'سعر الشراء: ${fmt.money(x.purchasePrice)}',
+          for (final c in x.costs) '${c.label}: ${fmt.money(c.amount)}',
+        ],
+        missingCost: x.purchasePrice <= 0,
+      ));
+    }
+    out.sort((a, b) => b.date.compareTo(a.date));
+    return out;
+  }
+
+  static bool inPeriodDate(DateTime d, Period? p) => p == null || p.contains(d);
+
+  /// الأصناف التي ليس لها سعر شراء (ربح بيعها غير دقيق).
+  List<Product> get productsWithoutCost =>
+      _products.where((p) => p.costPrice <= 0).toList();
+
+  /// أحداث الديون يوماً بيوم: دين جديد أو تسديد، الأحدث أولاً.
+  List<DebtEvent> debtEvents([Period? p]) {
+    final out = <DebtEvent>[];
+    for (final d in _debts) {
+      if (inPeriodDate(d.date, p)) {
+        out.add((date: d.date, debt: d, payment: null));
+      }
+      for (final pay in d.payments) {
+        if (inPeriodDate(pay.date, p)) {
+          out.add((date: pay.date, debt: d, payment: pay));
+        }
+      }
+    }
+    out.sort((a, b) => b.date.compareTo(a.date));
+    return out;
   }
 
   /// الدين المرتبط بفاتورة، إن وُجد.

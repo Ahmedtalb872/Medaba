@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:medaba/data/storage.dart';
+import 'package:medaba/models/debt.dart';
 import 'package:medaba/models/inventory.dart';
+import 'package:medaba/models/invoice.dart';
 import 'package:medaba/models/models.dart';
 import 'package:medaba/state/app_state.dart';
 
@@ -270,6 +272,52 @@ void main() {
     expect(s.company.productsSet, isTrue);
     await s.ensureDefaultProducts();
     expect(s.products, hasLength(AppState.defaultProducts.length));
+  });
+
+  test('profit is sale minus the purchase price at the time of sale', () async {
+    await s.saveWarehouse(const Warehouse(id: 'w', name: 'مخزن 1'));
+    await s.saveProduct(
+      const Product(id: 'p', name: '0.66 غ', costPrice: 100, salePrice: 130),
+    );
+    await s.saveMove(
+      StockMove(
+        id: 'in',
+        type: MoveType.stockIn,
+        productId: 'p',
+        warehouseId: 'w',
+        qty: 50,
+        date: DateTime(2026, 10, 1),
+      ),
+    );
+    await s.saveInvoice(
+      Invoice(
+        id: 'i',
+        type: InvoiceType.sale,
+        number: 'S-0001',
+        date: DateTime(2026, 10, 14),
+        partyName: 'سيدي',
+        warehouseId: 'w',
+        lines: const [InvoiceLine(productId: 'p', qty: 10, unitPrice: 130)],
+        debt: 500,
+      ),
+    );
+    var e = s.profitEntries().single;
+    expect(e.sale, 1300);
+    expect(e.cost, 1000);
+    expect(e.missingCost, isFalse);
+
+    // تغيير سعر الشراء لاحقاً لا يغيّر ربح فاتورة قديمة.
+    await s.saveProduct(
+      const Product(id: 'p', name: '0.66 غ', costPrice: 120, salePrice: 130),
+    );
+    e = s.profitEntries().single;
+    expect(e.cost, 1000);
+    expect(s.profitEntries(Period.month(DateTime(2026, 9))), isEmpty);
+
+    final events = s.debtEvents();
+    expect(events.single.debt.personName, 'سيدي');
+    expect(events.single.payment, isNull);
+    expect(s.debtsRemaining(DebtDirection.theyOwe), 500);
   });
 
   test('demo data seeds without errors', () async {

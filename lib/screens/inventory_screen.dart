@@ -692,12 +692,16 @@ Future<void> showAddStockForm(
           selected: {type},
           onSelectionChanged: (v) => setState(() => type = v.first),
         ),
-      if (type == MoveType.purchase)
+      // سعر الشراء يُحفظ مع الصنف، ومنه يُحسب الربح عند البيع.
+      if (!isStockWorker)
         TextFormField(
           controller: price,
-          decoration: const InputDecoration(labelText: 'سعر الشراء للوحدة'),
+          decoration: const InputDecoration(
+            labelText: 'سعر الشراء للوحدة',
+            helperText: 'يُحفظ مع الصنف ويُحسب منه الربح عند البيع',
+          ),
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          validator: numberValidator(),
+          validator: numberValidator(min: 0.01),
         ),
       DateField(
         label: 'التاريخ',
@@ -710,6 +714,12 @@ Future<void> showAddStockForm(
       ),
     ],
     onSave: () async {
+      final cost = fmt.parseNumber(price.text);
+      if (cost != null && cost > 0 && cost != product.costPrice) {
+        await s.saveProduct(
+          Product.fromJson({...product.toJson(), 'costPrice': cost}),
+        );
+      }
       await s.saveMove(
         StockMove(
           id: newId(),
@@ -717,9 +727,7 @@ Future<void> showAddStockForm(
           productId: product.id,
           warehouseId: warehouse,
           qty: fmt.parseNumber(qty.text)!,
-          unitPrice: type == MoveType.purchase
-              ? fmt.parseNumber(price.text)!
-              : product.costPrice,
+          unitPrice: cost ?? product.costPrice,
           date: date,
           note: note.text.trim(),
           person: person.text.trim(),

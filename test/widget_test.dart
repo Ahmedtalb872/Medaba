@@ -95,6 +95,35 @@ void main() {
     expect(find.text('لم تنتهِ بعد'), findsOneWidget);
   });
 
+  testWidgets('dashboard opens profits and debts by day', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await state.seedDemoData();
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('الأرباح').first);
+    await tester.pumpAndSettle();
+    expect(find.text('الربح (البيع - الشراء)'), findsOneWidget);
+    await tester.tap(find.text('الكل'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('S-0001'), findsWidgets);
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    // بطاقة «الديون» في الرئيسية (وليس عنصر القائمة الجانبية).
+    await tester.tap(find.textContaining('اضغط للتفاصيل').last);
+    await tester.pumpAndSettle();
+    expect(find.text('لنا عند الناس'), findsOneWidget);
+    expect(find.textContaining('سيدي محمد'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a stock worker sees only the inventory', (tester) async {
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1;

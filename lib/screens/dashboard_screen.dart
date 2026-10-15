@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../models/debt.dart';
 import '../models/invoice.dart';
 import '../models/models.dart';
 import '../state/app_state.dart';
@@ -10,6 +11,7 @@ import '../widgets/brand.dart';
 import '../widgets/common.dart';
 import '../widgets/shell_nav.dart';
 import 'business_actions.dart';
+import 'daily_screens.dart';
 import 'inventory_screen.dart';
 
 /// الصفحة الرئيسية: ترحيب، اختصارات سريعة، ثلاثة أرقام، وآخر المعاملات.
@@ -23,6 +25,9 @@ class DashboardScreen extends StatelessWidget {
     final sales = s.transactions
         .where((t) => t.category == TxCategory.sales && month.contains(t.date))
         .fold<double>(0, (a, t) => a + t.amount);
+    final profit = s
+        .profitEntries(month)
+        .fold<double>(0, (a, e) => a + e.sale - e.cost);
 
     return ListView(
       padding: pagePadding,
@@ -81,6 +86,42 @@ class DashboardScreen extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
+        _Grid(
+          children: [
+            _Total(
+              label: 'الأرباح',
+              value: profit,
+              hint: 'البيع - الشراء • هذا الشهر • اضغط للتفاصيل',
+              icon: Icons.insights,
+              color: const Color(0xFF0B6E4F),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfitsByDayScreen()),
+              ),
+            ),
+            _Total(
+              label: 'الديون',
+              value: s.debtsRemaining(DebtDirection.theyOwe),
+              hint:
+                  'لنا • وعلينا ${fmt.money(s.debtsRemaining(DebtDirection.weOwe))}'
+                  ' • اضغط للتفاصيل',
+              icon: Icons.account_balance_wallet_outlined,
+              color: const Color(0xFF7C3AED),
+              onTap: () {
+                final go = ShellNav.maybeOf(context)?.go;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DebtsByDayScreen(
+                      openDebts: go == null ? null : () => go(ShellPage.debts),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
         _RecentTransactions(items: s.transactions.take(6).toList()),
       ],
     );
@@ -95,7 +136,7 @@ class _Grid extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, c) {
-      final cols = c.maxWidth > 760 ? 3 : 1;
+      final cols = c.maxWidth > 760 ? children.length.clamp(1, 3) : 1;
       const gap = 16.0;
       final w = (c.maxWidth - gap * (cols - 1)) / cols;
       return Wrap(
@@ -293,18 +334,20 @@ class _Total extends StatelessWidget {
   final String hint;
   final IconData icon;
   final Color color;
+  final VoidCallback? onTap;
   const _Total({
     required this.label,
     required this.value,
     required this.hint,
     required this.icon,
     required this.color,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Color.alphaBlend(color.withValues(alpha: 0.05), Colors.white),
@@ -342,7 +385,20 @@ class _Total extends StatelessWidget {
             ),
           ),
           _IconTile(icon: icon, color: color),
+          if (onTap != null) ...[
+            const SizedBox(width: 8),
+            Icon(Icons.chevron_left, color: color),
+          ],
         ],
+      ),
+    );
+    if (onTap == null) return card;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: card,
       ),
     );
   }

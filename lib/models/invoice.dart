@@ -23,10 +23,15 @@ class InvoiceLine {
   final double qty;
   final double unitPrice;
 
+  /// سعر شراء الوحدة لحظة البيع، لحساب الربح حتى لو تغيّر سعر الشراء لاحقاً.
+  /// null في الفواتير القديمة (يُستعمل سعر الشراء الحالي للصنف).
+  final double? unitCost;
+
   const InvoiceLine({
     required this.productId,
     required this.qty,
     required this.unitPrice,
+    this.unitCost,
   });
 
   double get total => qty * unitPrice;
@@ -35,12 +40,14 @@ class InvoiceLine {
     'productId': productId,
     'qty': qty,
     'unitPrice': unitPrice,
+    if (unitCost != null) 'unitCost': unitCost,
   };
 
   factory InvoiceLine.fromJson(Map<String, dynamic> j) => InvoiceLine(
     productId: j['productId'] as String,
     qty: (j['qty'] as num).toDouble(),
     unitPrice: (j['unitPrice'] as num).toDouble(),
+    unitCost: (j['unitCost'] as num?)?.toDouble(),
   );
 }
 
