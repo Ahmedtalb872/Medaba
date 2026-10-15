@@ -33,7 +33,7 @@ class _CloudGateState extends State<CloudGate> {
   void initState() {
     super.initState();
     cloudSignOut = _signOut;
-    cloudChangePassword = _changePassword;
+    cloudChangeLogin = _changeLogin;
     _start();
   }
 
@@ -41,7 +41,7 @@ class _CloudGateState extends State<CloudGate> {
   void dispose() {
     _closeStorage();
     cloudSignOut = null;
-    cloudChangePassword = null;
+    cloudChangeLogin = null;
     super.dispose();
   }
 
@@ -140,8 +140,13 @@ class _CloudGateState extends State<CloudGate> {
 
   void _publishStatus() => cloudSync.value = _storage?.status.value;
 
-  /// يُرجع رسالة خطأ، أو null بعد تغيير كلمة المرور. يبقى المستخدم داخلاً.
-  Future<String?> _changePassword(String current, String next) async {
+  /// يُرجع رسالة خطأ، أو null بعد تغيير اسم المستخدم وكلمة المرور.
+  /// يبقى المستخدم داخلاً.
+  Future<String?> _changeLogin(
+    String current,
+    String newUsername,
+    String newPassword,
+  ) async {
     final login = cloudLogin;
     final remote = _remote;
     if (login == null || remote == null) return 'سجّل الدخول أولاً';
@@ -149,25 +154,33 @@ class _CloudGateState extends State<CloudGate> {
         cleanCredential(current) != login.password) {
       return 'كلمة المرور الحالية غير صحيحة';
     }
-    final password = cleanCredential(next);
+    final username = cleanUsername(newUsername);
+    final password = cleanCredential(newPassword);
+    if (username.isEmpty) return 'اكتب اسم المستخدم';
     if (password.length < 4) return '4 أحرف أو أرقام على الأقل';
-    // يُرفع ما لم يُرفع بكلمة المرور القديمة قبل تغييرها.
+    // يُرفع ما لم يُرفع بالدخول القديم قبل تغييره.
     try {
       await _storage?.flush().timeout(const Duration(seconds: 8));
     } catch (_) {}
     try {
       await cloudClient.rpc(
-        'app_change_password',
-        params: {...login.params, 'p_new': password},
+        'app_change_login',
+        params: {
+          ...login.params,
+          'p_new_user': username,
+          'p_new_pass': password,
+        },
       );
     } on PostgrestException catch (e) {
-      return e.code == 'PGRST202'
-          ? 'شغّل كود SQL الجديد في Supabase أولاً'
-          : 'تعذّر تغيير كلمة المرور';
+      return switch (e.code) {
+        'PGRST202' => 'شغّل كود SQL الجديد في Supabase أولاً',
+        '23505' => 'اسم المستخدم مستعمل لحساب آخر',
+        _ => 'تعذّر الحفظ',
+      };
     } catch (_) {
       return 'تعذّر الاتصال بالخادم، تحقق من الإنترنت';
     }
-    final updated = CloudLogin(login.username, password, login.role);
+    final updated = CloudLogin(username, password, login.role);
     remote.login = updated;
     cloudLogin = updated;
     await (await _local).writeList(_savedKey, [updated.toJson()]);

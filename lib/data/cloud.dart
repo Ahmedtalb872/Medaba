@@ -24,8 +24,10 @@ final cloudSync = ValueNotifier<SyncStatus?>(null);
 /// يُستدعى من زر «تسجيل الخروج»؛ يعيّنه [CloudGate].
 Future<void> Function()? cloudSignOut;
 
-/// يغيّر كلمة مرور الحساب الداخل؛ يُرجع رسالة خطأ أو null. يعيّنه [CloudGate].
-Future<String?> Function(String current, String next)? cloudChangePassword;
+/// يغيّر اسم المستخدم وكلمة المرور للحساب الداخل؛ يُرجع رسالة خطأ أو null.
+/// يعيّنه [CloudGate].
+Future<String?> Function(String current, String username, String password)?
+cloudChangeLogin;
 
 /// الحساب الداخل حالياً، أو null عند العمل على الجهاز فقط.
 CloudLogin? cloudLogin;

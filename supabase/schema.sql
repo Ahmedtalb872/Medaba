@@ -182,6 +182,32 @@ begin
 end;
 $$;
 
+-- يغيّر المستخدم اسمه وكلمة مروره معاً (الإعدادات ← اسم المستخدم وكلمة المرور).
+create or replace function public.app_change_login(
+  p_user text, p_pass text, p_new_user text, p_new_pass text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if app_role(p_user, p_pass) is null then
+    raise exception 'invalid login' using errcode = '28P01';
+  end if;
+  if length(trim(p_new_user)) = 0 or length(p_new_pass) < 4 then
+    raise exception 'invalid login data' using errcode = '22023';
+  end if;
+  if trim(p_new_user) <> p_user
+     and exists (select 1 from app_users where username = trim(p_new_user)) then
+    raise exception 'username taken' using errcode = '23505';
+  end if;
+  update app_users
+  set username = trim(p_new_user), password_hash = crypt(p_new_pass, gen_salt('bf'))
+  where username = p_user;
+end;
+$$;
+
 revoke all on function public.app_login(text, text) from public;
 revoke all on function public.app_fetch(text, text) from public;
 revoke all on function public.app_put(text, text, text, jsonb) from public;
@@ -190,6 +216,7 @@ revoke all on function public.app_users_list(text, text) from public;
 revoke all on function public.app_user_save(text, text, text, text, text) from public;
 revoke all on function public.app_user_delete(text, text, text) from public;
 revoke all on function public.app_change_password(text, text, text) from public;
+revoke all on function public.app_change_login(text, text, text, text) from public;
 grant execute on function public.app_login(text, text) to anon, authenticated;
 grant execute on function public.app_fetch(text, text) to anon, authenticated;
 grant execute on function public.app_put(text, text, text, jsonb) to anon, authenticated;
@@ -198,9 +225,11 @@ grant execute on function public.app_users_list(text, text) to anon, authenticat
 grant execute on function public.app_user_save(text, text, text, text, text) to anon, authenticated;
 grant execute on function public.app_user_delete(text, text, text) to anon, authenticated;
 grant execute on function public.app_change_password(text, text, text) to anon, authenticated;
+grant execute on function public.app_change_login(text, text, text, text) to anon, authenticated;
 
--- حساب المدير (أول مرة فقط). كلمة المرور تُغيَّر من التطبيق:
--- الإعدادات ← تغيير كلمة المرور. إعادة تشغيل الملف لا تعيدها إلى الرقم الأول.
+-- حساب المدير الأول، فقط إذا لم يوجد أي مدير. الاسم وكلمة المرور يُغيَّران
+-- من التطبيق: الإعدادات ← اسم المستخدم وكلمة المرور.
 insert into public.app_users (username, password_hash, role)
-values ('36933636', extensions.crypt('36933636', extensions.gen_salt('bf')), 'admin')
-on conflict (username) do update set role = 'admin';
+select '36933636', extensions.crypt('36933636', extensions.gen_salt('bf')), 'admin'
+where not exists (select 1 from public.app_users where role = 'admin')
+on conflict (username) do nothing;

@@ -39,10 +39,10 @@ class SettingsScreen extends StatelessWidget {
           Card(
             child: ListTile(
               leading: const Icon(Icons.lock_reset_outlined),
-              title: const Text('تغيير كلمة المرور'),
+              title: const Text('اسم المستخدم وكلمة المرور'),
               subtitle: Text('حساب الدخول: ${login.username}'),
               trailing: const Icon(Icons.chevron_left),
-              onTap: () => _changePassword(context),
+              onTap: () => _changeLogin(context, login.username),
             ),
           ),
           const SizedBox(height: 12),
@@ -240,10 +240,11 @@ Future<void> _editCompany(BuildContext context, AppState s) {
   );
 }
 
-/// تغيير كلمة مرور الحساب الداخل (تُحفظ في قاعدة البيانات).
-Future<void> _changePassword(BuildContext context) {
+/// تغيير اسم المستخدم وكلمة المرور للحساب الداخل (تُحفظ في قاعدة البيانات).
+Future<void> _changeLogin(BuildContext context, String username) {
   final key = GlobalKey<FormState>();
   final current = TextEditingController();
+  final user = TextEditingController(text: username);
   final next = TextEditingController();
   final confirm = TextEditingController();
   String? error;
@@ -251,7 +252,7 @@ Future<void> _changePassword(BuildContext context) {
     context: context,
     builder: (c) => StatefulBuilder(
       builder: (c, setState) => AlertDialog(
-        title: const Text('تغيير كلمة المرور'),
+        title: const Text('اسم المستخدم وكلمة المرور'),
         content: SizedBox(
           width: 420,
           child: Form(
@@ -264,6 +265,14 @@ Future<void> _changePassword(BuildContext context) {
                   obscureText: true,
                   decoration: const InputDecoration(
                     labelText: 'كلمة المرور الحالية',
+                  ),
+                  validator: requiredText,
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: user,
+                  decoration: const InputDecoration(
+                    labelText: 'اسم المستخدم الجديد',
                   ),
                   validator: requiredText,
                 ),
@@ -310,10 +319,10 @@ Future<void> _changePassword(BuildContext context) {
           FilledButton(
             onPressed: () async {
               if (!key.currentState!.validate()) return;
-              final change = cloudChangePassword;
+              final change = cloudChangeLogin;
               final result = change == null
                   ? 'سجّل الدخول أولاً'
-                  : await change(current.text, next.text);
+                  : await change(current.text, user.text, next.text);
               if (!c.mounted) return;
               if (result != null) {
                 setState(() => error = result);
@@ -321,7 +330,9 @@ Future<void> _changePassword(BuildContext context) {
               }
               Navigator.pop(c);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('تم تغيير كلمة المرور')),
+                const SnackBar(
+                  content: Text('تم الحفظ؛ ادخل بها في المرة القادمة'),
+                ),
               );
             },
             child: const Text('حفظ'),
