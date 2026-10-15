@@ -18,6 +18,7 @@ import 'partners_screen.dart';
 import 'plots_screen.dart';
 import 'profits_screen.dart';
 import 'settings_screen.dart';
+import 'shipments_screen.dart';
 import 'transactions_screen.dart';
 import 'workers_screen.dart';
 
@@ -37,6 +38,7 @@ const _dests = [
   _Dest('الفواتير', Icons.description_outlined, InvoicesScreen()),
   _Dest('الديون', Icons.account_balance_wallet_outlined, DebtsScreen()),
   _Dest('السيارات', Icons.directions_car_outlined, CarsScreen()),
+  _Dest('حاويات البضاعة', Icons.directions_boat_outlined, ShipmentsScreen()),
   _Dest('القطع الأرضية', Icons.landscape_outlined, PlotsScreen()),
   _Dest('المعاملات', Icons.receipt_long_outlined, TransactionsScreen()),
   _Dest('التقارير والأرباح', Icons.bar_chart, ProfitsScreen()),
@@ -197,7 +199,7 @@ class _Sidebar extends StatelessWidget {
           builder: (context, c) {
             // على الشاشات القصيرة (مثل MacBook Air) نصغّر الشعار والأزرار
             // حتى تظهر كل الصفحات دون تمرير.
-            final compact = c.maxHeight < 860;
+            final compact = c.maxHeight < 960;
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -500,6 +502,18 @@ List<_Alert> _alerts(AppState s) {
               : 'سيارة تصل قريباً: ${x.title}',
           page: ShellPage.cars,
         ),
+    for (final x in s.activeShipments)
+      if (x.isDelayed(now) || x.daysToArrival(now) <= 7)
+        (
+          icon: Icons.directions_boat_outlined,
+          color: x.isDelayed(now)
+              ? AppColors.loss.last
+              : AppColors.capital.last,
+          text: x.isDelayed(now)
+              ? 'حاوية متأخرة: ${x.contents}'
+              : 'حاوية تصل قريباً: ${x.contents} - ${x.status.label}',
+          page: ShellPage.shipments,
+        ),
     for (final d in s.debts)
       if (d.isOverdue(now))
         (
@@ -657,6 +671,14 @@ Future<void> _openSearch(
               Navigator.pop(dialog);
               openCarCard(context, x);
             },
+          ),
+      for (final x in s.shipments)
+        if (has([x.contents, x.company, x.billOfLading, x.containerNumber]))
+          (
+            icon: Icons.directions_boat_outlined,
+            title: x.contents,
+            subtitle: '${x.company} • ${x.status.label}',
+            open: () => go(ShellPage.shipments),
           ),
       for (final x in s.plots)
         if (has([x.name, x.location, x.buyer]))

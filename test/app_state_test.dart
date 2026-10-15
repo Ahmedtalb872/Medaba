@@ -243,6 +243,7 @@ void main() {
     expect(s.debts, isEmpty);
     expect(s.cars, isEmpty);
     expect(s.plots, isEmpty);
+    expect(s.shipments, isEmpty);
     expect(s.warehouses.map((w) => w.id), [wh]);
     expect(await s.removeDemoData(), 0);
   });

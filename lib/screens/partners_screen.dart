@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/models.dart';
+import '../models/shipment.dart';
 import '../state/app_state.dart';
 import '../utils/format.dart' as fmt;
 import '../widgets/common.dart';
@@ -244,6 +245,24 @@ Future<void> showPartnerForm(
                   ],
                   onChanged: (v) => setState(() => deal = v),
                 ),
+        if (kind == PartnerScope.container && s.shipments.isNotEmpty)
+          DropdownButtonFormField<String>(
+            isExpanded: true,
+            decoration: const InputDecoration(
+              labelText: 'اختر من حاويات البضاعة (اختياري)',
+            ),
+            items: [
+              for (final x in s.shipments)
+                DropdownMenuItem(
+                  value: _containerTitle(x),
+                  child: Text(
+                    _containerTitle(x),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (v) => setState(() => dealTitle.text = v ?? ''),
+          ),
         if (kind == PartnerScope.container || kind == PartnerScope.other)
           TextFormField(
             controller: dealTitle,
@@ -338,3 +357,9 @@ Future<void> showPartnerForm(
     },
   );
 }
+
+/// وصف الحاوية كما يُحفظ مع المستثمر: رقمها ثم بضاعتها.
+String _containerTitle(Shipment x) => [
+  if (x.containerNumber.isNotEmpty) x.containerNumber,
+  x.contents,
+].join(' - ');
