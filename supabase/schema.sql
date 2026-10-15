@@ -161,7 +161,7 @@ begin
 end;
 $$;
 
--- يغيّر المستخدم كلمة مروره بنفسه (من التطبيق: الإعدادات ← تغيير كلمة المرور).
+-- يغيّر المدير كلمة مروره بنفسه (للمدير فقط) (من التطبيق: الإعدادات ← تغيير كلمة المرور).
 create or replace function public.app_change_password(
   p_user text, p_pass text, p_new text
 )
@@ -171,8 +171,8 @@ security definer
 set search_path = public, extensions
 as $$
 begin
-  if app_role(p_user, p_pass) is null then
-    raise exception 'invalid login' using errcode = '28P01';
+  if app_role(p_user, p_pass) is distinct from 'admin' then
+    raise exception 'not allowed' using errcode = '42501';
   end if;
   if length(p_new) < 4 then
     raise exception 'invalid password' using errcode = '22023';
@@ -182,7 +182,7 @@ begin
 end;
 $$;
 
--- يغيّر المستخدم اسمه وكلمة مروره معاً (الإعدادات ← اسم المستخدم وكلمة المرور).
+-- يغيّر المدير اسمه وكلمة مروره معاً (للمدير فقط؛ العمال يغيّرها لهم المدير) (الإعدادات ← اسم المستخدم وكلمة المرور).
 create or replace function public.app_change_login(
   p_user text, p_pass text, p_new_user text, p_new_pass text
 )
@@ -192,8 +192,8 @@ security definer
 set search_path = public, extensions
 as $$
 begin
-  if app_role(p_user, p_pass) is null then
-    raise exception 'invalid login' using errcode = '28P01';
+  if app_role(p_user, p_pass) is distinct from 'admin' then
+    raise exception 'not allowed' using errcode = '42501';
   end if;
   if length(trim(p_new_user)) = 0 or length(p_new_pass) < 4 then
     raise exception 'invalid login data' using errcode = '22023';

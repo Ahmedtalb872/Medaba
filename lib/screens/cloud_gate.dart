@@ -150,6 +150,7 @@ class _CloudGateState extends State<CloudGate> {
     final login = cloudLogin;
     final remote = _remote;
     if (login == null || remote == null) return 'سجّل الدخول أولاً';
+    if (login.role != CloudLogin.adminRole) return 'هذه الخاصية للمدير فقط';
     if (current != login.password &&
         cleanCredential(current) != login.password) {
       return 'كلمة المرور الحالية غير صحيحة';
@@ -175,6 +176,7 @@ class _CloudGateState extends State<CloudGate> {
       return switch (e.code) {
         'PGRST202' => 'شغّل كود SQL الجديد في Supabase أولاً',
         '23505' => 'اسم المستخدم مستعمل لحساب آخر',
+        '42501' => 'هذه الخاصية للمدير فقط',
         _ => 'تعذّر الحفظ',
       };
     } catch (_) {

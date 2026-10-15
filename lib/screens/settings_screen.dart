@@ -34,7 +34,7 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => _editCompany(context, s),
           ),
         ),
-        if (cloudLogin case final login?) ...[
+        if (cloudLogin case final login? when !isStockWorker) ...[
           const SizedBox(height: 12),
           Card(
             child: ListTile(
