@@ -396,6 +396,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(state.stockOf('z', warehouseId: 'w'), 40);
+    // صورة الصنف قابلة للرفع من قائمة المخزون نفسها.
+    expect(find.byTooltip('رفع صورة الصنف'), findsOneWidget);
     final move = state.moves.single;
     expect(move.person, 'سيدي');
     expect(move.type, MoveType.stockIn);

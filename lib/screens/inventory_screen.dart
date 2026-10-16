@@ -222,6 +222,13 @@ class _StockTabState extends State<_StockTab> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  // صورة الصنف: الضغط عليها يرفع صورة أو يغيّرها.
+                  ProductThumb(
+                    product: p,
+                    size: 40,
+                    onTap: () => uploadProductImage(context, p),
+                  ),
+                  const SizedBox(width: 10),
                   Text(p.name),
                   const SizedBox(width: 4),
                   IconButton(
