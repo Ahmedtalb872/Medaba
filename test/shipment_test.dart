@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:medaba/data/storage.dart';
 import 'package:medaba/main.dart';
+import 'package:medaba/models/inventory.dart';
 import 'package:medaba/models/models.dart';
 import 'package:medaba/models/shipment.dart';
 import 'package:medaba/state/app_state.dart';
@@ -182,6 +183,23 @@ void main() {
     final cost = s.shipmentById('sh')!.extraCosts.single;
     expect(cost.amount, 5500);
     expect(cost.label, contains('2 عامل'));
+    expect(s.laborCost('sh'), 5500);
+
+    // رفع البضاعة في مخزن: تُحسب أجورها على المخزن لا على الحاوية.
+    await s.saveWarehouse(const Warehouse(id: 'w', name: 'مخزن 1'));
+    await s.recordWorkDay(
+      date: day,
+      task: 'رفع البضاعة',
+      warehouseId: 'w',
+      wages: {'a': 3000},
+    );
+    expect(s.laborCost('w'), 3000);
+    expect(s.laborCost('sh'), 5500);
+    expect(
+      s.transactions.map((t) => t.note),
+      contains('يومية عامل a - رفع البضاعة مخزن 1'),
+    );
+    expect(s.workDays('a'), 2);
   });
 
   testWidgets('unloading workers are recorded from the container row', (

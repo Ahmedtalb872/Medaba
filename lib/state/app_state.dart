@@ -397,19 +397,33 @@ class AppState extends ChangeNotifier {
     ),
   );
 
-  /// يوم عمل لعمال اليومية: أجرة لكل عامل حضر كمعاملة مصروف. عند ربطه
-  /// بحاوية يُضاف مجموع الأجور إلى تكاليفها الإضافية.
+  /// أعمال عمال اليومية.
+  static const workTasks = ['تنزيل البضاعة', 'رفع البضاعة', 'ترتيب المخزن'];
+
+  /// يوم عمل لعمال اليومية: أجرة لكل عامل حضر كمعاملة مصروف، مربوطة
+  /// بالحاوية أو المخزن الذي عملوا فيه. مع الحاوية يُضاف مجموع الأجور إلى
+  /// تكاليفها الإضافية.
   Future<void> recordWorkDay({
     required DateTime date,
     required Map<String, double> wages,
+    String task = 'تنزيل البضاعة',
     String? shipmentId,
+    String? warehouseId,
   }) async {
     final ship = shipmentId == null ? null : shipmentById(shipmentId);
+    final wh = ship != null || warehouseId == null
+        ? null
+        : warehouseById(warehouseId);
+    final place = ship != null
+        ? 'حاوية ${ship.containerNumber.isEmpty ? ship.contents : ship.containerNumber}'
+        : wh?.name;
     var total = 0.0;
+    var count = 0;
     for (final e in wages.entries) {
       final w = _workers.where((x) => x.id == e.key).firstOrNull;
       if (w == null || e.value <= 0) continue;
       total += e.value;
+      count++;
       _transactions.add(
         Transaction(
           id: newId(),
@@ -418,10 +432,10 @@ class AppState extends ChangeNotifier {
           date: date,
           note: [
             'يومية ${w.name}',
-            if (ship != null)
-              'حاوية ${ship.containerNumber.isEmpty ? ship.contents : ship.containerNumber}',
+            [task, ?place].join(' '),
           ].join(' - '),
           personId: w.id,
+          refId: ship?.id ?? wh?.id,
         ),
       );
     }
@@ -433,7 +447,7 @@ class AppState extends ChangeNotifier {
           'extraCosts': [
             ...ship.extraCosts.map((c) => c.toJson()),
             ShipmentExtraCost(
-              'عمال التفريغ ${fmt.date(date)} (${wages.values.where((v) => v > 0).length} عامل)',
+              'عمال $task ${fmt.date(date)} ($count عامل)',
               total,
             ).toJson(),
           ],
@@ -444,6 +458,12 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     await Future.wait([_saveTx(), _saveShipments()]);
   }
+
+  /// أجور عمال اليومية المسجلة على مخزن أو حاوية في فترة.
+  double laborCost(String refId, [Period? p]) =>
+      inPeriod(p)
+          .where((t) => t.category == TxCategory.salary && t.refId == refId)
+          .fold(0, (a, t) => a + t.amount);
 
   /// أيام عمل العامل اليومي في فترة (عدد أجور اليومية المسجلة له).
   int workDays(String workerId, [Period? p]) => inPeriod(p)

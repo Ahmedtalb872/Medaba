@@ -12,6 +12,7 @@ import '../widgets/common.dart';
 import '../utils/product_image.dart';
 import '../widgets/data_table_card.dart';
 import '../widgets/product_thumb.dart';
+import 'workers_screen.dart';
 
 /// إدارة المخازن: الأرصدة، الحركات، الأصناف، والمخازن.
 class InventoryScreen extends StatelessWidget {
@@ -1164,6 +1165,7 @@ class _WarehousesTab extends StatelessWidget {
             'ربح هذا الشهر',
             'الإيجار الشهري',
             'الإيجار المدفوع هذا الشهر',
+            'أجور العمال هذا الشهر',
             'أصناف متوفرة',
           ],
           items: s.warehouses,
@@ -1206,12 +1208,23 @@ class _WarehousesTab extends StatelessWidget {
                       : null,
                 ),
               ),
+              Text(() {
+                final labor = s.laborCost(w.id, month);
+                return labor == 0 ? '-' : fmt.money(labor);
+              }()),
               Text(
                 '${s.products.where((p) => s.stockOf(p.id, warehouseId: w.id) > 0).length}',
               ),
             ];
           },
           extraActions: (w) => [
+            if (!isStockWorker)
+              TableAction(
+                tooltip: 'عمال باليومية (تنزيل/رفع)',
+                icon: Icons.groups_outlined,
+                color: AppColors.capital.last,
+                onTap: () => showWorkDayForm(context, warehouseId: w.id),
+              ),
             if (!isStockWorker)
               TableAction(
                 tooltip: 'دفع الإيجار',

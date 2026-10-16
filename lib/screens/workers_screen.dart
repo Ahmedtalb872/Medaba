@@ -554,9 +554,13 @@ Future<void> showWorkerForm(BuildContext context, {Worker? existing}) {
   );
 }
 
-/// يوم عمل لعمال اليومية (مثل تفريغ حاوية): من حضر وأجرة كل واحد.
-/// [shipmentId] يربط اليوم بحاوية فيُضاف مجموع الأجور إلى تكاليفها.
-Future<void> showWorkDayForm(BuildContext context, {String? shipmentId}) {
+/// يوم عمل لعمال اليومية: تنزيل أو رفع البضاعة في حاوية أو مخزن، من حضر
+/// وأجرة كل واحد. مع الحاوية يُضاف مجموع الأجور إلى تكاليفها.
+Future<void> showWorkDayForm(
+  BuildContext context, {
+  String? shipmentId,
+  String? warehouseId,
+}) {
   final s = context.read<AppState>();
   final workers = s.workers.where((w) => w.active && w.daily).toList();
   if (workers.isEmpty) {
@@ -572,6 +576,10 @@ Future<void> showWorkDayForm(BuildContext context, {String? shipmentId}) {
   final key = GlobalKey<FormState>();
   var date = DateTime.now();
   String? ship = shipmentId;
+  String? wh = warehouseId;
+  // أين كان العمل: حاوية أو مخزن.
+  var atWarehouse = warehouseId != null;
+  var task = AppState.workTasks.first;
   final present = <String>{};
   final wage = {
     for (final w in workers)
@@ -591,26 +599,70 @@ Future<void> showWorkDayForm(BuildContext context, {String? shipmentId}) {
         value: date,
         onChanged: (d) => setState(() => date = d),
       ),
-      DropdownButtonFormField<String?>(
-        initialValue: ship,
-        isExpanded: true,
-        decoration: const InputDecoration(labelText: 'الحاوية (اختياري)'),
-        items: [
-          const DropdownMenuItem(value: null, child: Text('بدون حاوية')),
-          for (final x in s.shipments)
-            DropdownMenuItem(
-              value: x.id,
-              child: Text(
-                [
-                  if (x.containerNumber.isNotEmpty) x.containerNumber,
-                  x.contents,
-                ].join(' - '),
-                overflow: TextOverflow.ellipsis,
-              ),
+      const Text('العمل', style: TextStyle(fontWeight: FontWeight.bold)),
+      Wrap(
+        spacing: 8,
+        children: [
+          for (final t in AppState.workTasks)
+            ChoiceChip(
+              label: Text(t),
+              selected: task == t,
+              onSelected: (_) => setState(() => task = t),
             ),
         ],
-        onChanged: (v) => setState(() => ship = v),
       ),
+      SegmentedButton<bool>(
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(
+            value: false,
+            icon: Icon(Icons.directions_boat_outlined),
+            label: Text('حاوية'),
+          ),
+          ButtonSegment(
+            value: true,
+            icon: Icon(Icons.warehouse_outlined),
+            label: Text('مخزن'),
+          ),
+        ],
+        selected: {atWarehouse},
+        onSelectionChanged: (v) => setState(() => atWarehouse = v.first),
+      ),
+      if (!atWarehouse)
+        DropdownButtonFormField<String?>(
+          key: const ValueKey('ship'),
+          initialValue: ship,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'الحاوية'),
+          items: [
+            const DropdownMenuItem(value: null, child: Text('بدون حاوية')),
+            for (final x in s.shipments)
+              DropdownMenuItem(
+                value: x.id,
+                child: Text(
+                  [
+                    if (x.containerNumber.isNotEmpty) x.containerNumber,
+                    x.contents,
+                  ].join(' - '),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: (v) => setState(() => ship = v),
+        )
+      else
+        DropdownButtonFormField<String?>(
+          key: const ValueKey('wh'),
+          initialValue: wh,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'المخزن'),
+          items: [
+            const DropdownMenuItem(value: null, child: Text('بدون مخزن')),
+            for (final w in s.warehouses)
+              DropdownMenuItem(value: w.id, child: Text(w.name)),
+          ],
+          onChanged: (v) => setState(() => wh = v),
+        ),
       const Text(
         'العمال الحاضرون',
         style: TextStyle(fontWeight: FontWeight.bold),
@@ -651,7 +703,7 @@ Future<void> showWorkDayForm(BuildContext context, {String? shipmentId}) {
         present.isEmpty
             ? 'اختر العمال الذين حضروا'
             : '${present.length} عامل • المجموع ${fmt.money(total())}'
-                  '${ship == null ? '' : ' • يُضاف إلى تكاليف الحاوية'}',
+                  '${!atWarehouse && ship != null ? ' • يُضاف إلى تكاليف الحاوية' : ''}',
         style: const TextStyle(fontWeight: FontWeight.bold),
       ),
     ],
@@ -659,7 +711,9 @@ Future<void> showWorkDayForm(BuildContext context, {String? shipmentId}) {
       if (present.isEmpty) return;
       await s.recordWorkDay(
         date: date,
-        shipmentId: ship,
+        task: task,
+        shipmentId: atWarehouse ? null : ship,
+        warehouseId: atWarehouse ? wh : null,
         wages: {
           for (final id in present) id: fmt.parseNumber(wage[id]!.text) ?? 0,
         },

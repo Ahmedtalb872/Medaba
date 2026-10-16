@@ -220,6 +220,9 @@ class Transaction {
   /// معرّف الشخص المرتبط (عامل/شريك) إن وجد.
   final String? personId;
 
+  /// ما تخصه المعاملة: مخزن أو حاوية (مثل أجور عمال التفريغ).
+  final String? refId;
+
   const Transaction({
     required this.id,
     required this.category,
@@ -227,6 +230,7 @@ class Transaction {
     required this.date,
     this.note = '',
     this.personId,
+    this.refId,
   });
 
   TxType get type => category.type;
@@ -238,6 +242,7 @@ class Transaction {
     'date': date.toIso8601String(),
     'note': note,
     'personId': personId,
+    if (refId != null) 'refId': refId,
   };
 
   factory Transaction.fromJson(Map<String, dynamic> j) => Transaction(
@@ -247,5 +252,6 @@ class Transaction {
     date: parseDate(j['date']),
     note: j['note'] as String? ?? '',
     personId: j['personId'] as String?,
+    refId: j['refId'] as String?,
   );
 }
