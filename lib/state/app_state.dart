@@ -482,6 +482,9 @@ class AppState extends ChangeNotifier {
     for (final w in _workers) {
       if (w.id == id) return w.name;
     }
+    for (final w in _warehouses) {
+      if (w.id == id) return w.name;
+    }
     return null;
   }
 
@@ -687,6 +690,53 @@ class AppState extends ChangeNotifier {
     0,
     (s, p) => s + stockOf(p.id, warehouseId: warehouseId) * p.costPrice,
   );
+
+  /// ربح مبيعات مخزن معيّن (البيع - الشراء): فواتير البيع منه والبيع اليدوي.
+  double warehouseProfit(String warehouseId, [Period? p]) {
+    var profit = 0.0;
+    for (final inv in _invoices) {
+      if (inv.type != InvoiceType.sale ||
+          inv.warehouseId != warehouseId ||
+          !inPeriodDate(inv.date, p)) {
+        continue;
+      }
+      final cost = inv.lines.fold<double>(
+        0,
+        (a, l) =>
+            a +
+            (l.unitCost ?? productById(l.productId)?.costPrice ?? 0) * l.qty,
+      );
+      profit += inv.total - cost;
+    }
+    for (final m in _moves) {
+      if (m.type == MoveType.sale &&
+          m.invoiceId == null &&
+          m.warehouseId == warehouseId &&
+          inPeriodDate(m.date, p)) {
+        final cost = productById(m.productId)?.costPrice ?? 0;
+        profit += m.qty * (m.unitPrice - cost);
+      }
+    }
+    return profit;
+  }
+
+  /// الإيجار المدفوع لمخزن في فترة.
+  double rentPaid(String warehouseId, [Period? p]) => inPeriod(p)
+      .where((t) => t.category == TxCategory.rent && t.personId == warehouseId)
+      .fold(0, (a, t) => a + t.amount);
+
+  /// يسجّل دفع إيجار مخزن كمصروف إيجار.
+  Future<void> payWarehouseRent(Warehouse w, double amount, DateTime date) =>
+      saveTransaction(
+        Transaction(
+          id: newId(),
+          category: TxCategory.rent,
+          amount: amount,
+          date: date,
+          note: 'إيجار ${w.name}',
+          personId: w.id,
+        ),
+      );
 
   /// الأصناف التي وصل رصيدها الإجمالي إلى الحد الأدنى أو أقل.
   List<Product> get lowStockProducts => _products

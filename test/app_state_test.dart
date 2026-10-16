@@ -320,6 +320,54 @@ void main() {
     expect(s.debtsRemaining(DebtDirection.theyOwe), 500);
   });
 
+  test('each warehouse has its own capital, profit and rent', () async {
+    await s.saveWarehouse(
+      const Warehouse(
+        id: 'w1',
+        name: 'مخزن 1',
+        capital: 50000,
+        monthlyRent: 8000,
+      ),
+    );
+    await s.saveWarehouse(const Warehouse(id: 'w2', name: 'مخزن 2'));
+    await s.saveProduct(
+      const Product(id: 'p', name: '0.66 غ', costPrice: 100, salePrice: 150),
+    );
+    for (final w in ['w1', 'w2']) {
+      await s.saveMove(
+        StockMove(
+          id: 'in$w',
+          type: MoveType.stockIn,
+          productId: 'p',
+          warehouseId: w,
+          qty: 100,
+          date: DateTime(2026, 10, 1),
+        ),
+      );
+    }
+    await s.saveInvoice(
+      Invoice(
+        id: 'i',
+        type: InvoiceType.sale,
+        number: 'S-0001',
+        date: DateTime(2026, 10, 10),
+        warehouseId: 'w1',
+        lines: const [InvoiceLine(productId: 'p', qty: 20, unitPrice: 150)],
+      ),
+    );
+    final oct = Period.month(DateTime(2026, 10));
+    expect(s.stockValue(warehouseId: 'w1'), 8000);
+    expect(s.warehouseProfit('w1', oct), 1000);
+    expect(s.warehouseProfit('w2', oct), 0);
+
+    final w1 = s.warehouseById('w1')!;
+    await s.payWarehouseRent(w1, 8000, DateTime(2026, 10, 5));
+    expect(s.rentPaid('w1', oct), 8000);
+    expect(s.rentPaid('w2', oct), 0);
+    expect(s.transactions.any((t) => t.note == 'إيجار مخزن 1'), isTrue);
+    expect(Warehouse.fromJson(w1.toJson()).capital, 50000);
+  });
+
   test('demo data seeds without errors', () async {
     await s.seedDemoData();
     expect(s.warehouses, isNotEmpty);

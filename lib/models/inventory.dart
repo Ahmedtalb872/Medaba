@@ -10,11 +10,19 @@ class Warehouse {
   final String location;
   final String notes;
 
+  /// رأس مال المخزن: المبلغ المخصص لبضاعته.
+  final double capital;
+
+  /// إيجار المخزن الشهري (0 إذا كان ملكاً).
+  final double monthlyRent;
+
   const Warehouse({
     required this.id,
     required this.name,
     this.location = '',
     this.notes = '',
+    this.capital = 0,
+    this.monthlyRent = 0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -22,6 +30,8 @@ class Warehouse {
     'name': name,
     'location': location,
     'notes': notes,
+    'capital': capital,
+    'monthlyRent': monthlyRent,
   };
 
   factory Warehouse.fromJson(Map<String, dynamic> j) => Warehouse(
@@ -29,6 +39,8 @@ class Warehouse {
     name: j['name'] as String,
     location: j['location'] as String? ?? '',
     notes: j['notes'] as String? ?? '',
+    capital: (j['capital'] as num?)?.toDouble() ?? 0,
+    monthlyRent: (j['monthlyRent'] as num?)?.toDouble() ?? 0,
   );
 }
 

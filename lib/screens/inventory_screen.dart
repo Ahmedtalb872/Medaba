@@ -1141,6 +1141,7 @@ class _WarehousesTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = context.watch<AppState>();
+    final month = Period.month(DateTime.now());
     return ListView(
       padding: pagePadding,
       children: [
@@ -1157,20 +1158,67 @@ class _WarehousesTab extends StatelessWidget {
           columns: const [
             'المخزن',
             'الموقع',
+            'رأس المال',
+            'قيمة البضاعة',
+            'المتبقي من رأس المال',
+            'ربح هذا الشهر',
+            'الإيجار الشهري',
+            'الإيجار المدفوع هذا الشهر',
             'أصناف متوفرة',
-            'قيمة المخزون',
-            'ملاحظات',
           ],
           items: s.warehouses,
           emptyMessage: 'لم تتم إضافة مخازن بعد',
-          cells: (w) => [
-            Text(w.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-            Text(w.location),
-            Text(
-              '${s.products.where((p) => s.stockOf(p.id, warehouseId: w.id) > 0).length}',
-            ),
-            Text(fmt.money(s.stockValue(warehouseId: w.id))),
-            Text(w.notes),
+          cells: (w) {
+            final value = s.stockValue(warehouseId: w.id);
+            final profit = s.warehouseProfit(w.id, month);
+            final paid = s.rentPaid(w.id, month);
+            return [
+              Text(w.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(w.location.isEmpty ? '-' : w.location),
+              Text(w.capital == 0 ? '-' : fmt.money(w.capital)),
+              Text(fmt.money(value)),
+              Text(
+                w.capital == 0 ? '-' : fmt.money(w.capital - value),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: w.capital - value < 0 ? AppColors.expense.last : null,
+                ),
+              ),
+              Text(
+                fmt.money(profit),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: profit >= 0
+                      ? AppColors.income.last
+                      : AppColors.expense.last,
+                ),
+              ),
+              Text(w.monthlyRent == 0 ? '-' : fmt.money(w.monthlyRent)),
+              Text(
+                w.monthlyRent == 0
+                    ? (paid == 0 ? '-' : fmt.money(paid))
+                    : paid >= w.monthlyRent
+                    ? '${fmt.money(paid)} ✓'
+                    : '${fmt.money(paid)} (باقي ${fmt.money(w.monthlyRent - paid)})',
+                style: TextStyle(
+                  color: w.monthlyRent > 0 && paid < w.monthlyRent
+                      ? AppColors.expense.last
+                      : null,
+                ),
+              ),
+              Text(
+                '${s.products.where((p) => s.stockOf(p.id, warehouseId: w.id) > 0).length}',
+              ),
+            ];
+          },
+          extraActions: (w) => [
+            if (!isStockWorker)
+              TableAction(
+                tooltip: 'دفع الإيجار',
+                icon: Icons.receipt_long_outlined,
+                color: AppColors.gold,
+                onTap: () => showPayRentForm(context, w),
+              ),
           ],
           onEdit: (w) => showWarehouseForm(context, existing: w),
           onDelete: (w) async {
@@ -1191,6 +1239,14 @@ Future<void> showWarehouseForm(BuildContext context, {Warehouse? existing}) {
   final name = TextEditingController(text: existing?.name);
   final location = TextEditingController(text: existing?.location);
   final notes = TextEditingController(text: existing?.notes);
+  final capital = TextEditingController(
+    text: (existing?.capital ?? 0) == 0 ? '' : fmt.number(existing!.capital),
+  );
+  final rent = TextEditingController(
+    text: (existing?.monthlyRent ?? 0) == 0
+        ? ''
+        : fmt.number(existing!.monthlyRent),
+  );
 
   return showFormDialog(
     context: context,
@@ -1207,6 +1263,24 @@ Future<void> showWarehouseForm(BuildContext context, {Warehouse? existing}) {
         decoration: const InputDecoration(labelText: 'الموقع / العنوان'),
       ),
       TextFormField(
+        controller: capital,
+        decoration: const InputDecoration(
+          labelText: 'رأس مال المخزن',
+          helperText: 'المبلغ المخصص لبضاعة هذا المخزن',
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(required: false),
+      ),
+      TextFormField(
+        controller: rent,
+        decoration: const InputDecoration(
+          labelText: 'الإيجار الشهري',
+          helperText: 'اتركه فارغاً إذا كان المخزن ملكاً',
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(required: false),
+      ),
+      TextFormField(
         controller: notes,
         decoration: const InputDecoration(labelText: 'ملاحظات'),
         maxLines: 2,
@@ -1218,7 +1292,42 @@ Future<void> showWarehouseForm(BuildContext context, {Warehouse? existing}) {
         name: name.text.trim(),
         location: location.text.trim(),
         notes: notes.text.trim(),
+        capital: fmt.parseNumber(capital.text) ?? 0,
+        monthlyRent: fmt.parseNumber(rent.text) ?? 0,
       ),
     ),
+  );
+}
+
+/// دفع إيجار مخزن: يُسجَّل مصروف إيجار باسم المخزن.
+Future<void> showPayRentForm(BuildContext context, Warehouse w) {
+  final s = context.read<AppState>();
+  final key = GlobalKey<FormState>();
+  final amount = TextEditingController(
+    text: w.monthlyRent == 0 ? '' : fmt.number(w.monthlyRent),
+  );
+  var date = DateTime.now();
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'دفع إيجار ${w.name}',
+    fields: (setState) => [
+      TextFormField(
+        controller: amount,
+        autofocus: true,
+        decoration: const InputDecoration(labelText: 'المبلغ'),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(min: 0.01),
+      ),
+      DateField(
+        label: 'تاريخ الدفع',
+        value: date,
+        onChanged: (d) => setState(() => date = d),
+      ),
+    ],
+    onSave: () async {
+      await s.payWarehouseRent(w, fmt.parseNumber(amount.text)!, date);
+      if (context.mounted) _snack(context, 'تم تسجيل إيجار ${w.name}');
+    },
   );
 }
