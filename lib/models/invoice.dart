@@ -71,6 +71,9 @@ class Invoice {
   /// يُسجَّل ديناً مرتبطاً بالفاتورة في شاشة الديون.
   final double debt;
 
+  /// الفاتورة المفتوحة التي سُحبت منها هذه الكمية، إن وُجدت.
+  final String? openOrderId;
+
   const Invoice({
     required this.id,
     required this.type,
@@ -84,6 +87,7 @@ class Invoice {
     this.notes = '',
     this.txId,
     this.debt = 0,
+    this.openOrderId,
   });
 
   double get subtotal => lines.fold(0, (s, l) => s + l.total);
@@ -105,6 +109,7 @@ class Invoice {
     notes: notes,
     txId: txId,
     debt: debt,
+    openOrderId: openOrderId,
   );
 
   Map<String, dynamic> toJson() => {
@@ -120,6 +125,7 @@ class Invoice {
     'notes': notes,
     'txId': txId,
     'debt': debt,
+    if (openOrderId != null) 'openOrderId': openOrderId,
   };
 
   factory Invoice.fromJson(Map<String, dynamic> j) => Invoice(
@@ -138,6 +144,7 @@ class Invoice {
     notes: j['notes'] as String? ?? '',
     txId: j['txId'] as String?,
     debt: (j['debt'] as num?)?.toDouble() ?? 0,
+    openOrderId: j['openOrderId'] as String?,
   );
 }
 

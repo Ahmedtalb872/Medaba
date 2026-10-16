@@ -13,6 +13,7 @@ import '../theme/app_colors.dart';
 import '../utils/share_pdf.dart';
 import '../utils/format.dart' as fmt;
 import '../widgets/common.dart';
+import 'open_orders.dart';
 import '../widgets/product_thumb.dart';
 
 class InvoicesScreen extends StatefulWidget {
@@ -127,6 +128,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
             ),
           ],
         ),
+        const SizedBox(height: 16),
+        const OpenOrdersSection(),
         const SizedBox(height: 16),
         Wrap(
           spacing: 12,
@@ -687,6 +690,7 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
     discount: fmt.parseNumber(_discount.text) ?? 0,
     notes: _notes.text.trim(),
     txId: widget.existing?.txId,
+    openOrderId: widget.existing?.openOrderId,
   );
 
   Future<void> _save() async {

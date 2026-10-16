@@ -248,7 +248,23 @@ class _StockTabState extends State<_StockTab> {
               Text(p.code),
               Text(fmt.number(r.received)),
               Text(fmt.number(r.issued)),
-              _Available(qty: r.qty, received: r.received),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _Available(qty: r.qty, received: r.received),
+                  // ما تركه زبائن الفواتير المفتوحة في المخزن ولم يأخذوه.
+                  if (s.reservedQty(p.id, warehouseId: _warehouseId) > 0)
+                    Text(
+                      'محجوز ${fmt.number(s.reservedQty(p.id, warehouseId: _warehouseId))}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.gold,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                ],
+              ),
               Text(p.unit),
               Text(fmt.money(p.costPrice)),
               Text(fmt.money(p.salePrice)),

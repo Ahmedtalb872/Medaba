@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../data/storage.dart';
 import '../models/debt.dart';
+import '../models/open_order.dart';
 import '../models/plot.dart';
 import '../models/shipment.dart';
 import '../models/car.dart';
@@ -85,6 +86,7 @@ class AppState extends ChangeNotifier {
   static const _kDebts = 'debts';
   static const _kCars = 'cars';
   static const _kShipments = 'shipments';
+  static const _kOrders = 'open_orders';
   static const _kPlots = 'plots';
 
   /// كل مفاتيح التخزين، لمزامنتها مع قاعدة البيانات.
@@ -101,6 +103,7 @@ class AppState extends ChangeNotifier {
     _kCars,
     _kPlots,
     _kShipments,
+    _kOrders,
   ];
 
   final Storage _storage;
@@ -116,6 +119,7 @@ class AppState extends ChangeNotifier {
   List<Debt> _debts = [];
   List<Car> _cars = [];
   List<Shipment> _shipments = [];
+  List<OpenOrder> _orders = [];
   List<Plot> _plots = [];
   CompanyInfo _company = const CompanyInfo();
   bool loaded = false;
@@ -199,6 +203,7 @@ class AppState extends ChangeNotifier {
     _debts = await _read(_kDebts, Debt.fromJson);
     _cars = await _read(_kCars, Car.fromJson);
     _shipments = await _read(_kShipments, Shipment.fromJson);
+    _orders = await _read(_kOrders, OpenOrder.fromJson);
     _plots = await _read(_kPlots, Plot.fromJson);
     final company = await _storage.readList(_kCompany);
     if (company.isNotEmpty) _company = CompanyInfo.fromJson(company.first);
@@ -276,6 +281,9 @@ class AppState extends ChangeNotifier {
     _shipments.map((e) => e.toJson()).toList(),
   );
 
+  Future<void> _saveOrders() =>
+      _storage.writeList(_kOrders, _orders.map((e) => e.toJson()).toList());
+
   Future<void> _savePlots() =>
       _storage.writeList(_kPlots, _plots.map((e) => e.toJson()).toList());
 
@@ -285,6 +293,7 @@ class AppState extends ChangeNotifier {
     _saveDebts(),
     _saveCars(),
     _saveShipments(),
+    _saveOrders(),
     _savePartners(),
     _saveWorkers(),
     _saveTx(),
@@ -868,12 +877,34 @@ class AppState extends ChangeNotifier {
       for (final l in inv.lines) {
         needed[l.productId] = (needed[l.productId] ?? 0) + l.qty;
       }
+      final order = orderById(inv.openOrderId);
+      if (order != null) {
+        for (final e in needed.entries) {
+          final left =
+              order.qtyOf(e.key) -
+              takenFromOrder(order.id, e.key, excludeInvoiceId: inv.id);
+          if (e.value > left + 1e-9) {
+            throw StateError(
+              'المتبقي للزبون من "${productById(e.key)?.name}" '
+              'في ${order.number} هو ${fmt.number(left)} فقط',
+            );
+          }
+        }
+      }
       for (final e in needed.entries) {
-        final available = stockOf(
-          e.key,
-          warehouseId: inv.warehouseId,
-          excludeInvoiceId: inv.id,
-        );
+        // الكميات المحجوزة لزبائن الفواتير المفتوحة لا تُباع لغيرهم.
+        final available =
+            stockOf(
+              e.key,
+              warehouseId: inv.warehouseId,
+              excludeInvoiceId: inv.id,
+            ) -
+            reservedQty(
+              e.key,
+              warehouseId: inv.warehouseId,
+              excludeOrderId: inv.openOrderId,
+              excludeInvoiceId: inv.id,
+            );
         if (e.value > available + 1e-9) {
           throw StateError(
             'الكمية المتاحة من "${productById(e.key)?.name}" '
@@ -944,6 +975,177 @@ class AppState extends ChangeNotifier {
 
     notifyListeners();
     await Future.wait([_saveInvoices(), _saveMoves(), _saveTx(), _saveDebts()]);
+  }
+
+  // ---------- الفواتير المفتوحة ----------
+
+  OpenOrder? orderById(String? id) =>
+      id == null ? null : _orders.where((o) => o.id == id).firstOrNull;
+
+  /// الفواتير المفتوحة: غير المكتملة أولاً، ثم الأحدث.
+  List<OpenOrder> get openOrders => List.unmodifiable(
+    [..._orders]..sort((a, b) {
+      final ad = isOrderComplete(a), bd = isOrderComplete(b);
+      if (ad != bd) return ad ? 1 : -1;
+      return b.date.compareTo(a.date);
+    }),
+  );
+
+  /// الرقم التالي للفاتورة المفتوحة، مثل O-0001.
+  String nextOrderNumber() {
+    var max = 0;
+    for (final o in _orders) {
+      final n = int.tryParse(o.number.replaceAll(RegExp(r'[^0-9]'), ''));
+      if (n != null && n > max) max = n;
+    }
+    return 'O-${(max + 1).toString().padLeft(4, '0')}';
+  }
+
+  /// فواتير البيع (الدفعات) المسحوبة من فاتورة مفتوحة، الأقدم أولاً.
+  List<Invoice> pickupsOf(String orderId) =>
+      _invoices.where((i) => i.openOrderId == orderId).toList()
+        ..sort((a, b) => a.date.compareTo(b.date));
+
+  /// ما أخذه الزبون من صنف في فاتورة مفتوحة.
+  double takenFromOrder(
+    String orderId,
+    String productId, {
+    String? excludeInvoiceId,
+  }) => _invoices
+      .where((i) => i.openOrderId == orderId && i.id != excludeInvoiceId)
+      .expand((i) => i.lines)
+      .where((l) => l.productId == productId)
+      .fold(0, (s, l) => s + l.qty);
+
+  double remainingInOrder(OpenOrder o, String productId) {
+    final left = o.qtyOf(productId) - takenFromOrder(o.id, productId);
+    return left > 0 ? left : 0;
+  }
+
+  bool isOrderComplete(OpenOrder o) =>
+      o.lines.every((l) => remainingInOrder(o, l.productId) <= 1e-9);
+
+  /// المدفوع من قيمة الفاتورة المفتوحة (مجموع الدفعات بعد ديونها).
+  double orderPaid(OpenOrder o) => pickupsOf(o.id)
+      .fold(0, (s, i) => s + i.total - (debtForInvoice(i.id)?.remaining ?? 0));
+
+  /// قيمة ما أخذه الزبون حتى الآن.
+  double orderTakenValue(OpenOrder o) =>
+      pickupsOf(o.id).fold(0, (s, i) => s + i.total);
+
+  /// الكمية المحجوزة من صنف في مخزن لزبائن الفواتير المفتوحة (ما لم يأخذوه).
+  double reservedQty(
+    String productId, {
+    String? warehouseId,
+    String? excludeOrderId,
+    String? excludeInvoiceId,
+  }) {
+    var total = 0.0;
+    for (final o in _orders) {
+      if (o.id == excludeOrderId) continue;
+      if (warehouseId != null && o.warehouseId != warehouseId) continue;
+      final left =
+          o.qtyOf(productId) -
+          takenFromOrder(o.id, productId, excludeInvoiceId: excludeInvoiceId);
+      if (left > 0) total += left;
+    }
+    return total;
+  }
+
+  /// يحفظ الفاتورة المفتوحة. يتحقق أن البضاعة متوفرة لحجزها وأن الكميات
+  /// لا تقل عمّا أخذه الزبون.
+  Future<void> saveOpenOrder(OpenOrder o) async {
+    if (o.lines.isEmpty) throw StateError('أضف صنفاً واحداً على الأقل');
+    if (o.partyName.trim().isEmpty) throw StateError('اكتب اسم الزبون');
+    final old = orderById(o.id);
+    if (old != null &&
+        old.warehouseId != o.warehouseId &&
+        pickupsOf(o.id).isNotEmpty) {
+      throw StateError('لا يمكن تغيير المخزن بعد أن أخذ الزبون منها');
+    }
+    for (final pid in {for (final l in o.lines) l.productId}) {
+      final taken = takenFromOrder(o.id, pid);
+      final want = o.qtyOf(pid);
+      if (want + 1e-9 < taken) {
+        throw StateError(
+          'أخذ الزبون ${fmt.number(taken)} من "${productById(pid)?.name}"، '
+          'فلا يمكن أن تقل الكمية عن ذلك',
+        );
+      }
+      final free =
+          stockOf(pid, warehouseId: o.warehouseId) -
+          reservedQty(pid, warehouseId: o.warehouseId, excludeOrderId: o.id);
+      if (want - taken > free + 1e-9) {
+        throw StateError(
+          'المتوفر من "${productById(pid)?.name}" في المخزن '
+          '${fmt.number(free)} فقط',
+        );
+      }
+    }
+    // صنف أُزيل من الفاتورة وقد أخذ الزبون منه.
+    for (final i in pickupsOf(o.id)) {
+      for (final l in i.lines) {
+        if (o.qtyOf(l.productId) <= 0) {
+          throw StateError(
+            'أخذ الزبون من "${productById(l.productId)?.name}"، فلا يمكن حذفه',
+          );
+        }
+      }
+    }
+    _upsert(_orders, o, (e) => e.id);
+    notifyListeners();
+    await _saveOrders();
+  }
+
+  /// يُرفض حذف فاتورة مفتوحة أخذ الزبون منها (احذف دفعاتها أولاً).
+  Future<bool> deleteOpenOrder(String id) async {
+    if (pickupsOf(id).isNotEmpty) return false;
+    _orders.removeWhere((o) => o.id == id);
+    notifyListeners();
+    await _saveOrders();
+    return true;
+  }
+
+  /// يأخذ الزبون دفعة من فاتورته المفتوحة: تُنشأ فاتورة بيع بالكميات المأخوذة
+  /// وسعرها المتفق عليه، وما لم يُدفع منها يصبح ديناً. تُرجع فاتورة البيع.
+  Future<Invoice> pickupFromOrder(
+    String orderId, {
+    required Map<String, double> quantities,
+    required double paid,
+    DateTime? date,
+    String notes = '',
+  }) async {
+    final o = orderById(orderId);
+    if (o == null) throw StateError('الفاتورة المفتوحة غير موجودة');
+    final lines = [
+      for (final e in quantities.entries)
+        if (e.value > 0)
+          InvoiceLine(
+            productId: e.key,
+            qty: e.value,
+            unitPrice: o.priceOf(e.key),
+          ),
+    ];
+    if (lines.isEmpty) throw StateError('اكتب الكمية التي أخذها الزبون');
+    final total = lines.fold<double>(0, (s, l) => s + l.total);
+    final inv = Invoice(
+      id: newId(),
+      type: InvoiceType.sale,
+      number: nextInvoiceNumber(InvoiceType.sale),
+      date: date ?? DateTime.now(),
+      partyName: o.partyName,
+      partyPhone: o.partyPhone,
+      warehouseId: o.warehouseId,
+      lines: lines,
+      notes: [
+        'دفعة من الفاتورة المفتوحة ${o.number}',
+        if (notes.trim().isNotEmpty) notes.trim(),
+      ].join(' - '),
+      debt: (total - paid).clamp(0.0, total),
+      openOrderId: o.id,
+    );
+    await saveInvoice(inv);
+    return invoiceById(inv.id)!;
   }
 
   // ---------- الأرباح ----------
@@ -1977,6 +2179,7 @@ class AppState extends ChangeNotifier {
     _debts.clear();
     _cars.clear();
     _shipments.clear();
+    _orders.clear();
     _plots.clear();
     notifyListeners();
     await _saveAll();
