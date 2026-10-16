@@ -144,7 +144,7 @@ void main() {
     expect(old.extraCosts, isEmpty);
   });
 
-  test('a day of container work pays each daily worker', () async {
+  test('labor without registered workers is charged to its place', () async {
     final s = AppState(MemoryStorage());
     await s.load();
     final day = DateTime(2026, 10, 16);
@@ -158,53 +158,39 @@ void main() {
         expectedArrival: day,
       ),
     );
-    for (final (id, wage) in [('a', 3000.0), ('b', 2500.0)]) {
-      await s.saveWorker(
-        Worker(
-          id: id,
-          name: 'عامل $id',
-          monthlySalary: wage,
-          hiredAt: day,
-          daily: true,
-        ),
-      );
-    }
-    expect(s.monthlyPayroll, 0);
-
-    await s.recordWorkDay(
-      date: day,
-      shipmentId: 'sh',
-      wages: {'a': 3000, 'b': 2500},
-    );
-    expect(s.transactions, hasLength(2));
-    expect(s.transactions.first.note, contains('MSCU 1'));
-    expect(s.totalExpenses(), 5500);
-    expect(s.workDays('a'), 1);
-    final cost = s.shipmentById('sh')!.extraCosts.single;
-    expect(cost.amount, 5500);
-    expect(cost.label, contains('2 عامل'));
-    expect(s.laborCost('sh'), 5500);
-
-    // رفع البضاعة في مخزن: تُحسب أجورها على المخزن لا على الحاوية.
     await s.saveWarehouse(const Warehouse(id: 'w', name: 'مخزن 1'));
-    await s.recordWorkDay(
+
+    await s.recordLabor(
       date: day,
+      amount: 15000,
+      task: 'تنزيل البضاعة',
+      place: LaborPlace.container,
+      refId: 'sh',
+      workers: 5,
+      payer: 'أحمد',
+    );
+    await s.recordLabor(
+      date: day,
+      amount: 4000,
       task: 'رفع البضاعة',
-      warehouseId: 'w',
-      wages: {'a': 3000},
+      place: LaborPlace.warehouse,
+      refId: 'w',
     );
-    expect(s.laborCost('w'), 3000);
-    expect(s.laborCost('sh'), 5500);
+
+    expect(s.totalExpenses(), 19000);
+    expect(s.laborCost('sh'), 15000);
+    expect(s.laborCost('w'), 4000);
+    expect(s.shipmentById('sh')!.extraCosts.single.amount, 15000);
     expect(
-      s.transactions.map((t) => t.note),
-      contains('يومية عامل a - رفع البضاعة مخزن 1'),
+      s.laborPayments().map((t) => t.note),
+      containsAll([
+        'أجرة عمال (5) - تنزيل البضاعة - حاوية MSCU 1 - دفعها: أحمد',
+        'أجرة عمال - رفع البضاعة - مخزن 1',
+      ]),
     );
-    expect(s.workDays('a'), 2);
   });
 
-  testWidgets('unloading workers are recorded from the container row', (
-    tester,
-  ) async {
+  testWidgets('labor is paid from the container row', (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -212,15 +198,6 @@ void main() {
     final state = AppState(MemoryStorage());
     await state.load();
     await state.seedDemoData();
-    await state.saveWorker(
-      Worker(
-        id: 'd',
-        name: 'محمد',
-        monthlySalary: 3000,
-        hiredAt: DateTime(2026),
-        daily: true,
-      ),
-    );
     await tester.pumpWidget(MedabaApp(state: state));
     await tester.pumpAndSettle();
     await tester.tap(find.text('حاويات البضاعة').first);
@@ -228,18 +205,19 @@ void main() {
 
     final ship = state.shipments.first;
     final costsBefore = ship.extraCosts.length;
-    final button = find.byTooltip('عمال التفريغ (يومية)').first;
+    final button = find.byTooltip('دفع أجرة عمال').first;
     await tester.ensureVisible(button);
     await tester.pumpAndSettle();
     await tester.tap(button);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('محمد'));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('يُضاف إلى تكاليف الحاوية'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'المبلغ المدفوع للعمال'),
+      '12000',
+    );
     await tester.tap(find.text('حفظ'));
     await tester.pumpAndSettle();
 
-    expect(state.workDays('d'), 1);
+    expect(state.laborCost(ship.id), 12000);
     expect(state.shipmentById(ship.id)!.extraCosts, hasLength(costsBefore + 1));
     expect(tester.takeException(), isNull);
   });

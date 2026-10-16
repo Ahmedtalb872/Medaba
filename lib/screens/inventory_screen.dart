@@ -1236,10 +1236,14 @@ class _WarehousesTab extends StatelessWidget {
           extraActions: (w) => [
             if (!isStockWorker)
               TableAction(
-                tooltip: 'عمال باليومية (تنزيل/رفع)',
+                tooltip: 'دفع أجرة عمال',
                 icon: Icons.groups_outlined,
                 color: AppColors.capital.last,
-                onTap: () => showWorkDayForm(context, warehouseId: w.id),
+                onTap: () => showLaborForm(
+                  context,
+                  place: LaborPlace.warehouse,
+                  refId: w.id,
+                ),
               ),
             if (!isStockWorker)
               TableAction(

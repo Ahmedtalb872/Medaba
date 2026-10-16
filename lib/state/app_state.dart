@@ -43,6 +43,18 @@ typedef ProfitEntry = ({
 /// دين جديد ([payment] = null) أو تسديد دفعة منه.
 typedef DebtEvent = ({DateTime date, Debt debt, DebtPayment? payment});
 
+/// أين عمل العمال اليوميون.
+enum LaborPlace {
+  warehouse('مخزن'),
+  container('حاوية'),
+  car('سيارة'),
+  plot('قطعة أرضية'),
+  other('أخرى');
+
+  final String label;
+  const LaborPlace(this.label);
+}
+
 class ProfitShare {
   final String id;
   final String name;
@@ -412,65 +424,6 @@ class AppState extends ChangeNotifier {
   /// أعمال عمال اليومية.
   static const workTasks = ['تنزيل البضاعة', 'رفع البضاعة', 'ترتيب المخزن'];
 
-  /// يوم عمل لعمال اليومية: أجرة لكل عامل حضر كمعاملة مصروف، مربوطة
-  /// بالحاوية أو المخزن الذي عملوا فيه. مع الحاوية يُضاف مجموع الأجور إلى
-  /// تكاليفها الإضافية.
-  Future<void> recordWorkDay({
-    required DateTime date,
-    required Map<String, double> wages,
-    String task = 'تنزيل البضاعة',
-    String? shipmentId,
-    String? warehouseId,
-  }) async {
-    final ship = shipmentId == null ? null : shipmentById(shipmentId);
-    final wh = ship != null || warehouseId == null
-        ? null
-        : warehouseById(warehouseId);
-    final place = ship != null
-        ? 'حاوية ${ship.containerNumber.isEmpty ? ship.contents : ship.containerNumber}'
-        : wh?.name;
-    var total = 0.0;
-    var count = 0;
-    for (final e in wages.entries) {
-      final w = _workers.where((x) => x.id == e.key).firstOrNull;
-      if (w == null || e.value <= 0) continue;
-      total += e.value;
-      count++;
-      _transactions.add(
-        Transaction(
-          id: newId(),
-          category: TxCategory.salary,
-          amount: e.value,
-          date: date,
-          note: [
-            'يومية ${w.name}',
-            [task, ?place].join(' '),
-          ].join(' - '),
-          personId: w.id,
-          refId: ship?.id ?? wh?.id,
-        ),
-      );
-    }
-    if (ship != null && total > 0) {
-      _upsert(
-        _shipments,
-        Shipment.fromJson({
-          ...ship.toJson(),
-          'extraCosts': [
-            ...ship.extraCosts.map((c) => c.toJson()),
-            ShipmentExtraCost(
-              'عمال $task ${fmt.date(date)} ($count عامل)',
-              total,
-            ).toJson(),
-          ],
-        }),
-        (e) => e.id,
-      );
-    }
-    notifyListeners();
-    await Future.wait([_saveTx(), _saveShipments()]);
-  }
-
   /// أنواع مصاريف العمال غير الراتب واليومية.
   static const workerExpenseKinds = [
     'سلفة',
@@ -519,6 +472,116 @@ class AppState extends ChangeNotifier {
       personId: w.id,
     ),
   );
+
+  /// أجرة عمال يوميين غير مسجلين (عمال عشوائيون): مبلغ واحد للعمل، مع من
+  /// دفعه، والمكان الذي عملوا فيه. تُسجَّل مصروفاً، وتُضاف إلى تكاليف
+  /// الحاوية أو السيارة أو القطعة إذا كان العمل فيها.
+  Future<void> recordLabor({
+    required DateTime date,
+    required double amount,
+    required String task,
+    LaborPlace place = LaborPlace.other,
+    String? refId,
+    int workers = 0,
+    String payer = '',
+    String note = '',
+  }) async {
+    final where = laborPlaceName(place, refId);
+    final label = [
+      'أجرة عمال${workers > 0 ? ' ($workers)' : ''}',
+      task,
+      ?where,
+    ].join(' - ');
+    _transactions.add(
+      Transaction(
+        id: newId(),
+        category: TxCategory.salary,
+        amount: amount,
+        date: date,
+        note: [
+          label,
+          if (payer.trim().isNotEmpty) 'دفعها: ${payer.trim()}',
+          if (note.trim().isNotEmpty) note.trim(),
+        ].join(' - '),
+        refId: refId,
+      ),
+    );
+    final costLabel =
+        'عمال $task${workers > 0 ? ' ($workers)' : ''} ${fmt.date(date)}';
+    switch (place) {
+      case LaborPlace.container:
+        final ship = shipmentById(refId ?? '');
+        if (ship != null) {
+          _upsert(
+            _shipments,
+            Shipment.fromJson({
+              ...ship.toJson(),
+              'extraCosts': [
+                ...ship.extraCosts.map((c) => c.toJson()),
+                ShipmentExtraCost(costLabel, amount).toJson(),
+              ],
+            }),
+            (e) => e.id,
+          );
+        }
+      case LaborPlace.car:
+        final car = carById(refId ?? '');
+        if (car != null) {
+          _upsert(
+            _cars,
+            car.copyWith(
+              costs: [...car.costs, CarCost(costLabel, amount, date)],
+            ),
+            (e) => e.id,
+          );
+        }
+      case LaborPlace.plot:
+        final plot = plotById(refId ?? '');
+        if (plot != null) {
+          _upsert(
+            _plots,
+            plot.copyWith(
+              costs: [...plot.costs, PlotCost(costLabel, amount, date)],
+            ),
+            (e) => e.id,
+          );
+        }
+      case LaborPlace.warehouse || LaborPlace.other:
+        break;
+    }
+    notifyListeners();
+    await Future.wait([_saveTx(), _saveShipments(), _saveCars(), _savePlots()]);
+  }
+
+  /// اسم المكان الذي عمل فيه العمال (مخزن 1، سيارة تويوتا...).
+  String? laborPlaceName(LaborPlace place, String? refId) => switch (place) {
+    LaborPlace.warehouse => warehouseById(refId)?.name,
+    LaborPlace.car => switch (carById(refId ?? '')) {
+      final c? => 'سيارة ${c.title}',
+      _ => null,
+    },
+    LaborPlace.plot => switch (plotById(refId ?? '')) {
+      final p? => p.name,
+      _ => null,
+    },
+    LaborPlace.container => switch (shipmentById(refId ?? '')) {
+      final x? =>
+        'حاوية ${x.containerNumber.isEmpty ? x.contents : x.containerNumber}',
+      _ => null,
+    },
+    LaborPlace.other => null,
+  };
+
+  /// أجور العمال اليوميين المسجلة، الأحدث أولاً.
+  List<Transaction> laborPayments([Period? p]) =>
+      inPeriod(p)
+          .where(
+            (t) =>
+                t.category == TxCategory.salary &&
+                (t.note.startsWith('أجرة عمال') || t.note.startsWith('يومية')),
+          )
+          .toList()
+        ..sort((a, b) => b.date.compareTo(a.date));
 
   /// أجور عمال اليومية المسجلة على مخزن أو حاوية في فترة.
   double laborCost(String refId, [Period? p]) =>

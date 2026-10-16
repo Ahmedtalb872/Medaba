@@ -30,16 +30,23 @@ class WorkersScreen extends StatelessWidget {
           icon: Icons.engineering_outlined,
           subtitle:
               '$active عامل نشط • الرواتب الشهرية: ${fmt.money(s.monthlyPayroll)}'
-              ' • المصروف على العمال هذا الشهر: ${fmt.money(s.paidToWorkers(Period.month(DateTime.now())))}'
-              ' • عمال اليومية: ${s.workers.where((w) => w.active && w.daily).length}',
+              ' • المصروف على العمال هذا الشهر: ${fmt.money(s.paidToWorkers(Period.month(DateTime.now())))}',
           actionLabel: 'إضافة عامل',
           onAction: () => showWorkerForm(context),
-          secondaryLabel: 'تسجيل يوم عمل',
-          secondaryIcon: Icons.event_available_outlined,
-          onSecondary: () => showWorkDayForm(context),
+          secondaryLabel: 'دفع أجرة عمال',
+          secondaryIcon: Icons.groups_outlined,
+          onSecondary: () => showLaborForm(context),
         ),
+        const LaborPaymentsCard(),
+        const SizedBox(height: 16),
         if (s.workers.isEmpty)
-          const Card(child: EmptyState(message: 'لم تتم إضافة عمال بعد'))
+          const Card(
+            child: EmptyState(
+              message:
+                  'لا يوجد عمال دائمون مسجلون. العمال اليوميون '
+                  'يُسجَّل أجرهم من زر «دفع أجرة عمال» دون تسجيلهم',
+            ),
+          )
         else
           LayoutBuilder(
             builder: (context, c) {
@@ -573,181 +580,204 @@ Future<void> showWorkerForm(BuildContext context, {Worker? existing}) {
   );
 }
 
-/// يوم عمل لعمال اليومية: تنزيل أو رفع البضاعة في حاوية أو مخزن، من حضر
-/// وأجرة كل واحد. مع الحاوية يُضاف مجموع الأجور إلى تكاليفها.
-Future<void> showWorkDayForm(
+/// أجرة عمال يوميين غير مسجلين: المبلغ، من دفعه، والمكان الذي عملوا فيه
+/// (مخزن، حاوية، سيارة، قطعة أرضية).
+Future<void> showLaborForm(
   BuildContext context, {
-  String? shipmentId,
-  String? warehouseId,
+  LaborPlace place = LaborPlace.warehouse,
+  String? refId,
 }) {
   final s = context.read<AppState>();
-  final workers = s.workers.where((w) => w.active && w.daily).toList();
-  if (workers.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'لا يوجد عمال باليومية. أضف عاملاً واختر «يومية» في نوع الأجر',
-        ),
-      ),
-    );
-    return Future.value();
-  }
   final key = GlobalKey<FormState>();
+  final amount = TextEditingController();
+  final workers = TextEditingController();
+  final payer = TextEditingController(text: s.company.ownerName);
+  final note = TextEditingController();
   var date = DateTime.now();
-  String? ship = shipmentId;
-  String? wh = warehouseId;
-  // أين كان العمل: حاوية أو مخزن.
-  var atWarehouse = warehouseId != null;
   var task = AppState.workTasks.first;
-  final present = <String>{};
-  final wage = {
-    for (final w in workers)
-      w.id: TextEditingController(text: fmt.number(w.monthlySalary)),
+  var where = place;
+  String? ref = refId;
+
+  List<(String, String)> options() => switch (where) {
+    LaborPlace.warehouse => [for (final w in s.warehouses) (w.id, w.name)],
+    LaborPlace.container => [
+      for (final x in s.shipments)
+        (
+          x.id,
+          [
+            if (x.containerNumber.isNotEmpty) x.containerNumber,
+            x.contents,
+          ].join(' - '),
+        ),
+    ],
+    LaborPlace.car => [for (final c in s.cars) (c.id, c.title)],
+    LaborPlace.plot => [for (final p in s.plots) (p.id, p.name)],
+    LaborPlace.other => const [],
   };
-  double total() =>
-      [for (final id in present) fmt.parseNumber(wage[id]!.text) ?? 0]
-          .fold(0, (a, b) => a + b);
 
   return showFormDialog(
     context: context,
     formKey: key,
-    title: 'تسجيل يوم عمل',
-    fields: (setState) => [
-      DateField(
-        label: 'اليوم',
-        value: date,
-        onChanged: (d) => setState(() => date = d),
-      ),
-      const Text('العمل', style: TextStyle(fontWeight: FontWeight.bold)),
-      Wrap(
-        spacing: 8,
-        children: [
-          for (final t in AppState.workTasks)
-            ChoiceChip(
-              label: Text(t),
-              selected: task == t,
-              onSelected: (_) => setState(() => task = t),
-            ),
-        ],
-      ),
-      SegmentedButton<bool>(
-        showSelectedIcon: false,
-        segments: const [
-          ButtonSegment(
-            value: false,
-            icon: Icon(Icons.directions_boat_outlined),
-            label: Text('حاوية'),
-          ),
-          ButtonSegment(
-            value: true,
-            icon: Icon(Icons.warehouse_outlined),
-            label: Text('مخزن'),
-          ),
-        ],
-        selected: {atWarehouse},
-        onSelectionChanged: (v) => setState(() => atWarehouse = v.first),
-      ),
-      if (!atWarehouse)
-        DropdownButtonFormField<String?>(
-          key: const ValueKey('ship'),
-          initialValue: ship,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'الحاوية'),
-          items: [
-            const DropdownMenuItem(value: null, child: Text('بدون حاوية')),
-            for (final x in s.shipments)
-              DropdownMenuItem(
-                value: x.id,
-                child: Text(
-                  [
-                    if (x.containerNumber.isNotEmpty) x.containerNumber,
-                    x.contents,
-                  ].join(' - '),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-          ],
-          onChanged: (v) => setState(() => ship = v),
-        )
-      else
-        DropdownButtonFormField<String?>(
-          key: const ValueKey('wh'),
-          initialValue: wh,
-          isExpanded: true,
-          decoration: const InputDecoration(labelText: 'المخزن'),
-          items: [
-            const DropdownMenuItem(value: null, child: Text('بدون مخزن')),
-            for (final w in s.warehouses)
-              DropdownMenuItem(value: w.id, child: Text(w.name)),
-          ],
-          onChanged: (v) => setState(() => wh = v),
+    title: 'دفع أجرة عمال',
+    fields: (setState) {
+      final opts = options();
+      if (!opts.any((o) => o.$1 == ref)) ref = opts.firstOrNull?.$1;
+      return [
+        TextFormField(
+          controller: amount,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'المبلغ المدفوع للعمال'),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          validator: numberValidator(min: 0.01),
         ),
-      const Text(
-        'العمال الحاضرون',
-        style: TextStyle(fontWeight: FontWeight.bold),
-      ),
-      for (final w in workers)
-        Row(
+        TextFormField(
+          controller: workers,
+          decoration: const InputDecoration(labelText: 'عدد العمال (اختياري)'),
+          keyboardType: TextInputType.number,
+        ),
+        TextFormField(
+          controller: payer,
+          decoration: const InputDecoration(labelText: 'المسؤول عن الدفع'),
+          validator: requiredText,
+        ),
+        const Text('العمل', style: TextStyle(fontWeight: FontWeight.bold)),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            Expanded(
-              child: CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                controlAffinity: ListTileControlAffinity.leading,
-                title: Text(w.name),
-                subtitle: w.jobTitle.isEmpty ? null : Text(w.jobTitle),
-                value: present.contains(w.id),
-                onChanged: (v) => setState(
-                  () => v == true ? present.add(w.id) : present.remove(w.id),
-                ),
+            for (final t in AppState.workTasks)
+              ChoiceChip(
+                label: Text(t),
+                selected: task == t,
+                onSelected: (_) => setState(() => task = t),
               ),
-            ),
-            SizedBox(
-              width: 110,
-              child: TextFormField(
-                controller: wage[w.id],
-                enabled: present.contains(w.id),
-                onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(labelText: 'الأجرة'),
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                validator: present.contains(w.id)
-                    ? numberValidator(min: 0.01)
-                    : null,
-              ),
-            ),
           ],
         ),
-      Text(
-        present.isEmpty
-            ? 'اختر العمال الذين حضروا'
-            : '${present.length} عامل • المجموع ${fmt.money(total())}'
-                  '${!atWarehouse && ship != null ? ' • يُضاف إلى تكاليف الحاوية' : ''}',
-        style: const TextStyle(fontWeight: FontWeight.bold),
-      ),
-    ],
+        const Text('أين عملوا', style: TextStyle(fontWeight: FontWeight.bold)),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final p in LaborPlace.values)
+              ChoiceChip(
+                label: Text(p.label),
+                selected: where == p,
+                onSelected: (_) => setState(() {
+                  where = p;
+                  ref = null;
+                }),
+              ),
+          ],
+        ),
+        if (where != LaborPlace.other)
+          opts.isEmpty
+              ? Text('لا يوجد ${where.label} مسجل')
+              : DropdownButtonFormField<String>(
+                  key: ValueKey(where),
+                  initialValue: ref,
+                  isExpanded: true,
+                  decoration: InputDecoration(labelText: where.label),
+                  items: [
+                    for (final o in opts)
+                      DropdownMenuItem(
+                        value: o.$1,
+                        child: Text(o.$2, overflow: TextOverflow.ellipsis),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => ref = v),
+                ),
+        DateField(
+          label: 'التاريخ',
+          value: date,
+          onChanged: (d) => setState(() => date = d),
+        ),
+        TextFormField(
+          controller: note,
+          decoration: const InputDecoration(labelText: 'ملاحظات'),
+        ),
+      ];
+    },
     onSave: () async {
-      if (present.isEmpty) return;
-      await s.recordWorkDay(
+      await s.recordLabor(
         date: date,
+        amount: fmt.parseNumber(amount.text)!,
         task: task,
-        shipmentId: atWarehouse ? null : ship,
-        warehouseId: atWarehouse ? wh : null,
-        wages: {
-          for (final id in present) id: fmt.parseNumber(wage[id]!.text) ?? 0,
-        },
+        place: where,
+        refId: where == LaborPlace.other ? null : ref,
+        workers: fmt.parseNumber(workers.text)?.round() ?? 0,
+        payer: payer.text,
+        note: note.text,
       );
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'تم تسجيل يومية ${present.length} عامل: ${fmt.money(total())}',
-            ),
-          ),
+          SnackBar(content: Text('تم تسجيل أجرة العمال: ${amount.text}')),
         );
       }
     },
   );
+}
+
+/// قائمة أجور العمال اليوميين هذا الشهر في صفحة العمال.
+class LaborPaymentsCard extends StatelessWidget {
+  const LaborPaymentsCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    final items = s.laborPayments(Period.month(DateTime.now()));
+    final total = items.fold<double>(0, (a, t) => a + t.amount);
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'أجور العمال اليوميين هذا الشهر: ${fmt.money(total)}',
+                    style: Theme.of(context).textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            if (items.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text('لم تُسجَّل أجور هذا الشهر'),
+              ),
+            for (final x in items)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.groups_outlined),
+                title: Text(x.note),
+                subtitle: Text(fmt.date(x.date)),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      fmt.money(x.amount),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    IconButton(
+                      tooltip: 'حذف',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () async {
+                        if (await confirmDelete(context, x.note)) {
+                          await s.deleteTransaction(x.id);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// مصاريف العامل: الرواتب واليوميات والسلف وغيرها، مع إضافة مصروف.

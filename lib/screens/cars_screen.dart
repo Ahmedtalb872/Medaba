@@ -14,6 +14,7 @@ import '../utils/format.dart' as fmt;
 import '../utils/product_image.dart';
 import '../widgets/common.dart';
 import 'partners_screen.dart';
+import 'workers_screen.dart';
 import '../widgets/data_table_card.dart';
 import 'business_actions.dart';
 
@@ -902,6 +903,19 @@ class CarCardPage extends StatelessWidget {
               ],
             ),
           ),
+          if (!car.isSold)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton.icon(
+                onPressed: () => showLaborForm(
+                  context,
+                  place: LaborPlace.car,
+                  refId: car.id,
+                ),
+                icon: const Icon(Icons.groups_outlined),
+                label: const Text('دفع أجرة عمال لهذه السيارة'),
+              ),
+            ),
           const SizedBox(height: 12),
           SectionCard(
             title: 'المستثمرون في هذه السيارة',

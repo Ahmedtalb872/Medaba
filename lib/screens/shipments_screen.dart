@@ -181,10 +181,14 @@ class _ShipmentsScreenState extends State<ShipmentsScreen> {
               ),
             ),
             TableAction(
-              tooltip: 'عمال التفريغ (يومية)',
+              tooltip: 'دفع أجرة عمال',
               icon: Icons.groups_outlined,
               color: AppColors.gold,
-              onTap: () => showWorkDayForm(context, shipmentId: x.id),
+              onTap: () => showLaborForm(
+                context,
+                place: LaborPlace.container,
+                refId: x.id,
+              ),
             ),
             PopupMenuButton<ShipmentStatus>(
               tooltip: 'تغيير الحالة',

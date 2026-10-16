@@ -8,6 +8,7 @@ import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
 import '../widgets/common.dart';
 import 'partners_screen.dart';
+import 'workers_screen.dart';
 import '../widgets/data_table_card.dart';
 
 enum _View {
@@ -151,6 +152,13 @@ class _PlotsScreenState extends State<PlotsScreen> {
             ),
           ],
           extraActions: (x) => [
+            TableAction(
+              tooltip: 'دفع أجرة عمال',
+              icon: Icons.groups_outlined,
+              color: AppColors.workers.last,
+              onTap: () =>
+                  showLaborForm(context, place: LaborPlace.plot, refId: x.id),
+            ),
             TableAction(
               tooltip: 'إضافة مستثمر',
               icon: Icons.person_add_alt_1,
