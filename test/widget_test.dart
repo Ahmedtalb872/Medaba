@@ -447,7 +447,27 @@ void main() {
     await tester.pumpAndSettle();
     expect(state.productById('z')!.salePrice, 130);
     expect(state.productById('z')!.costPrice, 100);
-    final move = state.moves.single;
+
+    // تعديل المتوفر مباشرة: الفرق يُسجَّل حركة باسم المسؤول.
+    await tester.tap(find.byTooltip('تعديل المتوفر'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'الكمية المتوفرة الصحيحة'),
+      '35',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('ستُنقص 5 قطعة'), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'المسؤول عن التعديل'),
+      'محمد',
+    );
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+    expect(state.stockOf('z', warehouseId: 'w'), 35);
+    final adj = state.moves.firstWhere((m) => m.type == MoveType.stockOut);
+    expect(adj.qty, 5);
+    expect(adj.person, 'محمد');
+    final move = state.moves.firstWhere((m) => m.type == MoveType.stockIn);
     expect(move.person, 'سيدي');
     expect(move.type, MoveType.stockIn);
     // «إضافة» لا تُسجّل مصروفاً.

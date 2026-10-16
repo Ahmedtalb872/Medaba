@@ -384,6 +384,47 @@ void main() {
     expect(s.partnersShareTotal(), 0);
   });
 
+  test('the available quantity is set by a counting adjustment', () async {
+    await s.saveWarehouse(const Warehouse(id: 'w', name: 'مخزن 1'));
+    await s.saveProduct(const Product(id: 'p', name: '0.66 غ', costPrice: 10));
+    await s.adjustStock(
+      productId: 'p',
+      warehouseId: 'w',
+      newQty: 120,
+      person: 'محمد',
+    );
+    expect(s.stockOf('p', warehouseId: 'w'), 120);
+    expect(s.moves.single.type, MoveType.stockIn);
+    await s.adjustStock(
+      productId: 'p',
+      warehouseId: 'w',
+      newQty: 100,
+      person: 'محمد',
+      note: 'جرد',
+    );
+    expect(s.stockOf('p', warehouseId: 'w'), 100);
+    expect(s.moves, hasLength(2));
+    // بدون تغيير لا تُسجَّل حركة، ولا كمية سالبة.
+    await s.adjustStock(
+      productId: 'p',
+      warehouseId: 'w',
+      newQty: 100,
+      person: 'محمد',
+    );
+    expect(s.moves, hasLength(2));
+    expect(
+      () => s.adjustStock(
+        productId: 'p',
+        warehouseId: 'w',
+        newQty: -1,
+        person: 'محمد',
+      ),
+      throwsStateError,
+    );
+    // لا مصروف ولا إيراد من تعديل الجرد.
+    expect(s.transactions, isEmpty);
+  });
+
   test('demo data seeds without errors', () async {
     await s.seedDemoData();
     expect(s.warehouses, isNotEmpty);

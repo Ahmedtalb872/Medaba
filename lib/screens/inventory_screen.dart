@@ -253,7 +253,29 @@ class _StockTabState extends State<_StockTab> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _Available(qty: r.qty, received: r.received),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => showAdjustStockForm(
+                      context,
+                      p,
+                      warehouseId: _warehouseId,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _Available(qty: r.qty, received: r.received),
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: 'تعديل المتوفر',
+                          child: Icon(
+                            Icons.edit_outlined,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   // ما تركه زبائن الفواتير المفتوحة في المخزن ولم يأخذوه.
                   if (s.reservedQty(p.id, warehouseId: _warehouseId) > 0)
                     Text(
@@ -1471,5 +1493,96 @@ Future<void> showPriceForm(BuildContext context, Product p) {
         'salePrice': fmt.parseNumber(sale.text)!,
       }),
     ),
+  );
+}
+
+/// تعديل الكمية المتوفرة من صنف في مخزن (بعد الجرد مثلاً).
+Future<void> showAdjustStockForm(
+  BuildContext context,
+  Product product, {
+  String? warehouseId,
+}) {
+  final s = context.read<AppState>();
+  if (s.warehouses.isEmpty) {
+    _snack(context, 'أضف مخزناً أولاً من تبويب «المخازن»');
+    return Future.value();
+  }
+  final key = GlobalKey<FormState>();
+  var warehouse = warehouseId ?? s.warehouses.first.id;
+  double current() => s.stockOf(product.id, warehouseId: warehouse);
+  final qty = TextEditingController(text: fmt.number(current()));
+  final person = TextEditingController();
+  final note = TextEditingController();
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'تعديل المتوفر: ${product.name}',
+    fields: (setState) {
+      final diff = (fmt.parseNumber(qty.text) ?? current()) - current();
+      return [
+        DropdownButtonFormField<String>(
+          initialValue: warehouse,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'المخزن'),
+          items: [
+            for (final w in s.warehouses)
+              DropdownMenuItem(value: w.id, child: Text(w.name)),
+          ],
+          onChanged: (v) => setState(() {
+            warehouse = v!;
+            qty.text = fmt.number(current());
+          }),
+        ),
+        Text(
+          'المتوفر الآن في هذا المخزن: ${fmt.number(current())} ${product.unit}',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        TextFormField(
+          controller: qty,
+          autofocus: true,
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            labelText: 'الكمية المتوفرة الصحيحة',
+            suffixText: product.unit,
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          validator: numberValidator(min: 0),
+        ),
+        if (diff.abs() > 1e-9)
+          Text(
+            diff > 0
+                ? 'ستُضاف ${fmt.number(diff)} ${product.unit}'
+                : 'ستُنقص ${fmt.number(-diff)} ${product.unit}',
+            style: TextStyle(
+              color: diff > 0 ? AppColors.income.last : AppColors.expense.last,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        TextFormField(
+          controller: person,
+          decoration: const InputDecoration(labelText: 'المسؤول عن التعديل'),
+          validator: requiredText,
+        ),
+        TextFormField(
+          controller: note,
+          decoration: const InputDecoration(
+            labelText: 'السبب (جرد، تالف، خطأ في الإدخال...)',
+          ),
+        ),
+      ];
+    },
+    onSave: () async {
+      try {
+        await s.adjustStock(
+          productId: product.id,
+          warehouseId: warehouse,
+          newQty: fmt.parseNumber(qty.text)!,
+          person: person.text,
+          note: note.text,
+        );
+      } on StateError catch (e) {
+        if (context.mounted) _snack(context, e.message);
+      }
+    },
   );
 }

@@ -892,6 +892,37 @@ class AppState extends ChangeNotifier {
       .where((p) => p.minQty > 0 && stockOf(p.id) <= p.minQty)
       .toList();
 
+  /// يضبط الكمية المتوفرة من صنف في مخزن (جرد): الفرق يُسجَّل حركة إضافة أو
+  /// صرف باسم المسؤول، فيبقى سجل الحركات صحيحاً. لا يُسجَّل شيء إذا لم تتغير.
+  Future<void> adjustStock({
+    required String productId,
+    required String warehouseId,
+    required double newQty,
+    required String person,
+    String note = '',
+    DateTime? date,
+  }) async {
+    if (newQty < 0) throw StateError('الكمية لا تكون سالبة');
+    final diff = newQty - stockOf(productId, warehouseId: warehouseId);
+    if (diff.abs() < 1e-9) return;
+    await saveMove(
+      StockMove(
+        id: newId(),
+        type: diff > 0 ? MoveType.stockIn : MoveType.stockOut,
+        productId: productId,
+        warehouseId: warehouseId,
+        qty: diff.abs(),
+        unitPrice: productById(productId)?.costPrice ?? 0,
+        date: date ?? DateTime.now(),
+        note: [
+          'تعديل الكمية المتوفرة',
+          if (note.trim().isNotEmpty) note.trim(),
+        ].join(' - '),
+        person: person.trim(),
+      ),
+    );
+  }
+
   /// يحفظ حركة مخزون، وينشئ/يحدّث/يحذف المعاملة المالية المرتبطة بها.
   /// يرمي [StateError] إذا كانت الكمية الصادرة أكبر من المتاح.
   Future<void> saveMove(StockMove m) async {
