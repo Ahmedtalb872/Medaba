@@ -380,20 +380,80 @@ class AppState extends ChangeNotifier {
     await _saveWorkers();
   }
 
-  double get monthlyPayroll =>
-      _workers.where((w) => w.active).fold(0, (s, w) => s + w.monthlySalary);
+  /// مجموع الرواتب الشهرية (بدون عمال اليومية).
+  double get monthlyPayroll => _workers
+      .where((w) => w.active && !w.daily)
+      .fold(0, (s, w) => s + w.monthlySalary);
 
-  /// يسجّل صرف راتب الشهر لعامل كمعاملة مصروف.
+  /// يسجّل صرف راتب الشهر (أو أجرة يوم للعامل اليومي) كمعاملة مصروف.
   Future<void> paySalary(Worker w, DateTime date) => saveTransaction(
     Transaction(
       id: newId(),
       category: TxCategory.salary,
       amount: w.monthlySalary,
       date: date,
-      note: 'راتب ${w.name}',
+      note: '${w.daily ? 'يومية' : 'راتب'} ${w.name}',
       personId: w.id,
     ),
   );
+
+  /// يوم عمل لعمال اليومية: أجرة لكل عامل حضر كمعاملة مصروف. عند ربطه
+  /// بحاوية يُضاف مجموع الأجور إلى تكاليفها الإضافية.
+  Future<void> recordWorkDay({
+    required DateTime date,
+    required Map<String, double> wages,
+    String? shipmentId,
+  }) async {
+    final ship = shipmentId == null ? null : shipmentById(shipmentId);
+    var total = 0.0;
+    for (final e in wages.entries) {
+      final w = _workers.where((x) => x.id == e.key).firstOrNull;
+      if (w == null || e.value <= 0) continue;
+      total += e.value;
+      _transactions.add(
+        Transaction(
+          id: newId(),
+          category: TxCategory.salary,
+          amount: e.value,
+          date: date,
+          note: [
+            'يومية ${w.name}',
+            if (ship != null)
+              'حاوية ${ship.containerNumber.isEmpty ? ship.contents : ship.containerNumber}',
+          ].join(' - '),
+          personId: w.id,
+        ),
+      );
+    }
+    if (ship != null && total > 0) {
+      _upsert(
+        _shipments,
+        Shipment.fromJson({
+          ...ship.toJson(),
+          'extraCosts': [
+            ...ship.extraCosts.map((c) => c.toJson()),
+            ShipmentExtraCost(
+              'عمال التفريغ ${fmt.date(date)} (${wages.values.where((v) => v > 0).length} عامل)',
+              total,
+            ).toJson(),
+          ],
+        }),
+        (e) => e.id,
+      );
+    }
+    notifyListeners();
+    await Future.wait([_saveTx(), _saveShipments()]);
+  }
+
+  /// أيام عمل العامل اليومي في فترة (عدد أجور اليومية المسجلة له).
+  int workDays(String workerId, [Period? p]) => inPeriod(p)
+      .where(
+        (t) =>
+            t.personId == workerId &&
+            t.category == TxCategory.salary &&
+            t.note.startsWith('يومية'),
+      )
+      .length;
 
   // ---------- المعاملات ----------
 

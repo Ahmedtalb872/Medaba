@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:medaba/data/storage.dart';
 import 'package:medaba/main.dart';
+import 'package:medaba/models/models.dart';
 import 'package:medaba/models/shipment.dart';
 import 'package:medaba/state/app_state.dart';
 
@@ -140,5 +141,88 @@ void main() {
     // الشحنات المحفوظة قبل هذه الميزة تُقرأ بدون تكاليف إضافية.
     final old = Shipment.fromJson(x.toJson()..remove('extraCosts'));
     expect(old.extraCosts, isEmpty);
+  });
+
+  test('a day of container work pays each daily worker', () async {
+    final s = AppState(MemoryStorage());
+    await s.load();
+    final day = DateTime(2026, 10, 16);
+    await s.saveShipment(
+      Shipment(
+        id: 'sh',
+        company: 'الأطلسي',
+        containerNumber: 'MSCU 1',
+        contents: 'زنك',
+        departureDate: DateTime(2026, 10, 1),
+        expectedArrival: day,
+      ),
+    );
+    for (final (id, wage) in [('a', 3000.0), ('b', 2500.0)]) {
+      await s.saveWorker(
+        Worker(
+          id: id,
+          name: 'عامل $id',
+          monthlySalary: wage,
+          hiredAt: day,
+          daily: true,
+        ),
+      );
+    }
+    expect(s.monthlyPayroll, 0);
+
+    await s.recordWorkDay(
+      date: day,
+      shipmentId: 'sh',
+      wages: {'a': 3000, 'b': 2500},
+    );
+    expect(s.transactions, hasLength(2));
+    expect(s.transactions.first.note, contains('MSCU 1'));
+    expect(s.totalExpenses(), 5500);
+    expect(s.workDays('a'), 1);
+    final cost = s.shipmentById('sh')!.extraCosts.single;
+    expect(cost.amount, 5500);
+    expect(cost.label, contains('2 عامل'));
+  });
+
+  testWidgets('unloading workers are recorded from the container row', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await state.seedDemoData();
+    await state.saveWorker(
+      Worker(
+        id: 'd',
+        name: 'محمد',
+        monthlySalary: 3000,
+        hiredAt: DateTime(2026),
+        daily: true,
+      ),
+    );
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('حاويات البضاعة').first);
+    await tester.pumpAndSettle();
+
+    final ship = state.shipments.first;
+    final costsBefore = ship.extraCosts.length;
+    final button = find.byTooltip('عمال التفريغ (يومية)').first;
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('محمد'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('يُضاف إلى تكاليف الحاوية'), findsOneWidget);
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+
+    expect(state.workDays('d'), 1);
+    expect(state.shipmentById(ship.id)!.extraCosts, hasLength(costsBefore + 1));
+    expect(tester.takeException(), isNull);
   });
 }

@@ -114,9 +114,14 @@ class Worker {
 
   /// صورة العامل JPEG بترميز base64، أو null.
   final String? photo;
+
+  /// الأجر: راتب الشهر، أو أجرة اليوم للعامل اليومي ([daily]).
   final double monthlySalary;
   final DateTime hiredAt;
   final bool active;
+
+  /// عامل باليومية (مثل عمال تفريغ الحاويات) بدل الراتب الشهري.
+  final bool daily;
 
   const Worker({
     required this.id,
@@ -128,7 +133,11 @@ class Worker {
     required this.monthlySalary,
     required this.hiredAt,
     this.active = true,
+    this.daily = false,
   });
+
+  /// «الراتب الشهري» أو «الأجرة اليومية».
+  String get wageLabel => daily ? 'الأجرة اليومية' : 'الراتب الشهري';
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -140,6 +149,7 @@ class Worker {
     'monthlySalary': monthlySalary,
     'hiredAt': hiredAt.toIso8601String(),
     'active': active,
+    'daily': daily,
   };
 
   /// نسخة بصورة جديدة (أو بدون صورة).
@@ -153,6 +163,7 @@ class Worker {
     monthlySalary: monthlySalary,
     hiredAt: hiredAt,
     active: active,
+    daily: daily,
   );
 
   factory Worker.fromJson(Map<String, dynamic> j) => Worker(
@@ -165,6 +176,7 @@ class Worker {
     monthlySalary: (j['monthlySalary'] as num).toDouble(),
     hiredAt: parseDate(j['hiredAt']),
     active: j['active'] as bool? ?? true,
+    daily: j['daily'] as bool? ?? false,
   );
 }
 

@@ -29,9 +29,13 @@ class WorkersScreen extends StatelessWidget {
           title: 'العمال',
           icon: Icons.engineering_outlined,
           subtitle:
-              '$active عامل نشط • الرواتب الشهرية: ${fmt.money(s.monthlyPayroll)}',
+              '$active عامل نشط • الرواتب الشهرية: ${fmt.money(s.monthlyPayroll)}'
+              ' • عمال اليومية: ${s.workers.where((w) => w.active && w.daily).length}',
           actionLabel: 'إضافة عامل',
           onAction: () => showWorkerForm(context),
+          secondaryLabel: 'تسجيل يوم عمل',
+          secondaryIcon: Icons.event_available_outlined,
+          onSecondary: () => showWorkDayForm(context),
         ),
         if (s.workers.isEmpty)
           const Card(child: EmptyState(message: 'لم تتم إضافة عمال بعد'))
@@ -199,9 +203,15 @@ class WorkerCard extends StatelessWidget {
                         ),
                       field(
                         Icons.payments_outlined,
-                        'الراتب',
+                        w.daily ? 'الأجرة اليومية' : 'الراتب الشهري',
                         fmt.money(w.monthlySalary),
                       ),
+                      if (w.daily)
+                        field(
+                          Icons.calendar_month_outlined,
+                          'أيام العمل هذا الشهر',
+                          '${s.workDays(w.id, Period.month(DateTime.now()))}',
+                        ),
                       field(
                         Icons.event_outlined,
                         'تاريخ التعيين',
@@ -220,7 +230,7 @@ class WorkerCard extends StatelessWidget {
               alignment: WrapAlignment.end,
               children: [
                 TableAction(
-                  tooltip: 'صرف راتب هذا الشهر',
+                  tooltip: w.daily ? 'صرف يومية اليوم' : 'صرف راتب هذا الشهر',
                   icon: Icons.payments_outlined,
                   color: AppColors.income.last,
                   onTap: !w.active
@@ -231,7 +241,7 @@ class WorkerCard extends StatelessWidget {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  'تم تسجيل راتب ${w.name}: ${fmt.money(w.monthlySalary)}',
+                                  'تم تسجيل ${w.daily ? 'يومية' : 'راتب'} ${w.name}: ${fmt.money(w.monthlySalary)}',
                                 ),
                               ),
                             );
@@ -425,6 +435,7 @@ Future<void> showWorkerForm(BuildContext context, {Worker? existing}) {
   );
   var hired = existing?.hiredAt ?? DateTime.now();
   var active = existing?.active ?? true;
+  var daily = existing?.daily ?? false;
 
   return showFormDialog(
     context: context,
@@ -486,7 +497,8 @@ Future<void> showWorkerForm(BuildContext context, {Worker? existing}) {
         textDirection: TextDirection.ltr,
         validator: (v) {
           final t = v?.trim() ?? '';
-          if (t.isEmpty) return 'الرقم الوطني مطلوب';
+          // عامل اليومية قد لا يُعرف رقمه الوطني.
+          if (t.isEmpty) return daily ? null : 'الرقم الوطني مطلوب';
           if (!RegExp(r'^[0-9]+$').hasMatch(t)) return 'أرقام فقط';
           return null;
         },
@@ -496,9 +508,20 @@ Future<void> showWorkerForm(BuildContext context, {Worker? existing}) {
         decoration: const InputDecoration(labelText: 'رقم الهاتف'),
         keyboardType: TextInputType.phone,
       ),
+      SegmentedButton<bool>(
+        showSelectedIcon: false,
+        segments: const [
+          ButtonSegment(value: false, label: Text('راتب شهري')),
+          ButtonSegment(value: true, label: Text('يومية (حسب الأيام)')),
+        ],
+        selected: {daily},
+        onSelectionChanged: (v) => setState(() => daily = v.first),
+      ),
       TextFormField(
         controller: salary,
-        decoration: const InputDecoration(labelText: 'الراتب الشهري'),
+        decoration: InputDecoration(
+          labelText: daily ? 'الأجرة اليومية' : 'الراتب الشهري',
+        ),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         validator: numberValidator(),
       ),
@@ -525,7 +548,131 @@ Future<void> showWorkerForm(BuildContext context, {Worker? existing}) {
         monthlySalary: fmt.parseNumber(salary.text)!,
         hiredAt: hired,
         active: active,
+        daily: daily,
       ),
     ),
+  );
+}
+
+/// يوم عمل لعمال اليومية (مثل تفريغ حاوية): من حضر وأجرة كل واحد.
+/// [shipmentId] يربط اليوم بحاوية فيُضاف مجموع الأجور إلى تكاليفها.
+Future<void> showWorkDayForm(BuildContext context, {String? shipmentId}) {
+  final s = context.read<AppState>();
+  final workers = s.workers.where((w) => w.active && w.daily).toList();
+  if (workers.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'لا يوجد عمال باليومية. أضف عاملاً واختر «يومية» في نوع الأجر',
+        ),
+      ),
+    );
+    return Future.value();
+  }
+  final key = GlobalKey<FormState>();
+  var date = DateTime.now();
+  String? ship = shipmentId;
+  final present = <String>{};
+  final wage = {
+    for (final w in workers)
+      w.id: TextEditingController(text: fmt.number(w.monthlySalary)),
+  };
+  double total() =>
+      [for (final id in present) fmt.parseNumber(wage[id]!.text) ?? 0]
+          .fold(0, (a, b) => a + b);
+
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'تسجيل يوم عمل',
+    fields: (setState) => [
+      DateField(
+        label: 'اليوم',
+        value: date,
+        onChanged: (d) => setState(() => date = d),
+      ),
+      DropdownButtonFormField<String?>(
+        initialValue: ship,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: 'الحاوية (اختياري)'),
+        items: [
+          const DropdownMenuItem(value: null, child: Text('بدون حاوية')),
+          for (final x in s.shipments)
+            DropdownMenuItem(
+              value: x.id,
+              child: Text(
+                [
+                  if (x.containerNumber.isNotEmpty) x.containerNumber,
+                  x.contents,
+                ].join(' - '),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+        ],
+        onChanged: (v) => setState(() => ship = v),
+      ),
+      const Text(
+        'العمال الحاضرون',
+        style: TextStyle(fontWeight: FontWeight.bold),
+      ),
+      for (final w in workers)
+        Row(
+          children: [
+            Expanded(
+              child: CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(w.name),
+                subtitle: w.jobTitle.isEmpty ? null : Text(w.jobTitle),
+                value: present.contains(w.id),
+                onChanged: (v) => setState(
+                  () => v == true ? present.add(w.id) : present.remove(w.id),
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 110,
+              child: TextFormField(
+                controller: wage[w.id],
+                enabled: present.contains(w.id),
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(labelText: 'الأجرة'),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                validator: present.contains(w.id)
+                    ? numberValidator(min: 0.01)
+                    : null,
+              ),
+            ),
+          ],
+        ),
+      Text(
+        present.isEmpty
+            ? 'اختر العمال الذين حضروا'
+            : '${present.length} عامل • المجموع ${fmt.money(total())}'
+                  '${ship == null ? '' : ' • يُضاف إلى تكاليف الحاوية'}',
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+    ],
+    onSave: () async {
+      if (present.isEmpty) return;
+      await s.recordWorkDay(
+        date: date,
+        shipmentId: ship,
+        wages: {
+          for (final id in present) id: fmt.parseNumber(wage[id]!.text) ?? 0,
+        },
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'تم تسجيل يومية ${present.length} عامل: ${fmt.money(total())}',
+            ),
+          ),
+        );
+      }
+    },
   );
 }

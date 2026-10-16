@@ -8,6 +8,7 @@ import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
 import '../widgets/common.dart';
 import '../widgets/data_table_card.dart';
+import 'workers_screen.dart';
 
 enum _View {
   active('الجارية'),
@@ -166,6 +167,12 @@ class _ShipmentsScreenState extends State<ShipmentsScreen> {
             _StatusChip(shipment: x, now: now),
           ],
           extraActions: (x) => [
+            TableAction(
+              tooltip: 'عمال التفريغ (يومية)',
+              icon: Icons.groups_outlined,
+              color: AppColors.gold,
+              onTap: () => showWorkDayForm(context, shipmentId: x.id),
+            ),
             PopupMenuButton<ShipmentStatus>(
               tooltip: 'تغيير الحالة',
               icon: Icon(Icons.swap_horiz, color: AppColors.capital.last),
