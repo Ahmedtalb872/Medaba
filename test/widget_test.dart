@@ -398,6 +398,18 @@ void main() {
     expect(state.stockOf('z', warehouseId: 'w'), 40);
     // صورة الصنف قابلة للرفع من قائمة المخزون نفسها.
     expect(find.byTooltip('رفع صورة الصنف'), findsOneWidget);
+
+    // تعديل السعرين من قائمة المخزون مباشرة.
+    await tester.tap(find.text('أضف السعر'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'سعر البيع'),
+      '130',
+    );
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+    expect(state.productById('z')!.salePrice, 130);
+    expect(state.productById('z')!.costPrice, 100);
     final move = state.moves.single;
     expect(move.person, 'سيدي');
     expect(move.type, MoveType.stockIn);

@@ -266,8 +266,8 @@ class _StockTabState extends State<_StockTab> {
                 ],
               ),
               Text(p.unit),
-              Text(fmt.money(p.costPrice)),
-              Text(fmt.money(p.salePrice)),
+              _PriceCell(product: p, value: p.costPrice),
+              _PriceCell(product: p, value: p.salePrice),
               Text(fmt.money(r.qty * p.costPrice)),
               _StockStatus(qty: s.stockOf(p.id), min: p.minQty),
             ];
@@ -1358,5 +1358,98 @@ Future<void> showPayRentForm(BuildContext context, Warehouse w) {
       await s.payWarehouseRent(w, fmt.parseNumber(amount.text)!, date);
       if (context.mounted) _snack(context, 'تم تسجيل إيجار ${w.name}');
     },
+  );
+}
+
+/// سعر في قائمة المخزون؛ الضغط عليه يفتح تعديل سعري الشراء والبيع للصنف.
+class _PriceCell extends StatelessWidget {
+  final Product product;
+  final double value;
+  const _PriceCell({required this.product, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Text(
+      value == 0 ? 'أضف السعر' : fmt.money(value),
+      style: TextStyle(
+        color: value == 0 ? AppColors.expense.last : null,
+        fontWeight: value == 0 ? FontWeight.bold : null,
+      ),
+    );
+    if (isStockWorker) return text;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => showPriceForm(context, product),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            text,
+            const SizedBox(width: 4),
+            Icon(
+              Icons.edit_outlined,
+              size: 16,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// تعديل سعري الشراء والبيع لصنف (من قائمة المخزون مباشرة).
+Future<void> showPriceForm(BuildContext context, Product p) {
+  final s = context.read<AppState>();
+  final key = GlobalKey<FormState>();
+  final cost = TextEditingController(
+    text: p.costPrice == 0 ? '' : fmt.number(p.costPrice),
+  );
+  final sale = TextEditingController(
+    text: p.salePrice == 0 ? '' : fmt.number(p.salePrice),
+  );
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'أسعار ${p.name}',
+    fields: (setState) => [
+      TextFormField(
+        controller: cost,
+        autofocus: true,
+        onChanged: (_) => setState(() {}),
+        decoration: const InputDecoration(labelText: 'سعر الشراء'),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(),
+      ),
+      TextFormField(
+        controller: sale,
+        onChanged: (_) => setState(() {}),
+        decoration: const InputDecoration(labelText: 'سعر البيع'),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(),
+      ),
+      Builder(
+        builder: (_) {
+          final c = fmt.parseNumber(cost.text) ?? 0;
+          final v = fmt.parseNumber(sale.text) ?? 0;
+          if (c <= 0 || v <= 0) return const SizedBox.shrink();
+          return Text(
+            'ربح الوحدة: ${fmt.money(v - c)}',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: v >= c ? AppColors.income.last : AppColors.expense.last,
+            ),
+          );
+        },
+      ),
+    ],
+    onSave: () => s.saveProduct(
+      Product.fromJson({
+        ...p.toJson(),
+        'costPrice': fmt.parseNumber(cost.text)!,
+        'salePrice': fmt.parseNumber(sale.text)!,
+      }),
+    ),
   );
 }
