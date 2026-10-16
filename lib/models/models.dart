@@ -12,6 +12,7 @@ enum PartnerScope {
   company('الشركة كلها'),
   car('سيارة'),
   plot('قطعة أرضية'),
+  warehouse('مخزن'),
   container('حاوية'),
   other('صفقة أخرى');
 
@@ -19,7 +20,7 @@ enum PartnerScope {
   const PartnerScope(this.label);
 
   /// الصفقة مختارة من السيارات أو القطع المسجلة (وليست نصاً يكتبه المدير).
-  bool get linked => this == car || this == plot;
+  bool get linked => this == car || this == plot || this == warehouse;
 }
 
 /// شريك في المشروع يملك نسبة من الأرباح ويساهم برأس مال.

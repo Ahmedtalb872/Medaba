@@ -179,6 +179,7 @@ Future<void> showPartnerForm(
       for (final p in s.plots)
         (p.id, [p.name, if (p.location.isNotEmpty) p.location].join(' • ')),
     ],
+    PartnerScope.warehouse => [for (final w in s.warehouses) (w.id, w.name)],
     _ => const [],
   };
 
@@ -232,12 +233,14 @@ Future<void> showPartnerForm(
         ),
         if (kind.linked)
           options.isEmpty
-              ? Text(
-                  kind == PartnerScope.car
-                      ? 'لا توجد سيارات مسجلة؛ أضف السيارة أولاً من صفحة السيارات'
-                      : 'لا توجد قطع مسجلة؛ أضف القطعة أولاً من صفحة القطع الأرضية',
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                )
+              ? Text(switch (kind) {
+                  PartnerScope.car =>
+                    'لا توجد سيارات مسجلة؛ أضف السيارة أولاً من صفحة السيارات',
+                  PartnerScope.warehouse =>
+                    'لا توجد مخازن؛ أضف مخزناً أولاً من صفحة المخزون',
+                  _ =>
+                    'لا توجد قطع مسجلة؛ أضف القطعة أولاً من صفحة القطع الأرضية',
+                }, style: TextStyle(color: Theme.of(context).colorScheme.error))
               : DropdownButtonFormField<String>(
                   key: ValueKey(kind),
                   initialValue: deal,
@@ -382,3 +385,70 @@ String _containerTitle(Shipment x) => [
   if (x.containerNumber.isNotEmpty) x.containerNumber,
   x.contents,
 ].join(' - ');
+
+/// شركاء صفقة واحدة (مخزن، حاوية...): الاسم والمبلغ المدفوع والنسبة.
+/// [detailed] يعرض قائمة مع تعديل؛ وإلا سطراً مختصراً للجداول.
+class DealPartners extends StatelessWidget {
+  final PartnerScope scope;
+  final String dealId;
+  final bool detailed;
+  const DealPartners({
+    super.key,
+    required this.scope,
+    required this.dealId,
+    this.detailed = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    final partners = s.investorsIn(scope, dealId);
+    if (partners.isEmpty) {
+      return Text(detailed ? 'لا يوجد شركاء بعد' : '-');
+    }
+    if (!detailed) {
+      return Text(
+        partners
+            .map((p) => '${p.name} (${fmt.percent(p.sharePercent)})')
+            .join('، '),
+      );
+    }
+    return Column(
+      children: [
+        for (final p in partners)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            leading: const Icon(Icons.handshake_outlined),
+            title: Text(p.name),
+            subtitle: Text(
+              'دفع ${fmt.money(p.capital)} • نسبته ${fmt.percent(p.sharePercent)}',
+            ),
+            trailing: IconButton(
+              tooltip: 'تعديل',
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () => showPartnerForm(context, existing: p),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// قسم «الشركاء» داخل نموذج تعديل مخزن أو حاوية، مع زر الإضافة.
+List<Widget> dealPartnersFields(
+  BuildContext context,
+  PartnerScope scope,
+  String dealId,
+) => [
+  const Text('الشركاء', style: TextStyle(fontWeight: FontWeight.bold)),
+  DealPartners(scope: scope, dealId: dealId, detailed: true),
+  Align(
+    alignment: AlignmentDirectional.centerStart,
+    child: OutlinedButton.icon(
+      onPressed: () => showPartnerForm(context, scope: scope, dealId: dealId),
+      icon: const Icon(Icons.person_add_alt_1),
+      label: const Text('إضافة شريك'),
+    ),
+  ),
+];

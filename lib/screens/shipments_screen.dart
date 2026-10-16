@@ -167,7 +167,7 @@ class _ShipmentsScreenState extends State<ShipmentsScreen> {
               ),
             ),
             _StatusChip(shipment: x, now: now),
-            _Partners(shipmentId: x.id),
+            DealPartners(scope: PartnerScope.container, dealId: x.id),
           ],
           extraActions: (x) => [
             TableAction(
@@ -531,25 +531,8 @@ Future<void> showShipmentForm(BuildContext context, {Shipment? existing}) {
         maxLines: 2,
       ),
       // الشركاء في هذه الحاوية: المبلغ الذي دفعه كل واحد ونسبته.
-      if (existing != null) ...[
-        const Text('الشركاء', style: TextStyle(fontWeight: FontWeight.bold)),
-        _Partners(shipmentId: existing.id, detailed: true),
-        Align(
-          alignment: AlignmentDirectional.centerStart,
-          child: OutlinedButton.icon(
-            onPressed: () async {
-              await showPartnerForm(
-                context,
-                scope: PartnerScope.container,
-                dealId: existing.id,
-              );
-              setState(() {});
-            },
-            icon: const Icon(Icons.person_add_alt_1),
-            label: const Text('إضافة شريك'),
-          ),
-        ),
-      ],
+      if (existing != null)
+        ...dealPartnersFields(context, PartnerScope.container, existing.id),
     ],
     onSave: () async {
       final received = status == ShipmentStatus.received;
@@ -587,46 +570,4 @@ Future<void> showShipmentForm(BuildContext context, {Shipment? existing}) {
       }
     },
   );
-}
-
-/// شركاء الحاوية: الاسم والمبلغ المدفوع والنسبة.
-class _Partners extends StatelessWidget {
-  final String shipmentId;
-  final bool detailed;
-  const _Partners({required this.shipmentId, this.detailed = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final s = context.watch<AppState>();
-    final partners = s.investorsIn(PartnerScope.container, shipmentId);
-    if (partners.isEmpty) {
-      return Text(detailed ? 'لا يوجد شركاء في هذه الحاوية' : '-');
-    }
-    if (!detailed) {
-      return Text(
-        partners
-            .map((p) => '${p.name} (${fmt.percent(p.sharePercent)})')
-            .join('، '),
-      );
-    }
-    return Column(
-      children: [
-        for (final p in partners)
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            leading: const Icon(Icons.handshake_outlined),
-            title: Text(p.name),
-            subtitle: Text(
-              'دفع ${fmt.money(p.capital)} • نسبته ${fmt.percent(p.sharePercent)}',
-            ),
-            trailing: IconButton(
-              tooltip: 'تعديل',
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: () => showPartnerForm(context, existing: p),
-            ),
-          ),
-      ],
-    );
-  }
 }

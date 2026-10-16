@@ -12,6 +12,7 @@ import '../widgets/common.dart';
 import '../utils/product_image.dart';
 import '../widgets/data_table_card.dart';
 import '../widgets/product_thumb.dart';
+import 'partners_screen.dart';
 import 'workers_screen.dart';
 
 /// إدارة المخازن: الأرصدة، الحركات، الأصناف، والمخازن.
@@ -1182,6 +1183,7 @@ class _WarehousesTab extends StatelessWidget {
             'الإيجار الشهري',
             'الإيجار المدفوع هذا الشهر',
             'أجور العمال هذا الشهر',
+            'الشركاء',
             'أصناف متوفرة',
           ],
           items: s.warehouses,
@@ -1228,12 +1230,24 @@ class _WarehousesTab extends StatelessWidget {
                 final labor = s.laborCost(w.id, month);
                 return labor == 0 ? '-' : fmt.money(labor);
               }()),
+              DealPartners(scope: PartnerScope.warehouse, dealId: w.id),
               Text(
                 '${s.products.where((p) => s.stockOf(p.id, warehouseId: w.id) > 0).length}',
               ),
             ];
           },
           extraActions: (w) => [
+            if (!isStockWorker)
+              TableAction(
+                tooltip: 'إضافة شريك في المخزن',
+                icon: Icons.person_add_alt_1,
+                color: AppColors.capital.last,
+                onTap: () => showPartnerForm(
+                  context,
+                  scope: PartnerScope.warehouse,
+                  dealId: w.id,
+                ),
+              ),
             if (!isStockWorker)
               TableAction(
                 tooltip: 'دفع أجرة عمال',
@@ -1318,6 +1332,8 @@ Future<void> showWarehouseForm(BuildContext context, {Warehouse? existing}) {
         decoration: const InputDecoration(labelText: 'ملاحظات'),
         maxLines: 2,
       ),
+      if (existing != null && !isStockWorker)
+        ...dealPartnersFields(context, PartnerScope.warehouse, existing.id),
     ],
     onSave: () => s.saveWarehouse(
       Warehouse(

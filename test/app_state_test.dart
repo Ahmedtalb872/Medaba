@@ -366,6 +366,22 @@ void main() {
     expect(s.rentPaid('w2', oct), 0);
     expect(s.transactions.any((t) => t.note == 'إيجار مخزن 1'), isTrue);
     expect(Warehouse.fromJson(w1.toJson()).capital, 50000);
+
+    // شريك في المخزن: نسبته من ربح مبيعات هذا المخزن.
+    final partner = Partner(
+      id: 'pw',
+      name: 'سالم',
+      sharePercent: 40,
+      capital: 20000,
+      joinedAt: DateTime(2026, 10),
+      scope: PartnerScope.warehouse,
+      dealId: 'w1',
+    );
+    await s.savePartner(partner);
+    expect(s.investorsIn(PartnerScope.warehouse, 'w1').single.id, 'pw');
+    expect(s.dealLabel(partner), 'مخزن: مخزن 1');
+    expect(s.dealShareOf(partner), 400);
+    expect(s.partnersShareTotal(), 0);
   });
 
   test('demo data seeds without errors', () async {

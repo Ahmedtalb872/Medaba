@@ -356,6 +356,8 @@ class AppState extends ChangeNotifier {
       'سيارة: ${carById(p.dealId ?? '')?.title ?? '(محذوفة)'}',
     PartnerScope.plot =>
       'قطعة: ${plotById(p.dealId ?? '')?.name ?? '(محذوفة)'}',
+    PartnerScope.warehouse =>
+      'مخزن: ${warehouseById(p.dealId)?.name ?? '(محذوف)'}',
     PartnerScope.container => switch (shipmentById(p.dealId ?? '')) {
       final x? =>
         'حاوية: ${[if (x.containerNumber.isNotEmpty) x.containerNumber, x.contents].join(' - ')}',
@@ -369,6 +371,9 @@ class AppState extends ChangeNotifier {
     PartnerScope.company => null,
     PartnerScope.car => carById(p.dealId ?? '')?.profit,
     PartnerScope.plot => plotById(p.dealId ?? '')?.profit,
+    // ربح المخزن: مجموع ربح مبيعاته (البيع - الشراء) منذ البداية.
+    PartnerScope.warehouse =>
+      p.dealId == null ? null : warehouseProfit(p.dealId!),
     PartnerScope.container || PartnerScope.other => p.dealProfit,
   };
 
