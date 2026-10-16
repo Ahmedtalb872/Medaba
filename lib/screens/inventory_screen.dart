@@ -92,9 +92,9 @@ class _StockTab extends StatefulWidget {
 }
 
 enum _StockFilter {
-  all('الكل'),
-  available('المتوفر'),
-  out('نفد');
+  all('عرض الكل'),
+  available('المتوفر فقط'),
+  out('النافد فقط');
 
   final String label;
   const _StockFilter(this.label);
@@ -213,7 +213,7 @@ class _StockTabState extends State<_StockTab> {
             'الوحدة',
             'سعر الشراء',
             'سعر البيع',
-            'قيمة المتوفر',
+            'قيمة البضاعة بسعر الشراء',
             'الحالة',
           ],
           items: shown,
@@ -292,7 +292,8 @@ class _StockTabState extends State<_StockTab> {
               _PriceCell(product: p, value: p.costPrice),
               _PriceCell(product: p, value: p.salePrice),
               Text(fmt.money(r.qty * p.costPrice)),
-              _StockStatus(qty: s.stockOf(p.id), min: p.minQty),
+              // الحالة حسب المخزن المختار (أو كل المخازن).
+              _StockStatus(qty: r.qty, min: p.minQty),
             ];
           },
         ),
