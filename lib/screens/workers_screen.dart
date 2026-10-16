@@ -30,6 +30,7 @@ class WorkersScreen extends StatelessWidget {
           icon: Icons.engineering_outlined,
           subtitle:
               '$active عامل نشط • الرواتب الشهرية: ${fmt.money(s.monthlyPayroll)}'
+              ' • المصروف على العمال هذا الشهر: ${fmt.money(s.paidToWorkers(Period.month(DateTime.now())))}'
               ' • عمال اليومية: ${s.workers.where((w) => w.active && w.daily).length}',
           actionLabel: 'إضافة عامل',
           onAction: () => showWorkerForm(context),
@@ -217,6 +218,13 @@ class WorkerCard extends StatelessWidget {
                         'تاريخ التعيين',
                         fmt.date(w.hiredAt),
                       ),
+                      field(
+                        Icons.account_balance_wallet_outlined,
+                        'مصروف الشهر',
+                        fmt.money(
+                          s.paidToWorker(w.id, Period.month(DateTime.now())),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -247,6 +255,17 @@ class WorkerCard extends StatelessWidget {
                             );
                           }
                         },
+                ),
+                TableAction(
+                  tooltip: 'المصاريف',
+                  icon: Icons.receipt_long_outlined,
+                  color: AppColors.expense.last,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => WorkerExpensesPage(workerId: w.id),
+                    ),
+                  ),
                 ),
                 TableAction(
                   tooltip: 'طباعة البطاقة',
@@ -728,5 +747,152 @@ Future<void> showWorkDayForm(
         );
       }
     },
+  );
+}
+
+/// مصاريف العامل: الرواتب واليوميات والسلف وغيرها، مع إضافة مصروف.
+class WorkerExpensesPage extends StatelessWidget {
+  final String workerId;
+  const WorkerExpensesPage({super.key, required this.workerId});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    final w = s.workers.where((x) => x.id == workerId).firstOrNull;
+    if (w == null) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: const Center(child: Text('حُذف العامل')),
+      );
+    }
+    final month = Period.month(DateTime.now());
+    final items = s.workerExpenses(w.id);
+    return Scaffold(
+      appBar: AppBar(title: Text('مصاريف ${w.name}')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => showWorkerExpenseForm(context, w),
+        icon: const Icon(Icons.add),
+        label: const Text('إضافة مصروف'),
+      ),
+      body: ListView(
+        padding: pagePadding.copyWith(top: 16, bottom: 96),
+        children: [
+          StatGrid(
+            children: [
+              StatCard(
+                label: 'هذا الشهر',
+                value: fmt.money(s.paidToWorker(w.id, month)),
+                icon: Icons.calendar_month_outlined,
+                colors: AppColors.expense,
+              ),
+              StatCard(
+                label: 'الكل',
+                value: fmt.money(s.paidToWorker(w.id)),
+                icon: Icons.account_balance_wallet_outlined,
+                colors: AppColors.workers,
+              ),
+              StatCard(
+                label: w.wageLabel,
+                value: fmt.money(w.monthlySalary),
+                icon: Icons.payments_outlined,
+                colors: AppColors.payroll,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (items.isEmpty)
+            const Card(child: EmptyState(message: 'لا توجد مصاريف بعد')),
+          for (final x in items)
+            Card(
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: AppColors.expense.first.withValues(
+                    alpha: 0.12,
+                  ),
+                  child: Icon(
+                    x.category == TxCategory.salary
+                        ? Icons.payments_outlined
+                        : Icons.receipt_long_outlined,
+                    color: AppColors.expense.last,
+                  ),
+                ),
+                title: Text(x.note.isEmpty ? x.category.label : x.note),
+                subtitle: Text('${fmt.date(x.date)} • ${x.category.label}'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      fmt.money(x.amount),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    if (!s.isLinkedTransaction(x.id))
+                      IconButton(
+                        tooltip: 'حذف',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () async {
+                          if (await confirmDelete(context, x.note)) {
+                            await s.deleteTransaction(x.id);
+                          }
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// إضافة مصروف على عامل: سلفة، أكل، نقل، علاج، مكافأة...
+Future<void> showWorkerExpenseForm(BuildContext context, Worker w) {
+  final s = context.read<AppState>();
+  final key = GlobalKey<FormState>();
+  final amount = TextEditingController();
+  final note = TextEditingController();
+  var kind = AppState.workerExpenseKinds.first;
+  var date = DateTime.now();
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'مصروف على ${w.name}',
+    fields: (setState) => [
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final k in AppState.workerExpenseKinds)
+            ChoiceChip(
+              label: Text(k),
+              selected: kind == k,
+              onSelected: (_) => setState(() => kind = k),
+            ),
+        ],
+      ),
+      TextFormField(
+        controller: amount,
+        autofocus: true,
+        decoration: const InputDecoration(labelText: 'المبلغ'),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(min: 0.01),
+      ),
+      DateField(
+        label: 'التاريخ',
+        value: date,
+        onChanged: (d) => setState(() => date = d),
+      ),
+      TextFormField(
+        controller: note,
+        decoration: const InputDecoration(labelText: 'ملاحظات'),
+      ),
+    ],
+    onSave: () => s.addWorkerExpense(
+      w,
+      kind: kind,
+      amount: fmt.parseNumber(amount.text)!,
+      date: date,
+      note: note.text,
+    ),
   );
 }

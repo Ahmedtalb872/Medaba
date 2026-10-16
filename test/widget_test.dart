@@ -124,6 +124,43 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a worker\'s expenses are listed and added', (tester) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    final w = Worker(
+      id: 'w',
+      name: 'محمد',
+      monthlySalary: 3000,
+      hiredAt: DateTime(2026),
+      daily: true,
+    );
+    await state.saveWorker(w);
+    await state.paySalary(w, DateTime.now());
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('العمال').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('المصاريف'));
+    await tester.pumpAndSettle();
+    expect(find.text('يومية محمد'), findsOneWidget);
+
+    await tester.tap(find.text('إضافة مصروف'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('سلفة'));
+    await tester.enterText(find.widgetWithText(TextFormField, 'المبلغ'), '500');
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+
+    expect(state.paidToWorker('w'), 3500);
+    expect(find.text('سلفة محمد'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a stock worker sees only the inventory', (tester) async {
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1;

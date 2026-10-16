@@ -471,6 +471,55 @@ class AppState extends ChangeNotifier {
     await Future.wait([_saveTx(), _saveShipments()]);
   }
 
+  /// أنواع مصاريف العمال غير الراتب واليومية.
+  static const workerExpenseKinds = [
+    'سلفة',
+    'أكل',
+    'نقل',
+    'علاج',
+    'مكافأة',
+    'أخرى',
+  ];
+
+  /// كل ما صُرف على عامل (رواتب، يوميات، سلف ومصاريف)، الأحدث أولاً.
+  List<Transaction> workerExpenses(String workerId, [Period? p]) =>
+      inPeriod(p)
+          .where((t) => t.personId == workerId && t.type == TxType.expense)
+          .toList()
+        ..sort((a, b) => b.date.compareTo(a.date));
+
+  double paidToWorker(String workerId, [Period? p]) =>
+      workerExpenses(workerId, p).fold(0, (a, t) => a + t.amount);
+
+  /// مجموع ما صُرف على كل العمال في فترة.
+  double paidToWorkers([Period? p]) {
+    final ids = {for (final w in _workers) w.id};
+    return inPeriod(p)
+        .where((t) => t.type == TxType.expense && ids.contains(t.personId))
+        .fold(0, (a, t) => a + t.amount);
+  }
+
+  /// مصروف على عامل غير الراتب (سلفة، أكل، نقل...).
+  Future<void> addWorkerExpense(
+    Worker w, {
+    required String kind,
+    required double amount,
+    required DateTime date,
+    String note = '',
+  }) => saveTransaction(
+    Transaction(
+      id: newId(),
+      category: TxCategory.otherExpense,
+      amount: amount,
+      date: date,
+      note: [
+        '$kind ${w.name}',
+        if (note.trim().isNotEmpty) note.trim(),
+      ].join(' - '),
+      personId: w.id,
+    ),
+  );
+
   /// أجور عمال اليومية المسجلة على مخزن أو حاوية في فترة.
   double laborCost(String refId, [Period? p]) =>
       inPeriod(p)
