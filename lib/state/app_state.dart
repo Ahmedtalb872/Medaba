@@ -344,8 +344,11 @@ class AppState extends ChangeNotifier {
       'سيارة: ${carById(p.dealId ?? '')?.title ?? '(محذوفة)'}',
     PartnerScope.plot =>
       'قطعة: ${plotById(p.dealId ?? '')?.name ?? '(محذوفة)'}',
-    PartnerScope.container =>
-      'حاوية${p.dealTitle.isEmpty ? '' : ': ${p.dealTitle}'}',
+    PartnerScope.container => switch (shipmentById(p.dealId ?? '')) {
+      final x? =>
+        'حاوية: ${[if (x.containerNumber.isNotEmpty) x.containerNumber, x.contents].join(' - ')}',
+      _ => 'حاوية${p.dealTitle.isEmpty ? '' : ': ${p.dealTitle}'}',
+    },
     PartnerScope.other => p.dealTitle.isEmpty ? 'صفقة' : p.dealTitle,
   };
 

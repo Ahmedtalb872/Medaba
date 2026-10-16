@@ -69,7 +69,7 @@ class Partner {
 
   /// مفتاح الصفقة: المستثمرون بنفس المفتاح يتقاسمون نفس الربح.
   String get dealKey =>
-      '${scope.name}:${scope.linked ? dealId : dealTitle.trim()}';
+      '${scope.name}:${scope.linked || dealId != null ? dealId : dealTitle.trim()}';
 
   Map<String, dynamic> toJson() => {
     'id': id,

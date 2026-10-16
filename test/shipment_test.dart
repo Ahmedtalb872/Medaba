@@ -243,4 +243,45 @@ void main() {
     expect(state.shipmentById(ship.id)!.extraCosts, hasLength(costsBefore + 1));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('a partner is added to a container with amount and share', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1600, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await state.seedDemoData();
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('حاويات البضاعة').first);
+    await tester.pumpAndSettle();
+
+    final ship = state.shipments.first;
+    final button = find.byTooltip('إضافة شريك في الحاوية').first;
+    await tester.ensureVisible(button);
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'الاسم'), 'سالم');
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'المبلغ المستثمر'),
+      '5000000',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'نسبته من ربح الصفقة %'),
+      '25',
+    );
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+
+    final p = state.investorsIn(PartnerScope.container, ship.id).single;
+    expect(p.name, 'سالم');
+    expect(p.capital, 5000000);
+    expect(p.sharePercent, 25);
+    expect(find.textContaining('سالم (25'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

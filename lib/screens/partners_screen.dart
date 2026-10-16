@@ -182,6 +182,13 @@ Future<void> showPartnerForm(
     _ => const [],
   };
 
+  /// السيارة أو القطعة أو الحاوية المسجلة المرتبطة بالشراكة، إن وُجدت.
+  String? linkedDeal() =>
+      kind.linked ||
+          (kind == PartnerScope.container && s.shipmentById(deal ?? '') != null)
+      ? deal
+      : null;
+
   /// النسبة المتاحة: من أرباح الشركة، أو من ربح الصفقة المختارة.
   double available() {
     if (kind == PartnerScope.company) {
@@ -193,7 +200,7 @@ Future<void> showPartnerForm(
       sharePercent: 0,
       joinedAt: joined,
       scope: kind,
-      dealId: deal,
+      dealId: linkedDeal(),
       dealTitle: dealTitle.text,
     );
     return 100 - s.dealShareTotal(probe.dealKey, excludeId: existing?.id);
@@ -246,24 +253,36 @@ Future<void> showPartnerForm(
                   onChanged: (v) => setState(() => deal = v),
                 ),
         if (kind == PartnerScope.container && s.shipments.isNotEmpty)
-          DropdownButtonFormField<String>(
+          DropdownButtonFormField<String?>(
+            key: const ValueKey('container'),
+            initialValue: s.shipmentById(deal ?? '') == null ? null : deal,
             isExpanded: true,
             decoration: const InputDecoration(
-              labelText: 'اختر من حاويات البضاعة (اختياري)',
+              labelText: 'الحاوية من حاويات البضاعة',
             ),
             items: [
+              const DropdownMenuItem(
+                value: null,
+                child: Text('حاوية غير مسجلة (اكتب وصفها)'),
+              ),
               for (final x in s.shipments)
                 DropdownMenuItem(
-                  value: _containerTitle(x),
+                  value: x.id,
                   child: Text(
                     _containerTitle(x),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
             ],
-            onChanged: (v) => setState(() => dealTitle.text = v ?? ''),
+            onChanged: (v) => setState(() {
+              deal = v;
+              final x = s.shipmentById(v ?? '');
+              if (x != null) dealTitle.text = _containerTitle(x);
+            }),
           ),
-        if (kind == PartnerScope.container || kind == PartnerScope.other)
+        if (kind == PartnerScope.other ||
+            (kind == PartnerScope.container &&
+                s.shipmentById(deal ?? '') == null))
           TextFormField(
             controller: dealTitle,
             onChanged: (_) => setState(() {}),
@@ -345,7 +364,7 @@ Future<void> showPartnerForm(
           joinedAt: joined,
           notes: notes.text.trim(),
           scope: kind,
-          dealId: kind.linked ? deal : null,
+          dealId: linkedDeal(),
           dealTitle: kind.linked || kind == PartnerScope.company
               ? ''
               : dealTitle.text.trim(),
