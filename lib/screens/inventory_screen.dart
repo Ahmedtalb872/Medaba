@@ -22,7 +22,7 @@ class InventoryScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -49,6 +49,10 @@ class InventoryScreen extends StatelessWidget {
               Tab(icon: Icon(Icons.swap_vert), text: 'الحركات'),
               Tab(icon: Icon(Icons.category_outlined), text: 'الأصناف'),
               Tab(icon: Icon(Icons.warehouse_outlined), text: 'المخازن'),
+              Tab(
+                icon: Icon(Icons.assignment_return_outlined),
+                text: 'العارية',
+              ),
             ],
           ),
           const Expanded(
@@ -58,6 +62,7 @@ class InventoryScreen extends StatelessWidget {
                 _MovesTab(),
                 _ProductsTab(),
                 _WarehousesTab(),
+                _LoansTab(),
               ],
             ),
           ),
@@ -445,6 +450,7 @@ class _MoveTypeChip extends StatelessWidget {
     MoveType.sale => AppColors.capital,
     MoveType.stockOut => AppColors.expense,
     MoveType.transfer => AppColors.people,
+    MoveType.loanOut || MoveType.loanReturn => AppColors.profit,
   };
 
   @override
@@ -1579,6 +1585,259 @@ Future<void> showAdjustStockForm(
           warehouseId: warehouse,
           newQty: fmt.parseNumber(qty.text)!,
           person: person.text,
+          note: note.text,
+        );
+      } on StateError catch (e) {
+        if (context.mounted) _snack(context, e.message);
+      }
+    },
+  );
+}
+
+// ---------------- تبويب العارية ----------------
+
+/// البضاعة التي أخذها أشخاص من المخازن ليعيدوها لاحقاً.
+class _LoansTab extends StatelessWidget {
+  const _LoansTab();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    final loans = s.outstandingLoans();
+    final byPerson = <String, List<LoanBalance>>{};
+    for (final l in loans) {
+      (byPerson[l.person] ??= []).add(l);
+    }
+    final value = loans.fold<double>(
+      0,
+      (a, l) => a + l.qty * (s.productById(l.productId)?.costPrice ?? 0),
+    );
+    return ListView(
+      padding: pagePadding,
+      children: [
+        _Actions(
+          children: [
+            FilledButton.icon(
+              onPressed: () => showLendForm(context),
+              icon: const Icon(Icons.outbox_outlined),
+              label: const Text('عارية جديدة'),
+            ),
+          ],
+        ),
+        StatGrid(
+          children: [
+            StatCard(
+              label: 'أشخاص عندهم عارية',
+              value: '${byPerson.length}',
+              icon: Icons.people_outline,
+              colors: AppColors.people,
+            ),
+            StatCard(
+              label: 'قيمتها بسعر الشراء',
+              value: fmt.money(value),
+              icon: Icons.inventory_2_outlined,
+              colors: AppColors.profit,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (loans.isEmpty)
+          const Card(
+            child: EmptyState(
+              message:
+                  'لا توجد عارية عند أحد. اضغط «عارية جديدة» عندما '
+                  'يأخذ شخص بضاعة ليعيدها لاحقاً',
+            ),
+          ),
+        for (final e in byPerson.entries)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.person_outline),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          e.key,
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  for (final l in e.value)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        '${s.productById(l.productId)?.name ?? 'صنف محذوف'}: '
+                        '${fmt.number(l.qty)} ${s.productById(l.productId)?.unit ?? ''}',
+                      ),
+                      subtitle: Text(
+                        '${s.warehouseById(l.warehouseId)?.name ?? '-'} • '
+                        'منذ ${fmt.date(l.since)} '
+                        '(${DateTime.now().difference(l.since).inDays} يوم)',
+                      ),
+                      trailing: FilledButton.tonalIcon(
+                        onPressed: () => showReturnLoanForm(context, l),
+                        icon: const Icon(Icons.assignment_return_outlined),
+                        label: const Text('إرجاع'),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// عارية جديدة: من أخذ، أي صنف، من أي مخزن، وكم.
+Future<void> showLendForm(BuildContext context) {
+  final s = context.read<AppState>();
+  if (s.products.isEmpty || s.warehouses.isEmpty) {
+    _snack(context, 'أضف مخزناً واحداً وصنفاً واحداً على الأقل أولاً');
+    return Future.value();
+  }
+  final key = GlobalKey<FormState>();
+  final person = TextEditingController();
+  final qty = TextEditingController();
+  final note = TextEditingController();
+  var productId = s.products.first.id;
+  var warehouseId = s.warehouses.first.id;
+  var date = DateTime.now();
+  final people = {for (final l in s.outstandingLoans()) l.person}.toList();
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'عارية جديدة',
+    fields: (setState) {
+      final available = s.stockOf(productId, warehouseId: warehouseId);
+      return [
+        TextFormField(
+          controller: person,
+          decoration: const InputDecoration(labelText: 'من أخذ العارية'),
+          validator: requiredText,
+        ),
+        if (people.isNotEmpty)
+          Wrap(
+            spacing: 6,
+            children: [
+              for (final p in people)
+                ActionChip(
+                  label: Text(p),
+                  onPressed: () => setState(() => person.text = p),
+                ),
+            ],
+          ),
+        DropdownButtonFormField<String>(
+          initialValue: productId,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'الصنف'),
+          items: [
+            for (final p in s.products)
+              DropdownMenuItem(
+                value: p.id,
+                child: Text(p.name, overflow: TextOverflow.ellipsis),
+              ),
+          ],
+          onChanged: (v) => setState(() => productId = v!),
+        ),
+        DropdownButtonFormField<String>(
+          initialValue: warehouseId,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'من المخزن'),
+          items: [
+            for (final w in s.warehouses)
+              DropdownMenuItem(value: w.id, child: Text(w.name)),
+          ],
+          onChanged: (v) => setState(() => warehouseId = v!),
+        ),
+        TextFormField(
+          controller: qty,
+          decoration: InputDecoration(
+            labelText: 'الكمية',
+            helperText: 'المتوفر: ${fmt.number(available)}',
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          validator: numberValidator(min: 0.001, max: available),
+        ),
+        DateField(
+          label: 'التاريخ',
+          value: date,
+          onChanged: (d) => setState(() => date = d),
+        ),
+        TextFormField(
+          controller: note,
+          decoration: const InputDecoration(labelText: 'ملاحظات (الهاتف...)'),
+        ),
+      ];
+    },
+    onSave: () async {
+      try {
+        await s.lendStock(
+          person: person.text,
+          productId: productId,
+          warehouseId: warehouseId,
+          qty: fmt.parseNumber(qty.text)!,
+          date: date,
+          note: note.text,
+        );
+      } on StateError catch (e) {
+        if (context.mounted) _snack(context, e.message);
+      }
+    },
+  );
+}
+
+/// إرجاع عارية (كلها أو جزء منها) إلى مخزنها.
+Future<void> showReturnLoanForm(BuildContext context, LoanBalance l) {
+  final s = context.read<AppState>();
+  final key = GlobalKey<FormState>();
+  final qty = TextEditingController(text: fmt.number(l.qty));
+  final note = TextEditingController();
+  var date = DateTime.now();
+  final name = s.productById(l.productId)?.name ?? '';
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'إرجاع عارية ${l.person}',
+    fields: (setState) => [
+      Text(
+        '$name • عنده ${fmt.number(l.qty)} • '
+        '${s.warehouseById(l.warehouseId)?.name ?? ''}',
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+      TextFormField(
+        controller: qty,
+        autofocus: true,
+        decoration: const InputDecoration(labelText: 'الكمية المُرجَعة'),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(min: 0.001, max: l.qty),
+      ),
+      DateField(
+        label: 'تاريخ الإرجاع',
+        value: date,
+        onChanged: (d) => setState(() => date = d),
+      ),
+      TextFormField(
+        controller: note,
+        decoration: const InputDecoration(labelText: 'ملاحظات'),
+      ),
+    ],
+    onSave: () async {
+      try {
+        await s.returnLoan(
+          person: l.person,
+          productId: l.productId,
+          warehouseId: l.warehouseId,
+          qty: fmt.parseNumber(qty.text)!,
+          date: date,
           note: note.text,
         );
       } on StateError catch (e) {

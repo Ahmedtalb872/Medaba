@@ -161,6 +161,51 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a loan is given and returned from the loans tab', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await state.saveWarehouse(const Warehouse(id: 'w', name: 'مخزن 1'));
+    await state.saveProduct(const Product(id: 'p', name: '0.66 غ'));
+    await state.adjustStock(
+      productId: 'p',
+      warehouseId: 'w',
+      newQty: 50,
+      person: 'محمد',
+    );
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('المخزون').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('العارية'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('عارية جديدة'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'من أخذ العارية'),
+      'سيدي',
+    );
+    await tester.enterText(find.widgetWithText(TextFormField, 'الكمية'), '20');
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+    expect(state.stockOf('p', warehouseId: 'w'), 30);
+    expect(find.text('سيدي'), findsOneWidget);
+
+    await tester.tap(find.text('إرجاع'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+    expect(state.outstandingLoans(), isEmpty);
+    expect(state.stockOf('p', warehouseId: 'w'), 50);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a stock worker sees only the inventory', (tester) async {
     tester.view.physicalSize = const Size(400, 800);
     tester.view.devicePixelRatio = 1;

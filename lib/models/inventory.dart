@@ -120,7 +120,13 @@ enum MoveType {
   stockOut('صادر - صرف/تالف', isIn: false),
 
   /// تحويل كمية من مخزن إلى آخر.
-  transfer('تحويل بين المخازن', isIn: false);
+  transfer('تحويل بين المخازن', isIn: false),
+
+  /// عارية: يأخذ شخص بضاعة من المخزن ليعيدها لاحقاً ([StockMove.person]).
+  loanOut('عارية - خروج', isIn: false),
+
+  /// إرجاع العارية إلى المخزن.
+  loanReturn('عارية - إرجاع', isIn: true);
 
   final String label;
   final bool isIn;

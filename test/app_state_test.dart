@@ -425,6 +425,57 @@ void main() {
     expect(s.transactions, isEmpty);
   });
 
+  test('goods lent to a friend leave stock and come back', () async {
+    await s.saveWarehouse(const Warehouse(id: 'w', name: 'مخزن 1'));
+    await s.saveProduct(const Product(id: 'p', name: '0.66 غ', costPrice: 10));
+    await s.adjustStock(
+      productId: 'p',
+      warehouseId: 'w',
+      newQty: 100,
+      person: 'محمد',
+    );
+    await s.lendStock(
+      person: 'سيدي',
+      productId: 'p',
+      warehouseId: 'w',
+      qty: 30,
+      date: DateTime(2026, 10, 1),
+    );
+    expect(s.stockOf('p', warehouseId: 'w'), 70);
+    final loan = s.outstandingLoans().single;
+    expect(loan.person, 'سيدي');
+    expect(loan.qty, 30);
+    expect(loan.since, DateTime(2026, 10, 1));
+
+    await s.returnLoan(
+      person: 'سيدي',
+      productId: 'p',
+      warehouseId: 'w',
+      qty: 10,
+    );
+    expect(s.stockOf('p', warehouseId: 'w'), 80);
+    expect(s.loanedTo('سيدي', 'p', 'w'), 20);
+    expect(
+      () => s.returnLoan(
+        person: 'سيدي',
+        productId: 'p',
+        warehouseId: 'w',
+        qty: 21,
+      ),
+      throwsStateError,
+    );
+    await s.returnLoan(
+      person: 'سيدي',
+      productId: 'p',
+      warehouseId: 'w',
+      qty: 20,
+    );
+    expect(s.outstandingLoans(), isEmpty);
+    expect(s.stockOf('p', warehouseId: 'w'), 100);
+    // العارية لا تُسجَّل مصروفاً ولا إيراداً.
+    expect(s.transactions, isEmpty);
+  });
+
   test('demo data seeds without errors', () async {
     await s.seedDemoData();
     expect(s.warehouses, isNotEmpty);

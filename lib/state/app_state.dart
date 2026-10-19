@@ -40,6 +40,15 @@ typedef ProfitEntry = ({
   bool missingCost,
 });
 
+/// عارية لم تُرجع: من أخذها، الصنف، المخزن، الكمية الباقية ومنذ متى.
+typedef LoanBalance = ({
+  String person,
+  String productId,
+  String warehouseId,
+  double qty,
+  DateTime since,
+});
+
 /// دين جديد ([payment] = null) أو تسديد دفعة منه.
 typedef DebtEvent = ({DateTime date, Debt debt, DebtPayment? payment});
 
@@ -918,6 +927,96 @@ class AppState extends ChangeNotifier {
           'تعديل الكمية المتوفرة',
           if (note.trim().isNotEmpty) note.trim(),
         ].join(' - '),
+        person: person.trim(),
+      ),
+    );
+  }
+
+  // ---------- العارية ----------
+
+  /// العارية التي لم تُرجع بعد: كل شخص وصنف ومخزن مع الكمية الباقية عنده.
+  List<LoanBalance> outstandingLoans() {
+    final map = <(String, String, String), LoanBalance>{};
+    final sorted = [..._moves]..sort((a, b) => a.date.compareTo(b.date));
+    for (final m in sorted) {
+      if (m.type != MoveType.loanOut && m.type != MoveType.loanReturn) {
+        continue;
+      }
+      final key = (m.person.trim(), m.productId, m.warehouseId);
+      final cur = map[key];
+      final qty =
+          (cur?.qty ?? 0) + (m.type == MoveType.loanOut ? m.qty : -m.qty);
+      map[key] = (
+        person: key.$1,
+        productId: m.productId,
+        warehouseId: m.warehouseId,
+        qty: qty,
+        since: cur == null || cur.qty <= 1e-9 ? m.date : cur.since,
+      );
+    }
+    return map.values.where((l) => l.qty > 1e-9).toList()
+      ..sort((a, b) => a.since.compareTo(b.since));
+  }
+
+  /// ما عند شخص من صنف في مخزن ولم يُرجعه.
+  double loanedTo(String person, String productId, String warehouseId) =>
+      outstandingLoans()
+          .where(
+            (l) =>
+                l.person == person.trim() &&
+                l.productId == productId &&
+                l.warehouseId == warehouseId,
+          )
+          .fold(0, (s, l) => s + l.qty);
+
+  /// عارية جديدة: تخرج البضاعة من المخزن باسم الشخص.
+  Future<void> lendStock({
+    required String person,
+    required String productId,
+    required String warehouseId,
+    required double qty,
+    DateTime? date,
+    String note = '',
+  }) {
+    if (person.trim().isEmpty) throw StateError('اكتب اسم من أخذ العارية');
+    return saveMove(
+      StockMove(
+        id: newId(),
+        type: MoveType.loanOut,
+        productId: productId,
+        warehouseId: warehouseId,
+        qty: qty,
+        unitPrice: productById(productId)?.costPrice ?? 0,
+        date: date ?? DateTime.now(),
+        note: note.trim(),
+        person: person.trim(),
+      ),
+    );
+  }
+
+  /// إرجاع العارية (كلها أو جزء منها) إلى المخزن.
+  Future<void> returnLoan({
+    required String person,
+    required String productId,
+    required String warehouseId,
+    required double qty,
+    DateTime? date,
+    String note = '',
+  }) {
+    final owed = loanedTo(person, productId, warehouseId);
+    if (qty > owed + 1e-9) {
+      throw StateError('الباقي عند $person ${fmt.number(owed)} فقط');
+    }
+    return saveMove(
+      StockMove(
+        id: newId(),
+        type: MoveType.loanReturn,
+        productId: productId,
+        warehouseId: warehouseId,
+        qty: qty,
+        unitPrice: productById(productId)?.costPrice ?? 0,
+        date: date ?? DateTime.now(),
+        note: note.trim(),
         person: person.trim(),
       ),
     );
