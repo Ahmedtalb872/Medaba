@@ -195,14 +195,63 @@ void main() {
     await tester.tap(find.text('حفظ'));
     await tester.pumpAndSettle();
     expect(state.stockOf('p', warehouseId: 'w'), 30);
-    expect(find.text('سيدي'), findsOneWidget);
+    expect(find.text('عند سيدي'), findsOneWidget);
 
-    await tester.tap(find.text('إرجاع'));
+    await tester.tap(find.text('استلام'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('حفظ'));
     await tester.pumpAndSettle();
     expect(state.outstandingLoans(), isEmpty);
     expect(state.stockOf('p', warehouseId: 'w'), 50);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a borrowed loan with two items is recorded', (tester) async {
+    tester.view.physicalSize = const Size(400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final state = AppState(MemoryStorage());
+    await state.load();
+    await state.saveWarehouse(const Warehouse(id: 'w', name: 'مخزن 1'));
+    await state.saveProduct(const Product(id: 'a', name: 'أ'));
+    await state.saveProduct(const Product(id: 'b', name: 'ب'));
+    await tester.pumpWidget(MedabaApp(state: state));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.menu));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('المخزون').last);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('العارية'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('العارية'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('عارية جديدة'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('علينا: نأخذ بضاعة'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'من أعطانا العارية'),
+      'أحمد',
+    );
+    await tester.enterText(find.widgetWithText(TextFormField, 'الكمية'), '5');
+    await tester.tap(find.text('إضافة صنف'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('أ').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ب').last);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'الكمية').last,
+      '7',
+    );
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+
+    expect(state.stockOf('a', warehouseId: 'w'), 5);
+    expect(state.stockOf('b', warehouseId: 'w'), 7);
+    expect(state.outstandingLoans(ours: false), hasLength(2));
     expect(tester.takeException(), isNull);
   });
 

@@ -474,6 +474,33 @@ void main() {
     expect(s.stockOf('p', warehouseId: 'w'), 100);
     // العارية لا تُسجَّل مصروفاً ولا إيراداً.
     expect(s.transactions, isEmpty);
+
+    // علينا: نأخذ صنفين من شخص في عارية واحدة ثم نعيدهما.
+    await s.saveProduct(const Product(id: 'q', name: '#9.5'));
+    await s.recordLoan(
+      person: 'أحمد',
+      warehouseId: 'w',
+      items: {'p': 40, 'q': 15},
+      ours: false,
+    );
+    expect(s.stockOf('p', warehouseId: 'w'), 140);
+    expect(s.stockOf('q', warehouseId: 'w'), 15);
+    expect(s.outstandingLoans(ours: false), hasLength(2));
+    expect(s.outstandingLoans(ours: true), isEmpty);
+    await s.returnLoan(
+      person: 'أحمد',
+      productId: 'q',
+      warehouseId: 'w',
+      qty: 15,
+      ours: false,
+    );
+    expect(s.stockOf('q', warehouseId: 'w'), 0);
+    expect(s.loanedTo('أحمد', 'p', 'w', ours: false), 40);
+    // لا نعطي في عارية أكثر من المتوفر.
+    expect(
+      () => s.recordLoan(person: 'سيدي', warehouseId: 'w', items: {'q': 1}),
+      throwsStateError,
+    );
   });
 
   test('demo data seeds without errors', () async {

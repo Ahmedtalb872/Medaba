@@ -126,7 +126,20 @@ enum MoveType {
   loanOut('عارية - خروج', isIn: false),
 
   /// إرجاع العارية إلى المخزن.
-  loanReturn('عارية - إرجاع', isIn: true);
+  loanReturn('عارية - إرجاع', isIn: true),
+
+  /// عارية علينا: نأخذ بضاعة من شخص فتدخل المخزن ونعيدها له لاحقاً.
+  borrowIn('عارية علينا - استلام', isIn: true),
+
+  /// إعادة العارية التي علينا إلى صاحبها.
+  borrowReturn('عارية علينا - إعادة', isIn: false);
+
+  /// حركة عارية (لنا أو علينا).
+  bool get isLoan =>
+      this == loanOut ||
+      this == loanReturn ||
+      this == borrowIn ||
+      this == borrowReturn;
 
   final String label;
   final bool isIn;

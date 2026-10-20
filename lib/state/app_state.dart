@@ -42,6 +42,7 @@ typedef ProfitEntry = ({
 
 /// عارية لم تُرجع: من أخذها، الصنف، المخزن، الكمية الباقية ومنذ متى.
 typedef LoanBalance = ({
+  bool ours,
   String person,
   String productId,
   String warehouseId,
@@ -934,42 +935,94 @@ class AppState extends ChangeNotifier {
 
   // ---------- العارية ----------
 
-  /// العارية التي لم تُرجع بعد: كل شخص وصنف ومخزن مع الكمية الباقية عنده.
-  List<LoanBalance> outstandingLoans() {
-    final map = <(String, String, String), LoanBalance>{};
+  /// العارية التي لم تُرجع بعد. [LoanBalance.ours]: بضاعتنا عند شخص (لنا)،
+  /// وإلا بضاعة شخص عندنا (علينا).
+  List<LoanBalance> outstandingLoans({bool? ours}) {
+    final map = <(bool, String, String, String), LoanBalance>{};
     final sorted = [..._moves]..sort((a, b) => a.date.compareTo(b.date));
     for (final m in sorted) {
-      if (m.type != MoveType.loanOut && m.type != MoveType.loanReturn) {
-        continue;
-      }
-      final key = (m.person.trim(), m.productId, m.warehouseId);
+      if (!m.type.isLoan) continue;
+      final mine = m.type == MoveType.loanOut || m.type == MoveType.loanReturn;
+      final key = (mine, m.person.trim(), m.productId, m.warehouseId);
       final cur = map[key];
-      final qty =
-          (cur?.qty ?? 0) + (m.type == MoveType.loanOut ? m.qty : -m.qty);
+      final adds = m.type == MoveType.loanOut || m.type == MoveType.borrowIn;
+      final qty = (cur?.qty ?? 0) + (adds ? m.qty : -m.qty);
       map[key] = (
-        person: key.$1,
+        ours: mine,
+        person: key.$2,
         productId: m.productId,
         warehouseId: m.warehouseId,
         qty: qty,
         since: cur == null || cur.qty <= 1e-9 ? m.date : cur.since,
       );
     }
-    return map.values.where((l) => l.qty > 1e-9).toList()
+    return map.values
+        .where((l) => l.qty > 1e-9 && (ours == null || l.ours == ours))
+        .toList()
       ..sort((a, b) => a.since.compareTo(b.since));
   }
 
-  /// ما عند شخص من صنف في مخزن ولم يُرجعه.
-  double loanedTo(String person, String productId, String warehouseId) =>
-      outstandingLoans()
-          .where(
-            (l) =>
-                l.person == person.trim() &&
-                l.productId == productId &&
-                l.warehouseId == warehouseId,
-          )
-          .fold(0, (s, l) => s + l.qty);
+  /// الباقي من عارية صنف مع شخص في مخزن (لنا أو علينا).
+  double loanedTo(
+    String person,
+    String productId,
+    String warehouseId, {
+    bool ours = true,
+  }) => outstandingLoans(ours: ours)
+      .where(
+        (l) =>
+            l.person == person.trim() &&
+            l.productId == productId &&
+            l.warehouseId == warehouseId,
+      )
+      .fold(0, (s, l) => s + l.qty);
 
-  /// عارية جديدة: تخرج البضاعة من المخزن باسم الشخص.
+  /// عارية جديدة بعدة أصناف: [ours] بضاعتنا تخرج إلى الشخص، وإلا بضاعته
+  /// تدخل مخزننا.
+  Future<void> recordLoan({
+    required String person,
+    required String warehouseId,
+    required Map<String, double> items,
+    bool ours = true,
+    DateTime? date,
+    String note = '',
+  }) async {
+    if (person.trim().isEmpty) throw StateError('اكتب اسم صاحب العارية');
+    final lines = {
+      for (final e in items.entries)
+        if (e.value > 0) e.key: e.value,
+    };
+    if (lines.isEmpty) throw StateError('أضف صنفاً واحداً على الأقل');
+    if (ours) {
+      for (final e in lines.entries) {
+        final available = stockOf(e.key, warehouseId: warehouseId);
+        if (e.value > available + 1e-9) {
+          throw StateError(
+            'المتوفر من "${productById(e.key)?.name}" ${fmt.number(available)} فقط',
+          );
+        }
+      }
+    }
+    for (final e in lines.entries) {
+      _moves.add(
+        StockMove(
+          id: newId(),
+          type: ours ? MoveType.loanOut : MoveType.borrowIn,
+          productId: e.key,
+          warehouseId: warehouseId,
+          qty: e.value,
+          unitPrice: productById(e.key)?.costPrice ?? 0,
+          date: date ?? DateTime.now(),
+          note: note.trim(),
+          person: person.trim(),
+        ),
+      );
+    }
+    notifyListeners();
+    await _saveMoves();
+  }
+
+  /// عارية لنا بصنف واحد.
   Future<void> lendStock({
     required String person,
     required String productId,
@@ -977,40 +1030,33 @@ class AppState extends ChangeNotifier {
     required double qty,
     DateTime? date,
     String note = '',
-  }) {
-    if (person.trim().isEmpty) throw StateError('اكتب اسم من أخذ العارية');
-    return saveMove(
-      StockMove(
-        id: newId(),
-        type: MoveType.loanOut,
-        productId: productId,
-        warehouseId: warehouseId,
-        qty: qty,
-        unitPrice: productById(productId)?.costPrice ?? 0,
-        date: date ?? DateTime.now(),
-        note: note.trim(),
-        person: person.trim(),
-      ),
-    );
-  }
+  }) => recordLoan(
+    person: person,
+    warehouseId: warehouseId,
+    items: {productId: qty},
+    date: date,
+    note: note,
+  );
 
-  /// إرجاع العارية (كلها أو جزء منها) إلى المخزن.
+  /// إرجاع العارية (كلها أو جزء منها): لنا تعود إلى المخزن، وعلينا تخرج
+  /// إلى صاحبها.
   Future<void> returnLoan({
     required String person,
     required String productId,
     required String warehouseId,
     required double qty,
+    bool ours = true,
     DateTime? date,
     String note = '',
   }) {
-    final owed = loanedTo(person, productId, warehouseId);
+    final owed = loanedTo(person, productId, warehouseId, ours: ours);
     if (qty > owed + 1e-9) {
-      throw StateError('الباقي عند $person ${fmt.number(owed)} فقط');
+      throw StateError('الباقي من العارية ${fmt.number(owed)} فقط');
     }
     return saveMove(
       StockMove(
         id: newId(),
-        type: MoveType.loanReturn,
+        type: ours ? MoveType.loanReturn : MoveType.borrowReturn,
         productId: productId,
         warehouseId: warehouseId,
         qty: qty,
