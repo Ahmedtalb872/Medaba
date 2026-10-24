@@ -41,6 +41,18 @@ typedef ProfitEntry = ({
 });
 
 /// عارية لم تُرجع: من أخذها، الصنف، المخزن، الكمية الباقية ومنذ متى.
+/// سطر في كشف صفقة: تاريخه (إن وُجد) وبيانه ومبلغه.
+typedef DealLine = ({DateTime? date, String label, double amount});
+
+typedef DealStatement = ({
+  String title,
+  List<DealLine> expenses,
+  List<DealLine> income,
+  double expensesTotal,
+  double? profit,
+  List<Partner> partners,
+});
+
 typedef LoanBalance = ({
   bool ours,
   String person,
@@ -386,6 +398,169 @@ class AppState extends ChangeNotifier {
       p.dealId == null ? null : warehouseProfit(p.dealId!),
     PartnerScope.container || PartnerScope.other => p.dealProfit,
   };
+
+  /// كشف الصفقة التي فيها المستثمر: مصروفاتها ومداخيلها وشركاؤها،
+  /// ليرسله المدير للشريك.
+  DealStatement dealStatement(Partner p) {
+    final expenses = <DealLine>[];
+    final income = <DealLine>[];
+    final id = p.dealId ?? '';
+    switch (p.scope) {
+      case PartnerScope.car:
+        final c = carById(id);
+        if (c != null) {
+          expenses.add((
+            date: c.purchaseDate,
+            label: 'سعر شراء السيارة',
+            amount: c.purchasePrice,
+          ));
+          for (final x in c.costs) {
+            expenses.add((date: x.date, label: x.label, amount: x.amount));
+          }
+          if (c.isSold) {
+            income.add((
+              date: c.saleDate,
+              label: 'بيع السيارة${c.buyer.isEmpty ? '' : ' لـ ${c.buyer}'}',
+              amount: c.salePrice,
+            ));
+          }
+        }
+      case PartnerScope.plot:
+        final x = plotById(id);
+        if (x != null) {
+          expenses.add((
+            date: x.purchaseDate,
+            label: 'سعر شراء القطعة',
+            amount: x.purchasePrice,
+          ));
+          for (final c in x.costs) {
+            expenses.add((date: c.date, label: c.label, amount: c.amount));
+          }
+          if (x.status == PlotStatus.sold) {
+            income.add((
+              date: x.saleDate,
+              label: 'بيع القطعة${x.buyer.isEmpty ? '' : ' لـ ${x.buyer}'}',
+              amount: x.salePrice,
+            ));
+          }
+        }
+      case PartnerScope.container:
+        final x = shipmentById(id);
+        if (x != null) {
+          for (final (label, amount) in [
+            ('قيمة البضاعة', x.goodsValue),
+            ('الشحن', x.freightCost),
+            ('الجمارك', x.customsCost),
+          ]) {
+            if (amount > 0) {
+              expenses.add((
+                date: x.departureDate,
+                label: label,
+                amount: amount,
+              ));
+            }
+          }
+          for (final c in x.extraCosts) {
+            expenses.add((date: null, label: c.label, amount: c.amount));
+          }
+        }
+      case PartnerScope.warehouse:
+        for (final t in _transactions) {
+          if (t.type == TxType.expense &&
+              (t.refId == id ||
+                  (t.category == TxCategory.rent && t.personId == id))) {
+            expenses.add((date: t.date, label: t.note, amount: t.amount));
+          }
+        }
+        if (id.isNotEmpty) {
+          income.add((
+            date: null,
+            label: 'ربح المبيعات (البيع - الشراء)',
+            amount: warehouseProfit(id),
+          ));
+        }
+      case PartnerScope.other || PartnerScope.company:
+        break;
+    }
+    // مصروفات أُضيفت للصفقة يدوياً من صفحة الكشف.
+    if (p.scope == PartnerScope.other) {
+      for (final t in _transactions) {
+        if (t.refId == p.dealKey && t.type == TxType.expense) {
+          expenses.add((date: t.date, label: t.note, amount: t.amount));
+        }
+      }
+    }
+    int byDate(DealLine a, DealLine b) =>
+        (a.date ?? DateTime(9999)).compareTo(b.date ?? DateTime(9999));
+    expenses.sort(byDate);
+    final partners = _partners.where((x) => x.dealKey == p.dealKey).toList();
+    return (
+      title: dealLabel(p),
+      expenses: expenses,
+      income: income,
+      expensesTotal: expenses.fold(0, (a, e) => a + e.amount),
+      profit: dealProfitOf(p),
+      partners: partners,
+    );
+  }
+
+  /// يضيف مصروفاً للصفقة: في تكاليف السيارة أو القطعة أو الحاوية،
+  /// أو معاملة مصروف مرتبطة بالمخزن أو الصفقة الأخرى.
+  Future<void> addDealExpense(
+    Partner p, {
+    required String label,
+    required double amount,
+    required DateTime date,
+  }) async {
+    final id = p.dealId ?? '';
+    switch (p.scope) {
+      case PartnerScope.car:
+        final c = carById(id);
+        if (c == null) throw StateError('السيارة محذوفة');
+        _upsert(
+          _cars,
+          c.copyWith(costs: [...c.costs, CarCost(label, amount, date)]),
+          (e) => e.id,
+        );
+      case PartnerScope.plot:
+        final x = plotById(id);
+        if (x == null) throw StateError('القطعة محذوفة');
+        _upsert(
+          _plots,
+          x.copyWith(costs: [...x.costs, PlotCost(label, amount, date)]),
+          (e) => e.id,
+        );
+      case PartnerScope.container:
+        final x = shipmentById(id);
+        if (x == null) throw StateError('الحاوية محذوفة');
+        _upsert(
+          _shipments,
+          Shipment.fromJson({
+            ...x.toJson(),
+            'extraCosts': [
+              ...x.extraCosts.map((c) => c.toJson()),
+              ShipmentExtraCost('$label ${fmt.date(date)}', amount).toJson(),
+            ],
+          }),
+          (e) => e.id,
+        );
+      case PartnerScope.warehouse || PartnerScope.other:
+        _transactions.add(
+          Transaction(
+            id: newId(),
+            category: TxCategory.otherExpense,
+            amount: amount,
+            date: date,
+            note: '$label - ${dealLabel(p)}',
+            refId: p.scope == PartnerScope.warehouse ? id : p.dealKey,
+          ),
+        );
+      case PartnerScope.company:
+        return;
+    }
+    notifyListeners();
+    await Future.wait([_saveTx(), _saveShipments(), _saveCars(), _savePlots()]);
+  }
 
   /// نصيب المستثمر من ربح صفقته، أو null قبل انتهائها.
   double? dealShareOf(Partner p) {

@@ -7,6 +7,8 @@ import '../state/app_state.dart';
 import '../utils/format.dart' as fmt;
 import '../widgets/common.dart';
 import '../widgets/data_table_card.dart';
+import '../theme/app_colors.dart';
+import 'deal_statement.dart';
 
 class PartnersScreen extends StatelessWidget {
   const PartnersScreen({super.key});
@@ -84,6 +86,14 @@ class PartnersScreen extends StatelessWidget {
             'المسحوب',
           ],
           items: deals,
+          extraActions: (p) => [
+            TableAction(
+              tooltip: 'كشف الصفقة والمصروفات (PDF)',
+              icon: Icons.receipt_long_outlined,
+              color: AppColors.brand,
+              onTap: () => openDealStatement(context, p),
+            ),
+          ],
           emptyMessage:
               'لا يوجد مستثمرون في صفقات. اضغط «إضافة شريك» واختر نوع الصفقة',
           cells: (p) {
@@ -424,10 +434,20 @@ class DealPartners extends StatelessWidget {
             subtitle: Text(
               'دفع ${fmt.money(p.capital)} • نسبته ${fmt.percent(p.sharePercent)}',
             ),
-            trailing: IconButton(
-              tooltip: 'تعديل',
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: () => showPartnerForm(context, existing: p),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'كشف الصفقة والمصروفات (PDF)',
+                  icon: const Icon(Icons.receipt_long_outlined),
+                  onPressed: () => openDealStatement(context, p),
+                ),
+                IconButton(
+                  tooltip: 'تعديل',
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: () => showPartnerForm(context, existing: p),
+                ),
+              ],
             ),
           ),
       ],
