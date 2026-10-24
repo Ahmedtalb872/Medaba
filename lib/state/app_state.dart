@@ -1168,6 +1168,25 @@ class AppState extends ChangeNotifier {
         'فلا يمكن أن يقل الدين عن ذلك',
       );
     }
+    if (inv.type == InvoiceType.sale && inv.partialDelivery) {
+      for (final d in inv.deliveries) {
+        for (final pid in d.items.keys) {
+          if (inv.qtyOf(pid) <= 0) {
+            throw StateError(
+              'سُلِّم للزبون من "${productById(pid)?.name}" ولم يعد في الفاتورة',
+            );
+          }
+        }
+      }
+      for (final pid in inv.productIds) {
+        if (inv.leftOf(pid) < -1e-9) {
+          throw StateError(
+            'أخذ الزبون ${fmt.number(inv.takenOf(pid))} من '
+            '"${productById(pid)?.name}"، فلا يمكن أن تقل الكمية عن ذلك',
+          );
+        }
+      }
+    }
     if (inv.type == InvoiceType.sale) {
       final needed = <String, double>{};
       for (final l in inv.lines) {
@@ -1328,6 +1347,20 @@ class AppState extends ChangeNotifier {
   /// قيمة ما أخذه الزبون حتى الآن.
   double orderTakenValue(OpenOrder o) =>
       pickupsOf(o.id).fold(0, (s, i) => s + i.total);
+
+  /// بضاعة بيعت ودُفع ثمنها لكن الزبون تركها في المخزن ولم يأخذها بعد.
+  /// خُصمت من المتوفر عند البيع، لكنها ما زالت موجودة في المخزن.
+  double undeliveredQty(String productId, {String? warehouseId}) => _invoices
+      .where(
+        (i) =>
+            i.partialDelivery &&
+            (warehouseId == null || i.warehouseId == warehouseId),
+      )
+      .fold(0, (s, i) => s + i.leftOf(productId).clamp(0, double.infinity));
+
+  /// فواتير البيع التي بقي لأصحابها بضاعة لم يأخذوها.
+  List<Invoice> get invoicesWithLeft =>
+      _invoices.where((i) => i.hasLeft).toList();
 
   /// الكمية المحجوزة من صنف في مخزن لزبائن الفواتير المفتوحة (ما لم يأخذوه).
   double reservedQty(

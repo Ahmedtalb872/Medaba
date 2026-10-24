@@ -281,6 +281,16 @@ class _StockTabState extends State<_StockTab> {
                       ],
                     ),
                   ),
+                  // بضاعة مباعة مدفوعة تركها زبائنها في المخزن (خارج المتوفر).
+                  if (s.undeliveredQty(p.id, warehouseId: _warehouseId) > 0)
+                    Text(
+                      'مباع لم يُسلَّم ${fmt.number(s.undeliveredQty(p.id, warehouseId: _warehouseId))}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.gold,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   // ما تركه زبائن الفواتير المفتوحة في المخزن ولم يأخذوه.
                   if (s.reservedQty(p.id, warehouseId: _warehouseId) > 0)
                     Text(

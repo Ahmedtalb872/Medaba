@@ -51,6 +51,42 @@ class InvoiceLine {
   );
 }
 
+/// دفعة تسليم: ما أخذه الزبون من بضاعة فاتورة البيع في يوم معيّن.
+class Delivery {
+  final String id;
+  final DateTime date;
+
+  /// الكمية المأخوذة لكل صنف.
+  final Map<String, double> items;
+  final String note;
+
+  const Delivery({
+    required this.id,
+    required this.date,
+    required this.items,
+    this.note = '',
+  });
+
+  double qtyOf(String productId) => items[productId] ?? 0;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'date': date.toIso8601String(),
+    'items': items,
+    'note': note,
+  };
+
+  factory Delivery.fromJson(Map<String, dynamic> j) => Delivery(
+    id: j['id'] as String,
+    date: parseDate(j['date']),
+    items: {
+      for (final e in (j['items'] as Map? ?? {}).entries)
+        e.key as String: (e.value as num).toDouble(),
+    },
+    note: j['note'] as String? ?? '',
+  );
+}
+
 /// فاتورة بيع أو شراء بعدة أصناف. حفظها يحرّك المخزون ويسجّل المبلغ في الحسابات.
 class Invoice {
   final String id;
@@ -74,6 +110,13 @@ class Invoice {
   /// الفاتورة المفتوحة التي سُحبت منها هذه الكمية، إن وُجدت.
   final String? openOrderId;
 
+  /// الزبون دفع ثمن البضاعة كلها لكنه يأخذها على دفعات.
+  /// عند تفعيله تُحسب الكمية المأخوذة من [deliveries]، وإلا فكلها مأخوذة.
+  final bool partialDelivery;
+
+  /// سجل دفعات التسليم بتواريخها.
+  final List<Delivery> deliveries;
+
   const Invoice({
     required this.id,
     required this.type,
@@ -88,7 +131,28 @@ class Invoice {
     this.txId,
     this.debt = 0,
     this.openOrderId,
+    this.partialDelivery = false,
+    this.deliveries = const [],
   });
+
+  /// الكمية الأصلية من صنف في الفاتورة.
+  double qtyOf(String productId) =>
+      lines.where((l) => l.productId == productId).fold(0, (s, l) => s + l.qty);
+
+  /// ما أخذه الزبون من الصنف.
+  double takenOf(String productId) => partialDelivery
+      ? deliveries.fold(0, (s, d) => s + d.qtyOf(productId))
+      : qtyOf(productId);
+
+  /// ما بقي للزبون في المخزن ولم يأخذه.
+  double leftOf(String productId) => qtyOf(productId) - takenOf(productId);
+
+  /// أصناف الفاتورة بلا تكرار، بترتيبها.
+  List<String> get productIds => {for (final l in lines) l.productId}.toList();
+
+  /// بقي للزبون شيء لم يأخذه.
+  bool get hasLeft =>
+      partialDelivery && productIds.any((p) => leftOf(p) > 1e-9);
 
   double get subtotal => lines.fold(0, (s, l) => s + l.total);
   double get afterDiscount => subtotal - discount;
@@ -110,6 +174,8 @@ class Invoice {
     txId: txId,
     debt: debt,
     openOrderId: openOrderId,
+    partialDelivery: partialDelivery,
+    deliveries: deliveries,
   );
 
   Map<String, dynamic> toJson() => {
@@ -126,6 +192,9 @@ class Invoice {
     'txId': txId,
     'debt': debt,
     if (openOrderId != null) 'openOrderId': openOrderId,
+    if (partialDelivery) 'partialDelivery': true,
+    if (deliveries.isNotEmpty)
+      'deliveries': [for (final d in deliveries) d.toJson()],
   };
 
   factory Invoice.fromJson(Map<String, dynamic> j) => Invoice(
@@ -145,6 +214,11 @@ class Invoice {
     txId: j['txId'] as String?,
     debt: (j['debt'] as num?)?.toDouble() ?? 0,
     openOrderId: j['openOrderId'] as String?,
+    partialDelivery: j['partialDelivery'] as bool? ?? false,
+    deliveries: [
+      for (final d in j['deliveries'] as List? ?? [])
+        Delivery.fromJson(d as Map<String, dynamic>),
+    ],
   );
 }
 

@@ -13,6 +13,7 @@ import '../theme/app_colors.dart';
 import '../utils/share_pdf.dart';
 import '../utils/format.dart' as fmt;
 import '../widgets/common.dart';
+import 'invoice_delivery.dart';
 import 'open_orders.dart';
 import '../widgets/product_thumb.dart';
 
@@ -351,7 +352,20 @@ class _InvoiceTable extends StatelessWidget {
                           ),
                         ),
                       ),
-                      DataCell(Text('${i.lines.length}')),
+                      DataCell(
+                        i.hasLeft
+                            ? Tooltip(
+                                message: 'الزبون لم يأخذ كل البضاعة بعد',
+                                child: Text(
+                                  '${i.lines.length} • بقي له',
+                                  style: const TextStyle(
+                                    color: AppColors.gold,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              )
+                            : Text('${i.lines.length}'),
+                      ),
                       DataCell(
                         Text(
                           fmt.money(i.total),
@@ -607,6 +621,11 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
   final List<_LineDraft> _lines = [];
   bool _saving = false;
 
+  /// التسليم على دفعات: الزبون دفع الكل وترك جزءاً من البضاعة.
+  late bool _partial;
+  late List<Delivery> _deliveries;
+  late bool _showDelivery;
+
   bool get _isSale => widget.type == InvoiceType.sale;
 
   @override
@@ -623,6 +642,9 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
     );
     _notes = TextEditingController(text: e?.notes);
     _onDebt = (e?.debt ?? 0) > 0;
+    _partial = e?.partialDelivery ?? false;
+    _deliveries = [...?e?.deliveries];
+    _showDelivery = _partial;
     final paid = e == null ? 0.0 : e.total - e.debt;
     _paidNow = TextEditingController(
       text: _onDebt && paid > 0 ? fmt.number(paid) : '',
@@ -691,6 +713,8 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
     notes: _notes.text.trim(),
     txId: widget.existing?.txId,
     openOrderId: widget.existing?.openOrderId,
+    partialDelivery: _isSale && _partial,
+    deliveries: _isSale ? _deliveries : const [],
   );
 
   Future<void> _save() async {
@@ -871,6 +895,39 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
       ),
     );
 
+    final delivery = !_isSale
+        ? null
+        : !_showDelivery
+        ? OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+            onPressed: () => setState(() => _showDelivery = true),
+            icon: const Icon(Icons.inventory_outlined),
+            label: Text(
+              _partial && inv.hasLeft
+                  ? 'الأصلية / المأخوذ / المتبقي • بقي للزبون بضاعة'
+                  : 'الكمية الأصلية / المأخوذ / المتبقي',
+            ),
+          )
+        : SectionCard(
+            title: 'الأصلية / المأخوذ / المتبقي',
+            trailing: IconButton(
+              tooltip: 'إخفاء',
+              icon: const Icon(Icons.expand_less),
+              onPressed: () => setState(() => _showDelivery = false),
+            ),
+            child: DeliveryPanel(
+              invoice: inv,
+              productName: (id) => s.productById(id)?.name ?? '-',
+              unitOf: (id) => s.productById(id)?.unit ?? '',
+              onChanged: (partial, list) => setState(() {
+                _partial = partial;
+                _deliveries = list;
+              }),
+            ),
+          );
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -908,6 +965,7 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
               const SizedBox(height: 12),
               totals,
             ],
+            if (delivery != null) ...[const SizedBox(height: 12), delivery],
             // مساحة تحت المحتوى حتى لا يغطي زر الحفظ العائم آخر سطر.
             const SizedBox(height: 120),
           ],

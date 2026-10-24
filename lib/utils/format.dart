@@ -6,12 +6,14 @@ const currencySymbol = 'أوقية';
 final _money = NumberFormat('#,##0.##', 'en');
 final _date = DateFormat('yyyy/MM/dd', 'en_US');
 final _month = DateFormat('MM/yyyy', 'en_US');
+final _dateTime = DateFormat('yyyy/MM/dd HH:mm', 'en_US');
 
 String money(num v) => '${_money.format(v)} $currencySymbol';
 String number(num v) => _money.format(v);
 String percent(num v) => '${_money.format(v)}%';
 String date(DateTime d) => _date.format(d);
 String month(DateTime d) => _month.format(d);
+String dateTime(DateTime d) => _dateTime.format(d);
 
 /// يحوّل نصاً مُدخلاً إلى رقم، ويقبل الأرقام العربية الهندية والفارسية.
 ///
