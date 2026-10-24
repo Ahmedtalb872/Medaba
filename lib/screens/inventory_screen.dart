@@ -1,0 +1,1959 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../data/cloud.dart';
+import '../models/inventory.dart';
+import '../models/models.dart';
+import '../state/app_state.dart';
+import '../theme/app_colors.dart';
+import '../utils/format.dart' as fmt;
+import '../utils/item_list.dart';
+import '../widgets/common.dart';
+import '../utils/product_image.dart';
+import '../widgets/data_table_card.dart';
+import '../widgets/product_thumb.dart';
+import 'partners_screen.dart';
+import 'workers_screen.dart';
+
+/// إدارة المخازن: الأرصدة، الحركات، الأصناف، والمخازن.
+class InventoryScreen extends StatelessWidget {
+  const InventoryScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 5,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            child: PageHeader(
+              title: context.select<AppState, String>(
+                (s) => s.company.inventoryLabel,
+              ),
+              icon: Icons.warehouse_outlined,
+              subtitle: 'أرصدة الأصناف وحركات الوارد والصادر والتحويل',
+              secondaryLabel: isStockWorker ? null : 'تغيير الاسم',
+              secondaryIcon: Icons.edit_outlined,
+              onSecondary: isStockWorker
+                  ? null
+                  : () => showRenameInventory(context),
+            ),
+          ),
+          const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              Tab(icon: Icon(Icons.inventory_outlined), text: 'المخزون'),
+              Tab(icon: Icon(Icons.swap_vert), text: 'الحركات'),
+              Tab(icon: Icon(Icons.category_outlined), text: 'الأصناف'),
+              Tab(icon: Icon(Icons.warehouse_outlined), text: 'المخازن'),
+              Tab(
+                icon: Icon(Icons.assignment_return_outlined),
+                text: 'العارية',
+              ),
+            ],
+          ),
+          const Expanded(
+            child: TabBarView(
+              children: [
+                _StockTab(),
+                _MovesTab(),
+                _ProductsTab(),
+                _WarehousesTab(),
+                _LoansTab(),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+void _snack(BuildContext context, String msg) =>
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+
+/// صف أزرار الإجراءات أعلى كل تبويب.
+class _Actions extends StatelessWidget {
+  final List<Widget> children;
+  const _Actions({required this.children});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Wrap(spacing: 8, runSpacing: 8, children: children),
+  );
+}
+
+// ---------------- تبويب المخزون ----------------
+
+class _StockTab extends StatefulWidget {
+  const _StockTab();
+
+  @override
+  State<_StockTab> createState() => _StockTabState();
+}
+
+enum _StockFilter {
+  all('عرض الكل'),
+  available('المتوفر فقط'),
+  out('النافد فقط');
+
+  final String label;
+  const _StockFilter(this.label);
+}
+
+typedef _StockRow = ({
+  Product product,
+  double received,
+  double issued,
+  double qty,
+});
+
+class _StockTabState extends State<_StockTab> {
+  String? _warehouseId;
+  _StockFilter _filter = _StockFilter.all;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    if (s.warehouseById(_warehouseId) == null) _warehouseId = null;
+    _StockRow row(Product p) {
+      final f = s.stockFlow(p.id, warehouseId: _warehouseId);
+      return (
+        product: p,
+        received: f.received,
+        issued: f.issued,
+        qty: f.received - f.issued,
+      );
+    }
+
+    bool matches(_StockRow r, _StockFilter f) => switch (f) {
+      _StockFilter.all => true,
+      _StockFilter.available => r.qty > 0,
+      _StockFilter.out => r.qty <= 0,
+    };
+
+    final rows = [for (final p in s.products) row(p)];
+    final shown = rows.where((r) => matches(r, _filter)).toList();
+
+    return ListView(
+      padding: pagePadding,
+      children: [
+        _Actions(
+          children: [
+            FilledButton.icon(
+              onPressed: () => showMoveForm(context),
+              icon: const Icon(Icons.add),
+              label: const Text('حركة جديدة'),
+            ),
+          ],
+        ),
+        StatGrid(
+          children: [
+            StatCard(
+              label: 'عدد الأصناف',
+              value: '${s.products.length}',
+              icon: Icons.category_outlined,
+              colors: AppColors.capital,
+            ),
+            StatCard(
+              label: 'قيمة المخزون (بسعر الشراء)',
+              value: fmt.money(s.stockValue(warehouseId: _warehouseId)),
+              icon: Icons.warehouse_outlined,
+              colors: AppColors.stock,
+            ),
+            StatCard(
+              label: 'أصناف تحت الحد الأدنى',
+              value: '${s.lowStockProducts.length}',
+              icon: Icons.warning_amber_rounded,
+              colors: s.lowStockProducts.isEmpty
+                  ? AppColors.ok
+                  : AppColors.loss,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ChoiceChip(
+              label: const Text('كل المخازن'),
+              selected: _warehouseId == null,
+              onSelected: (_) => setState(() => _warehouseId = null),
+            ),
+            for (final w in s.warehouses)
+              ChoiceChip(
+                label: Text(w.name),
+                selected: _warehouseId == w.id,
+                onSelected: (_) => setState(() => _warehouseId = w.id),
+              ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SegmentedButton<_StockFilter>(
+          segments: [
+            for (final f in _StockFilter.values)
+              ButtonSegment(
+                value: f,
+                label: Text(
+                  '${f.label} (${rows.where((r) => matches(r, f)).length})',
+                ),
+              ),
+          ],
+          selected: {_filter},
+          onSelectionChanged: (v) => setState(() => _filter = v.first),
+        ),
+        const SizedBox(height: 12),
+        DataTableCard<_StockRow>(
+          columns: const [
+            'الصنف',
+            'الكود',
+            'الكمية الأصلية',
+            'الخارج',
+            'المتوفر',
+            'الوحدة',
+            'سعر الشراء',
+            'سعر البيع',
+            'قيمة البضاعة بسعر الشراء',
+            'الحالة',
+          ],
+          items: shown,
+          emptyMessage: 'أضف أصنافاً من تبويب "الأصناف"',
+          cells: (r) {
+            final p = r.product;
+            return [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // صورة الصنف: الضغط عليها يرفع صورة أو يغيّرها.
+                  ProductThumb(
+                    product: p,
+                    size: 40,
+                    onTap: () => uploadProductImage(context, p),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(p.name),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: 'زيادة المخزون',
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(
+                      Icons.add_circle_outline,
+                      color: AppColors.income.last,
+                      size: 20,
+                    ),
+                    onPressed: () =>
+                        showAddStockForm(context, p, warehouseId: _warehouseId),
+                  ),
+                ],
+              ),
+              Text(p.code),
+              Text(fmt.number(r.received)),
+              Text(fmt.number(r.issued)),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => showAdjustStockForm(
+                      context,
+                      p,
+                      warehouseId: _warehouseId,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _Available(qty: r.qty, received: r.received),
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: 'تعديل المتوفر',
+                          child: Icon(
+                            Icons.edit_outlined,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // بضاعة مباعة مدفوعة تركها زبائنها في المخزن (خارج المتوفر).
+                  if (s.undeliveredQty(p.id, warehouseId: _warehouseId) > 0)
+                    Text(
+                      'مباع لم يُسلَّم ${fmt.number(s.undeliveredQty(p.id, warehouseId: _warehouseId))}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.gold,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  // ما تركه زبائن الفواتير المفتوحة في المخزن ولم يأخذوه.
+                  if (s.reservedQty(p.id, warehouseId: _warehouseId) > 0)
+                    Text(
+                      'محجوز ${fmt.number(s.reservedQty(p.id, warehouseId: _warehouseId))}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.gold,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                ],
+              ),
+              Text(p.unit),
+              _PriceCell(product: p, value: p.costPrice),
+              _PriceCell(product: p, value: p.salePrice),
+              Text(fmt.money(r.qty * p.costPrice)),
+              // الحالة حسب المخزن المختار (أو كل المخازن).
+              _StockStatus(qty: r.qty, min: p.minQty),
+            ];
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// الكمية المتوفرة مع شريط يبيّن نسبتها من الكمية الأصلية.
+class _Available extends StatelessWidget {
+  final double qty;
+  final double received;
+  const _Available({required this.qty, required this.received});
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = received <= 0 ? 0.0 : (qty / received).clamp(0.0, 1.0);
+    final color = ratio > 0.25 ? AppColors.income.last : AppColors.expense.last;
+    return SizedBox(
+      width: 96,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            fmt.number(qty),
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: ratio,
+              minHeight: 5,
+              color: color,
+              backgroundColor: color.withValues(alpha: 0.15),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StockStatus extends StatelessWidget {
+  final double qty;
+  final double min;
+  const _StockStatus({required this.qty, required this.min});
+
+  @override
+  Widget build(BuildContext context) {
+    final (label, colors) = qty <= 0
+        ? ('نفد', AppColors.loss)
+        : min > 0 && qty <= min
+        ? ('منخفض', AppColors.workers)
+        : ('متوفر', AppColors.income);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        gradient: AppColors.gradient(colors),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------- تبويب الحركات ----------------
+
+class _MovesTab extends StatelessWidget {
+  const _MovesTab();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    return ListView(
+      padding: pagePadding,
+      children: [
+        _Actions(
+          children: [
+            FilledButton.icon(
+              onPressed: () => showMoveForm(context),
+              icon: const Icon(Icons.add),
+              label: const Text('حركة جديدة'),
+            ),
+          ],
+        ),
+        DataTableCard<StockMove>(
+          columns: const [
+            'التاريخ',
+            'النوع',
+            'الصنف',
+            'المخزن',
+            'الكمية',
+            'سعر الفرد',
+            'الإجمالي',
+            'العميل / المسؤول',
+            'ملاحظات',
+          ],
+          items: s.moves,
+          emptyMessage: 'لا توجد حركات مخزون بعد',
+          cells: (m) {
+            final product = s.productById(m.productId);
+            final from = s.warehouseById(m.warehouseId)?.name ?? '-';
+            final to = s.warehouseById(m.toWarehouseId)?.name;
+            return [
+              Text(fmt.date(m.date)),
+              _MoveTypeChip(type: m.type),
+              Text(product?.name ?? '-'),
+              Text(to == null ? from : '$from ← $to'),
+              Text('${fmt.number(m.qty)} ${product?.unit ?? ''}'),
+              Text(m.type.hasPrice ? fmt.money(m.unitPrice) : '-'),
+              Text(
+                m.type.hasPrice ? fmt.money(m.total) : '-',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              Text(m.person.isEmpty ? '-' : m.person),
+              Text(m.note),
+            ];
+          },
+          onEdit: (m) => m.invoiceId != null
+              ? _invoiceMoveNotice(context, s, m)
+              : showMoveForm(context, existing: m),
+          onDelete: (m) async {
+            if (m.invoiceId != null) {
+              return _invoiceMoveNotice(context, s, m);
+            }
+            if (!await confirmDelete(context, 'حركة ${m.type.label}')) return;
+            await s.deleteMove(m.id);
+          },
+        ),
+      ],
+    );
+  }
+}
+
+class _MoveTypeChip extends StatelessWidget {
+  final MoveType type;
+  const _MoveTypeChip({required this.type});
+
+  static List<Color> colorsOf(MoveType t) => switch (t) {
+    MoveType.purchase || MoveType.stockIn => AppColors.income,
+    MoveType.sale => AppColors.capital,
+    MoveType.stockOut => AppColors.expense,
+    MoveType.transfer => AppColors.people,
+    MoveType.loanOut ||
+    MoveType.loanReturn ||
+    MoveType.borrowIn ||
+    MoveType.borrowReturn => AppColors.profit,
+  };
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+      color: colorsOf(type).last.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      type.label,
+      style: TextStyle(color: colorsOf(type).last, fontWeight: FontWeight.bold),
+    ),
+  );
+}
+
+/// حركات الفواتير تُعدَّل من شاشة الفواتير حتى تبقى الفاتورة مطابقة للمخزون.
+void _invoiceMoveNotice(BuildContext context, AppState s, StockMove m) =>
+    _snack(
+      context,
+      'هذه الحركة جزء من ${s.invoiceById(m.invoiceId)?.number ?? 'فاتورة'}؛ '
+      'عدّلها أو احذفها من شاشة الفواتير',
+    );
+
+/// يطلب اسماً جديداً لقسم المخزون (مثل «المستودع») ويحفظه.
+Future<void> showRenameInventory(BuildContext context) async {
+  final s = context.read<AppState>();
+  final controller = TextEditingController(text: s.company.inventoryLabel);
+  final name = await showDialog<String>(
+    context: context,
+    builder: (dialog) => AlertDialog(
+      title: const Text('اسم قسم المخزون'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        decoration: const InputDecoration(
+          labelText: 'الاسم',
+          helperText: 'مثل: المخزون، المستودع، المخزن',
+        ),
+        onSubmitted: (v) => Navigator.pop(dialog, v),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialog),
+          child: const Text('إلغاء'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialog, controller.text),
+          child: const Text('حفظ'),
+        ),
+      ],
+    ),
+  );
+  if (name != null) await s.renameInventory(name);
+}
+
+Future<void> showMoveForm(BuildContext context, {StockMove? existing}) async {
+  final s = context.read<AppState>();
+  if (s.products.isEmpty || s.warehouses.isEmpty) {
+    _snack(context, 'أضف مخزناً واحداً وصنفاً واحداً على الأقل أولاً');
+    return;
+  }
+  final key = GlobalKey<FormState>();
+  // عامل المخزون لا يسجّل بيعاً أو شراءً (لهما أثر مالي يراه المدير فقط).
+  final types = [
+    for (final t in MoveType.values)
+      if (!isStockWorker || t.financial == null || t == existing?.type) t,
+  ];
+  var type = existing?.type ?? types.first;
+  var productId = existing?.productId ?? s.products.first.id;
+  var warehouseId = existing?.warehouseId ?? s.warehouses.first.id;
+  String? toWarehouseId = existing?.toWarehouseId;
+  var date = existing?.date ?? DateTime.now();
+  final qty = TextEditingController(
+    text: existing == null ? '' : fmt.number(existing.qty),
+  );
+  final price = TextEditingController(
+    text: existing == null ? '' : fmt.number(existing.unitPrice),
+  );
+  final note = TextEditingController(text: existing?.note);
+  final person = TextEditingController(text: existing?.person);
+
+  void fillPrice() {
+    final p = s.productById(productId);
+    if (p == null) return;
+    price.text = fmt.number(type == MoveType.sale ? p.salePrice : p.costPrice);
+  }
+
+  if (existing == null) fillPrice();
+
+  double available() => s.stockOf(
+    productId,
+    warehouseId: warehouseId,
+    excludeMoveId: existing?.id,
+  );
+
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: existing == null ? 'حركة مخزون جديدة' : 'تعديل حركة المخزون',
+    fields: (setState) => [
+      DropdownButtonFormField<MoveType>(
+        initialValue: type,
+        decoration: const InputDecoration(labelText: 'نوع الحركة'),
+        items: [
+          for (final t in types)
+            DropdownMenuItem(value: t, child: Text(t.label)),
+        ],
+        onChanged: (t) => setState(() {
+          type = t!;
+          fillPrice();
+        }),
+      ),
+      DropdownButtonFormField<String>(
+        initialValue: productId,
+        decoration: const InputDecoration(labelText: 'الصنف'),
+        items: [
+          for (final p in s.products)
+            DropdownMenuItem(value: p.id, child: Text(p.name)),
+        ],
+        onChanged: (v) => setState(() {
+          productId = v!;
+          fillPrice();
+        }),
+      ),
+      DropdownButtonFormField<String>(
+        initialValue: warehouseId,
+        decoration: InputDecoration(
+          labelText: type == MoveType.transfer ? 'من مخزن' : 'المخزن',
+          helperText: type.decreasesSource
+              ? 'المتاح: ${fmt.number(available())} '
+                    '${s.productById(productId)?.unit ?? ''}'
+              : null,
+        ),
+        items: [
+          for (final w in s.warehouses)
+            DropdownMenuItem(value: w.id, child: Text(w.name)),
+        ],
+        onChanged: (v) => setState(() => warehouseId = v!),
+      ),
+      if (type == MoveType.transfer)
+        DropdownButtonFormField<String>(
+          initialValue: toWarehouseId,
+          decoration: const InputDecoration(labelText: 'إلى مخزن'),
+          items: [
+            for (final w in s.warehouses)
+              DropdownMenuItem(value: w.id, child: Text(w.name)),
+          ],
+          validator: (v) => v == null
+              ? 'اختر المخزن الهدف'
+              : v == warehouseId
+              ? 'يجب أن يختلف عن المخزن المصدر'
+              : null,
+          onChanged: (v) => setState(() => toWarehouseId = v),
+        ),
+      TextFormField(
+        controller: qty,
+        decoration: InputDecoration(
+          labelText: 'الكمية',
+          suffixText: s.productById(productId)?.unit,
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: (v) {
+          final base = numberValidator(min: 0.001)(v);
+          if (base != null) return base;
+          if (type.decreasesSource && fmt.parseNumber(v)! > available()) {
+            return 'أكبر من المتاح (${fmt.number(available())})';
+          }
+          return null;
+        },
+      ),
+      if (type.hasPrice)
+        TextFormField(
+          controller: price,
+          decoration: InputDecoration(
+            labelText: type == MoveType.sale
+                ? 'سعر البيع للوحدة'
+                : 'سعر الشراء للوحدة',
+            helperText:
+                'تُسجَّل تلقائياً كمعاملة '
+                '${type == MoveType.sale ? 'إيراد' : 'مصروف'} في الحسابات',
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          validator: numberValidator(),
+        ),
+      DateField(
+        label: 'التاريخ',
+        value: date,
+        onChanged: (d) => setState(() => date = d),
+      ),
+      TextFormField(
+        controller: person,
+        decoration: const InputDecoration(
+          labelText: 'العميل / المسؤول عن الحركة',
+        ),
+      ),
+      TextFormField(
+        controller: note,
+        decoration: const InputDecoration(labelText: 'ملاحظات'),
+      ),
+    ],
+    onSave: () => s.saveMove(
+      StockMove(
+        id: existing?.id ?? newId(),
+        type: type,
+        productId: productId,
+        warehouseId: warehouseId,
+        toWarehouseId: type == MoveType.transfer ? toWarehouseId : null,
+        qty: fmt.parseNumber(qty.text)!,
+        unitPrice: type.hasPrice ? fmt.parseNumber(price.text)! : 0,
+        date: date,
+        note: note.text.trim(),
+        person: person.text.trim(),
+        txId: existing?.txId,
+      ),
+    ),
+  );
+}
+
+/// زيادة كمية صنف في مخزن، مع اسم العميل أو المسؤول عن الزيادة.
+///
+/// «إضافة» لا تُنشئ مصروفاً (بضاعة وصلت أو رُدّت)، و«شراء» تُسجَّل مصروفاً
+/// بسعر الشراء.
+Future<void> showAddStockForm(
+  BuildContext context,
+  Product product, {
+  String? warehouseId,
+}) {
+  final s = context.read<AppState>();
+  if (s.warehouses.isEmpty) {
+    _snack(context, 'أضف مخزناً أولاً من تبويب «المخازن»');
+    return Future.value();
+  }
+  final key = GlobalKey<FormState>();
+  final qty = TextEditingController();
+  final person = TextEditingController();
+  final note = TextEditingController();
+  final price = TextEditingController(
+    text: product.costPrice == 0 ? '' : fmt.number(product.costPrice),
+  );
+  var warehouse = warehouseId ?? s.warehouses.first.id;
+  var type = MoveType.stockIn;
+  var date = DateTime.now();
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'زيادة مخزون: ${product.name}',
+    fields: (setState) => [
+      Text(
+        'المتوفر الآن: ${fmt.number(s.stockOf(product.id, warehouseId: warehouse))} ${product.unit}',
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+      DropdownButtonFormField<String>(
+        initialValue: warehouse,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: 'المخزن'),
+        items: [
+          for (final w in s.warehouses)
+            DropdownMenuItem(value: w.id, child: Text(w.name)),
+        ],
+        onChanged: (v) => setState(() => warehouse = v!),
+      ),
+      TextFormField(
+        controller: qty,
+        autofocus: true,
+        decoration: InputDecoration(
+          labelText: 'الكمية المضافة',
+          suffixText: product.unit,
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(min: 0.001),
+      ),
+      TextFormField(
+        controller: person,
+        decoration: const InputDecoration(
+          labelText: 'العميل / المسؤول عن الزيادة',
+        ),
+        validator: requiredText,
+      ),
+      if (!isStockWorker)
+        SegmentedButton<MoveType>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(
+              value: MoveType.stockIn,
+              label: Text('إضافة بدون مصروف'),
+            ),
+            ButtonSegment(
+              value: MoveType.purchase,
+              label: Text('شراء (يُسجَّل مصروفاً)'),
+            ),
+          ],
+          selected: {type},
+          onSelectionChanged: (v) => setState(() => type = v.first),
+        ),
+      // سعر الشراء يُحفظ مع الصنف، ومنه يُحسب الربح عند البيع.
+      if (!isStockWorker)
+        TextFormField(
+          controller: price,
+          decoration: const InputDecoration(
+            labelText: 'سعر الشراء للوحدة',
+            helperText: 'يُحفظ مع الصنف ويُحسب منه الربح عند البيع',
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          validator: numberValidator(min: 0.01),
+        ),
+      DateField(
+        label: 'التاريخ',
+        value: date,
+        onChanged: (d) => setState(() => date = d),
+      ),
+      TextFormField(
+        controller: note,
+        decoration: const InputDecoration(labelText: 'ملاحظات'),
+      ),
+    ],
+    onSave: () async {
+      final cost = fmt.parseNumber(price.text);
+      if (cost != null && cost > 0 && cost != product.costPrice) {
+        await s.saveProduct(
+          Product.fromJson({...product.toJson(), 'costPrice': cost}),
+        );
+      }
+      await s.saveMove(
+        StockMove(
+          id: newId(),
+          type: type,
+          productId: product.id,
+          warehouseId: warehouse,
+          qty: fmt.parseNumber(qty.text)!,
+          unitPrice: cost ?? product.costPrice,
+          date: date,
+          note: note.text.trim(),
+          person: person.text.trim(),
+        ),
+      );
+      if (context.mounted) {
+        _snack(
+          context,
+          'تمت إضافة ${qty.text} ${product.unit} إلى ${product.name}',
+        );
+      }
+    },
+  );
+}
+
+// ---------------- تبويب الأصناف ----------------
+
+class _ProductsTab extends StatelessWidget {
+  const _ProductsTab();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    return ListView(
+      padding: pagePadding,
+      children: [
+        _Actions(
+          children: [
+            FilledButton.icon(
+              onPressed: () => showProductForm(context),
+              icon: const Icon(Icons.add),
+              label: const Text('إضافة صنف'),
+            ),
+            OutlinedButton.icon(
+              onPressed: () => showBulkProductsForm(context),
+              icon: const Icon(Icons.playlist_add),
+              label: const Text('إضافة عدة أصناف'),
+            ),
+          ],
+        ),
+        DataTableCard<Product>(
+          columns: const [
+            'الصورة',
+            'الصنف',
+            'الكود',
+            'الوحدة',
+            'سعر الشراء',
+            'سعر البيع',
+            'هامش الربح',
+            'الحد الأدنى',
+          ],
+          items: s.products,
+          emptyMessage: 'لم تتم إضافة أصناف بعد',
+          cells: (p) => [
+            ProductThumb(
+              product: p,
+              size: 40,
+              onTap: () => uploadProductImage(context, p),
+            ),
+            Text(p.name),
+            Text(p.code),
+            Text(p.unit),
+            Text(fmt.money(p.costPrice)),
+            Text(fmt.money(p.salePrice)),
+            Text(
+              p.costPrice == 0
+                  ? '-'
+                  : fmt.percent(
+                      (p.salePrice - p.costPrice) / p.costPrice * 100,
+                    ),
+            ),
+            Text(fmt.number(p.minQty)),
+          ],
+          onEdit: (p) => showProductForm(context, existing: p),
+          onDelete: (p) async {
+            final invoices = s.invoicesUsingProduct(p.id);
+            if (isStockWorker && invoices.isNotEmpty) {
+              _snack(context, 'الصنف مستخدم في فواتير؛ حذفه للمدير فقط');
+              return;
+            }
+            final moves = s.manualMovesOf(p.id);
+            final detail = [
+              if (invoices.isNotEmpty)
+                'ستُحذف معه الفواتير المرتبطة به كاملة '
+                    '(${invoices.length}): ${invoices.join('، ')}.',
+              if (moves > 0) 'وستُحذف حركات المخزون الخاصة به ($moves).',
+            ];
+            final ok = await confirmDelete(
+              context,
+              p.name,
+              detail: detail.isEmpty ? null : detail.join('\n'),
+            );
+            if (!ok) return;
+            await s.deleteProduct(p.id, withInvoices: true);
+          },
+        ),
+      ],
+    );
+  }
+}
+
+/// يضيف أصنافاً كثيرة دفعة واحدة من قائمة ملصوقة، سطر لكل صنف.
+/// الأسعار تبقى صفراً ليكملها المدير من زر التعديل.
+Future<void> showBulkProductsForm(BuildContext context) {
+  final s = context.read<AppState>();
+  final key = GlobalKey<FormState>();
+  final list = TextEditingController();
+  final prefix = TextEditingController();
+  final unit = TextEditingController(text: 'قطعة');
+  final existing = {for (final p in s.products) p.name.trim().toLowerCase()};
+  const units = ['قطعة', 'كرتون', 'كيس', 'طن', 'كيلو', 'متر', 'لتر', 'لفة'];
+
+  List<String> names() => [
+    for (final n in parseItemList(list.text))
+      [prefix.text.trim(), n].where((t) => t.isNotEmpty).join(' '),
+  ];
+
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'إضافة عدة أصناف',
+    fields: (setState) {
+      final all = names();
+      final fresh = all
+          .where((n) => !existing.contains(n.toLowerCase()))
+          .toList();
+      return [
+        TextFormField(
+          controller: list,
+          onChanged: (_) => setState(() {}),
+          minLines: 6,
+          maxLines: 12,
+          decoration: const InputDecoration(
+            labelText: 'الأصناف (سطر لكل صنف)',
+            hintText: 'الصق القائمة هنا، ولو منسوخة من واتساب',
+            alignLabelWithHint: true,
+          ),
+          validator: (_) =>
+              names().isEmpty ? 'اكتب صنفاً واحداً على الأقل' : null,
+        ),
+        TextFormField(
+          controller: prefix,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(
+            labelText: 'اسم يسبق كل صنف (اختياري)',
+            hintText: 'مثل: زنك، أنبوب، دهان',
+          ),
+        ),
+        TextFormField(
+          controller: unit,
+          onChanged: (_) => setState(() {}),
+          decoration: const InputDecoration(labelText: 'الوحدة'),
+          validator: requiredText,
+        ),
+        Wrap(
+          spacing: 6,
+          runSpacing: 6,
+          children: [
+            for (final u in units)
+              ChoiceChip(
+                label: Text(u),
+                selected: unit.text.trim() == u,
+                onSelected: (_) => setState(() => unit.text = u),
+              ),
+          ],
+        ),
+        if (all.isNotEmpty) ...[
+          Text(
+            fresh.length == all.length
+                ? 'سيُضاف ${fresh.length} صنف'
+                : 'سيُضاف ${fresh.length} صنف '
+                      '(${all.length - fresh.length} موجود من قبل ولن يتكرر)',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final n in all)
+                Chip(
+                  label: Text(n, textDirection: TextDirection.ltr),
+                  visualDensity: VisualDensity.compact,
+                  backgroundColor: existing.contains(n.toLowerCase())
+                      ? Colors.grey.shade300
+                      : null,
+                ),
+            ],
+          ),
+          const Text(
+            'الأسعار تبدأ صفراً؛ أكملها لكل صنف من زر التعديل ✏️',
+            style: TextStyle(fontSize: 12),
+          ),
+        ],
+      ];
+    },
+    onSave: () async {
+      final fresh = names()
+          .where((n) => !existing.contains(n.toLowerCase()))
+          .toList();
+      for (final n in fresh) {
+        await s.saveProduct(
+          Product(id: newId(), name: n, unit: unit.text.trim()),
+        );
+      }
+      if (context.mounted) _snack(context, 'تمت إضافة ${fresh.length} صنف');
+    },
+  );
+}
+
+Future<void> showProductForm(BuildContext context, {Product? existing}) {
+  final s = context.read<AppState>();
+  final key = GlobalKey<FormState>();
+  final name = TextEditingController(text: existing?.name);
+  final code = TextEditingController(text: existing?.code);
+  final unit = TextEditingController(text: existing?.unit ?? 'قطعة');
+  String num(double? v) => v == null ? '' : fmt.number(v);
+  final cost = TextEditingController(text: num(existing?.costPrice));
+  final sale = TextEditingController(text: num(existing?.salePrice));
+  final min = TextEditingController(text: num(existing?.minQty));
+  const decimal = TextInputType.numberWithOptions(decimal: true);
+  var image = existing?.image;
+  // الوحدات الشائعة مع ما استُعمل من قبل.
+  final units = {
+    'قطعة',
+    'كرتون',
+    'كيس',
+    'طن',
+    'كيلو',
+    'متر',
+    'لتر',
+    'جالون',
+    for (final p in s.products) p.unit,
+  }.where((u) => u.trim().isNotEmpty).toList();
+  // الصنف الجديد يُسجَّل في مخزن بكميته الموجودة الآن.
+  var warehouseId = s.warehouses.isEmpty ? null : s.warehouses.first.id;
+  final openingQty = TextEditingController();
+
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: existing == null ? 'إضافة صنف' : 'تعديل الصنف',
+    fields: (setState) => [
+      Row(
+        children: [
+          ProductThumb(
+            product: Product(id: '', name: '', image: image),
+            size: 64,
+          ),
+          const SizedBox(width: 12),
+          OutlinedButton.icon(
+            icon: const Icon(Icons.photo_outlined),
+            label: Text(image == null ? 'رفع صورة' : 'تغيير الصورة'),
+            onPressed: () async {
+              try {
+                final picked = await pickProductImage();
+                if (picked != null) setState(() => image = picked);
+              } on FormatException catch (e) {
+                if (context.mounted) _snack(context, e.message);
+              }
+            },
+          ),
+          if (image != null)
+            IconButton(
+              tooltip: 'إزالة الصورة',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () => setState(() => image = null),
+            ),
+        ],
+      ),
+      TextFormField(
+        controller: name,
+        decoration: const InputDecoration(labelText: 'اسم الصنف'),
+        validator: requiredText,
+      ),
+      TextFormField(
+        controller: code,
+        decoration: const InputDecoration(labelText: 'الكود / الباركود'),
+      ),
+      TextFormField(
+        controller: unit,
+        onChanged: (_) => setState(() {}),
+        decoration: const InputDecoration(
+          labelText: 'الوحدة',
+          helperText: 'اختر من الأزرار أو اكتب وحدة أخرى',
+        ),
+        validator: requiredText,
+      ),
+      Wrap(
+        spacing: 6,
+        runSpacing: 6,
+        children: [
+          for (final u in units)
+            ChoiceChip(
+              label: Text(u),
+              selected: unit.text.trim() == u,
+              onSelected: (_) => setState(() => unit.text = u),
+            ),
+        ],
+      ),
+      if (existing == null) ...[
+        if (s.warehouses.isEmpty)
+          const Text(
+            'لا توجد مخازن بعد: أضف مخزناً من تبويب «المخازن» لتسجيل كمية الصنف',
+            style: TextStyle(color: Colors.orange),
+          )
+        else ...[
+          DropdownButtonFormField<String>(
+            initialValue: warehouseId,
+            isExpanded: true,
+            decoration: const InputDecoration(labelText: 'المخزن'),
+            items: [
+              for (final w in s.warehouses)
+                DropdownMenuItem(value: w.id, child: Text(w.name)),
+            ],
+            onChanged: (v) => setState(() => warehouseId = v),
+          ),
+          TextFormField(
+            controller: openingQty,
+            decoration: InputDecoration(
+              labelText: 'الكمية الموجودة الآن',
+              suffixText: unit.text.trim(),
+              helperText:
+                  'تُسجَّل في المخزن المختار؛ اتركها فارغة إن لم يصل بعد',
+            ),
+            keyboardType: decimal,
+            validator: numberValidator(required: false),
+          ),
+        ],
+      ] else
+        Builder(
+          builder: (_) {
+            final where = [
+              for (final w in s.warehouses)
+                if (s.stockOf(existing.id, warehouseId: w.id) != 0)
+                  '${w.name}: ${fmt.number(s.stockOf(existing.id, warehouseId: w.id))}',
+            ];
+            return Text(
+              where.isEmpty
+                  ? 'غير موجود في أي مخزن حالياً'
+                  : 'موجود في: ${where.join('، ')}',
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            );
+          },
+        ),
+      TextFormField(
+        controller: cost,
+        decoration: const InputDecoration(labelText: 'سعر الشراء'),
+        keyboardType: decimal,
+        validator: numberValidator(),
+      ),
+      TextFormField(
+        controller: sale,
+        decoration: const InputDecoration(labelText: 'سعر البيع'),
+        keyboardType: decimal,
+        validator: numberValidator(),
+      ),
+      TextFormField(
+        controller: min,
+        decoration: const InputDecoration(
+          labelText: 'الحد الأدنى للتنبيه',
+          helperText: 'يظهر تنبيه عندما يصل الرصيد لهذه الكمية',
+        ),
+        keyboardType: decimal,
+        validator: numberValidator(required: false),
+      ),
+    ],
+    onSave: () async {
+      final product = Product(
+        id: existing?.id ?? newId(),
+        name: name.text.trim(),
+        code: code.text.trim(),
+        unit: unit.text.trim(),
+        costPrice: fmt.parseNumber(cost.text)!,
+        salePrice: fmt.parseNumber(sale.text)!,
+        minQty: fmt.parseNumber(min.text) ?? 0,
+        image: image,
+      );
+      await s.saveProduct(product);
+      final qty = fmt.parseNumber(openingQty.text) ?? 0;
+      if (existing == null && warehouseId != null && qty > 0) {
+        // «وارد - إضافة» لا يُنشئ مصروفاً: الكمية كانت موجودة قبل التطبيق.
+        await s.saveMove(
+          StockMove(
+            id: newId(),
+            type: MoveType.stockIn,
+            productId: product.id,
+            warehouseId: warehouseId!,
+            qty: qty,
+            unitPrice: product.costPrice,
+            date: DateTime.now(),
+            note: 'رصيد أول عند إضافة الصنف',
+          ),
+        );
+      }
+    },
+  );
+}
+
+// ---------------- تبويب المخازن ----------------
+
+class _WarehousesTab extends StatelessWidget {
+  const _WarehousesTab();
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    final month = Period.month(DateTime.now());
+    return ListView(
+      padding: pagePadding,
+      children: [
+        _Actions(
+          children: [
+            FilledButton.icon(
+              onPressed: () => showWarehouseForm(context),
+              icon: const Icon(Icons.add),
+              label: const Text('إضافة مخزن'),
+            ),
+          ],
+        ),
+        DataTableCard<Warehouse>(
+          columns: const [
+            'المخزن',
+            'الموقع',
+            'رأس المال',
+            'قيمة البضاعة',
+            'المتبقي من رأس المال',
+            'ربح هذا الشهر',
+            'الإيجار الشهري',
+            'الإيجار المدفوع هذا الشهر',
+            'أجور العمال هذا الشهر',
+            'الشركاء',
+            'أصناف متوفرة',
+          ],
+          items: s.warehouses,
+          emptyMessage: 'لم تتم إضافة مخازن بعد',
+          cells: (w) {
+            final value = s.stockValue(warehouseId: w.id);
+            final profit = s.warehouseProfit(w.id, month);
+            final paid = s.rentPaid(w.id, month);
+            return [
+              Text(w.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(w.location.isEmpty ? '-' : w.location),
+              Text(w.capital == 0 ? '-' : fmt.money(w.capital)),
+              Text(fmt.money(value)),
+              Text(
+                w.capital == 0 ? '-' : fmt.money(w.capital - value),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: w.capital - value < 0 ? AppColors.expense.last : null,
+                ),
+              ),
+              Text(
+                fmt.money(profit),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: profit >= 0
+                      ? AppColors.income.last
+                      : AppColors.expense.last,
+                ),
+              ),
+              Text(w.monthlyRent == 0 ? '-' : fmt.money(w.monthlyRent)),
+              Text(
+                w.monthlyRent == 0
+                    ? (paid == 0 ? '-' : fmt.money(paid))
+                    : paid >= w.monthlyRent
+                    ? '${fmt.money(paid)} ✓'
+                    : '${fmt.money(paid)} (باقي ${fmt.money(w.monthlyRent - paid)})',
+                style: TextStyle(
+                  color: w.monthlyRent > 0 && paid < w.monthlyRent
+                      ? AppColors.expense.last
+                      : null,
+                ),
+              ),
+              Text(() {
+                final labor = s.laborCost(w.id, month);
+                return labor == 0 ? '-' : fmt.money(labor);
+              }()),
+              DealPartners(scope: PartnerScope.warehouse, dealId: w.id),
+              Text(
+                '${s.products.where((p) => s.stockOf(p.id, warehouseId: w.id) > 0).length}',
+              ),
+            ];
+          },
+          extraActions: (w) => [
+            if (!isStockWorker)
+              TableAction(
+                tooltip: 'إضافة شريك في المخزن',
+                icon: Icons.person_add_alt_1,
+                color: AppColors.capital.last,
+                onTap: () => showPartnerForm(
+                  context,
+                  scope: PartnerScope.warehouse,
+                  dealId: w.id,
+                ),
+              ),
+            if (!isStockWorker)
+              TableAction(
+                tooltip: 'دفع أجرة عمال',
+                icon: Icons.groups_outlined,
+                color: AppColors.capital.last,
+                onTap: () => showLaborForm(
+                  context,
+                  place: LaborPlace.warehouse,
+                  refId: w.id,
+                ),
+              ),
+            if (!isStockWorker)
+              TableAction(
+                tooltip: 'دفع الإيجار',
+                icon: Icons.receipt_long_outlined,
+                color: AppColors.gold,
+                onTap: () => showPayRentForm(context, w),
+              ),
+          ],
+          onEdit: (w) => showWarehouseForm(context, existing: w),
+          onDelete: (w) async {
+            if (!await confirmDelete(context, w.name)) return;
+            if (!await s.deleteWarehouse(w.id) && context.mounted) {
+              _snack(context, 'لا يمكن حذف مخزن عليه حركات مخزون');
+            }
+          },
+        ),
+      ],
+    );
+  }
+}
+
+Future<void> showWarehouseForm(BuildContext context, {Warehouse? existing}) {
+  final s = context.read<AppState>();
+  final key = GlobalKey<FormState>();
+  final name = TextEditingController(text: existing?.name);
+  final location = TextEditingController(text: existing?.location);
+  final notes = TextEditingController(text: existing?.notes);
+  final capital = TextEditingController(
+    text: (existing?.capital ?? 0) == 0 ? '' : fmt.number(existing!.capital),
+  );
+  final rent = TextEditingController(
+    text: (existing?.monthlyRent ?? 0) == 0
+        ? ''
+        : fmt.number(existing!.monthlyRent),
+  );
+
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: existing == null ? 'إضافة مخزن' : 'تعديل المخزن',
+    fields: (_) => [
+      TextFormField(
+        controller: name,
+        decoration: const InputDecoration(labelText: 'اسم المخزن'),
+        validator: requiredText,
+      ),
+      TextFormField(
+        controller: location,
+        decoration: const InputDecoration(labelText: 'الموقع / العنوان'),
+      ),
+      TextFormField(
+        controller: capital,
+        decoration: const InputDecoration(
+          labelText: 'رأس مال المخزن',
+          helperText: 'المبلغ المخصص لبضاعة هذا المخزن',
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(required: false),
+      ),
+      TextFormField(
+        controller: rent,
+        decoration: const InputDecoration(
+          labelText: 'الإيجار الشهري',
+          helperText: 'اتركه فارغاً إذا كان المخزن ملكاً',
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(required: false),
+      ),
+      TextFormField(
+        controller: notes,
+        decoration: const InputDecoration(labelText: 'ملاحظات'),
+        maxLines: 2,
+      ),
+      if (existing != null && !isStockWorker)
+        ...dealPartnersFields(context, PartnerScope.warehouse, existing.id),
+    ],
+    onSave: () => s.saveWarehouse(
+      Warehouse(
+        id: existing?.id ?? newId(),
+        name: name.text.trim(),
+        location: location.text.trim(),
+        notes: notes.text.trim(),
+        capital: fmt.parseNumber(capital.text) ?? 0,
+        monthlyRent: fmt.parseNumber(rent.text) ?? 0,
+      ),
+    ),
+  );
+}
+
+/// دفع إيجار مخزن: يُسجَّل مصروف إيجار باسم المخزن.
+Future<void> showPayRentForm(BuildContext context, Warehouse w) {
+  final s = context.read<AppState>();
+  final key = GlobalKey<FormState>();
+  final amount = TextEditingController(
+    text: w.monthlyRent == 0 ? '' : fmt.number(w.monthlyRent),
+  );
+  var date = DateTime.now();
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'دفع إيجار ${w.name}',
+    fields: (setState) => [
+      TextFormField(
+        controller: amount,
+        autofocus: true,
+        decoration: const InputDecoration(labelText: 'المبلغ'),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(min: 0.01),
+      ),
+      DateField(
+        label: 'تاريخ الدفع',
+        value: date,
+        onChanged: (d) => setState(() => date = d),
+      ),
+    ],
+    onSave: () async {
+      await s.payWarehouseRent(w, fmt.parseNumber(amount.text)!, date);
+      if (context.mounted) _snack(context, 'تم تسجيل إيجار ${w.name}');
+    },
+  );
+}
+
+/// سعر في قائمة المخزون؛ الضغط عليه يفتح تعديل سعري الشراء والبيع للصنف.
+class _PriceCell extends StatelessWidget {
+  final Product product;
+  final double value;
+  const _PriceCell({required this.product, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = Text(
+      value == 0 ? 'أضف السعر' : fmt.money(value),
+      style: TextStyle(
+        color: value == 0 ? AppColors.expense.last : null,
+        fontWeight: value == 0 ? FontWeight.bold : null,
+      ),
+    );
+    if (isStockWorker) return text;
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => showPriceForm(context, product),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            text,
+            const SizedBox(width: 4),
+            Icon(
+              Icons.edit_outlined,
+              size: 16,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// تعديل سعري الشراء والبيع لصنف (من قائمة المخزون مباشرة).
+Future<void> showPriceForm(BuildContext context, Product p) {
+  final s = context.read<AppState>();
+  final key = GlobalKey<FormState>();
+  final cost = TextEditingController(
+    text: p.costPrice == 0 ? '' : fmt.number(p.costPrice),
+  );
+  final sale = TextEditingController(
+    text: p.salePrice == 0 ? '' : fmt.number(p.salePrice),
+  );
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'أسعار ${p.name}',
+    fields: (setState) => [
+      TextFormField(
+        controller: cost,
+        autofocus: true,
+        onChanged: (_) => setState(() {}),
+        decoration: const InputDecoration(labelText: 'سعر الشراء'),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(),
+      ),
+      TextFormField(
+        controller: sale,
+        onChanged: (_) => setState(() {}),
+        decoration: const InputDecoration(labelText: 'سعر البيع'),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(),
+      ),
+      Builder(
+        builder: (_) {
+          final c = fmt.parseNumber(cost.text) ?? 0;
+          final v = fmt.parseNumber(sale.text) ?? 0;
+          if (c <= 0 || v <= 0) return const SizedBox.shrink();
+          return Text(
+            'ربح الوحدة: ${fmt.money(v - c)}',
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: v >= c ? AppColors.income.last : AppColors.expense.last,
+            ),
+          );
+        },
+      ),
+    ],
+    onSave: () => s.saveProduct(
+      Product.fromJson({
+        ...p.toJson(),
+        'costPrice': fmt.parseNumber(cost.text)!,
+        'salePrice': fmt.parseNumber(sale.text)!,
+      }),
+    ),
+  );
+}
+
+/// تعديل الكمية المتوفرة من صنف في مخزن (بعد الجرد مثلاً).
+Future<void> showAdjustStockForm(
+  BuildContext context,
+  Product product, {
+  String? warehouseId,
+}) {
+  final s = context.read<AppState>();
+  if (s.warehouses.isEmpty) {
+    _snack(context, 'أضف مخزناً أولاً من تبويب «المخازن»');
+    return Future.value();
+  }
+  final key = GlobalKey<FormState>();
+  var warehouse = warehouseId ?? s.warehouses.first.id;
+  double current() => s.stockOf(product.id, warehouseId: warehouse);
+  final qty = TextEditingController(text: fmt.number(current()));
+  final person = TextEditingController();
+  final note = TextEditingController();
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'تعديل المتوفر: ${product.name}',
+    fields: (setState) {
+      final diff = (fmt.parseNumber(qty.text) ?? current()) - current();
+      return [
+        DropdownButtonFormField<String>(
+          initialValue: warehouse,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'المخزن'),
+          items: [
+            for (final w in s.warehouses)
+              DropdownMenuItem(value: w.id, child: Text(w.name)),
+          ],
+          onChanged: (v) => setState(() {
+            warehouse = v!;
+            qty.text = fmt.number(current());
+          }),
+        ),
+        Text(
+          'المتوفر الآن في هذا المخزن: ${fmt.number(current())} ${product.unit}',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        TextFormField(
+          controller: qty,
+          autofocus: true,
+          onChanged: (_) => setState(() {}),
+          decoration: InputDecoration(
+            labelText: 'الكمية المتوفرة الصحيحة',
+            suffixText: product.unit,
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          validator: numberValidator(min: 0),
+        ),
+        if (diff.abs() > 1e-9)
+          Text(
+            diff > 0
+                ? 'ستُضاف ${fmt.number(diff)} ${product.unit}'
+                : 'ستُنقص ${fmt.number(-diff)} ${product.unit}',
+            style: TextStyle(
+              color: diff > 0 ? AppColors.income.last : AppColors.expense.last,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        TextFormField(
+          controller: person,
+          decoration: const InputDecoration(labelText: 'المسؤول عن التعديل'),
+          validator: requiredText,
+        ),
+        TextFormField(
+          controller: note,
+          decoration: const InputDecoration(
+            labelText: 'السبب (جرد، تالف، خطأ في الإدخال...)',
+          ),
+        ),
+      ];
+    },
+    onSave: () async {
+      try {
+        await s.adjustStock(
+          productId: product.id,
+          warehouseId: warehouse,
+          newQty: fmt.parseNumber(qty.text)!,
+          person: person.text,
+          note: note.text,
+        );
+      } on StateError catch (e) {
+        if (context.mounted) _snack(context, e.message);
+      }
+    },
+  );
+}
+
+// ---------------- تبويب العارية ----------------
+
+/// العارية: «لنا» بضاعتنا عند أشخاص، و«علينا» بضاعة أشخاص عندنا.
+class _LoansTab extends StatefulWidget {
+  const _LoansTab();
+
+  @override
+  State<_LoansTab> createState() => _LoansTabState();
+}
+
+class _LoansTabState extends State<_LoansTab> {
+  bool _ours = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    final loans = s.outstandingLoans(ours: _ours);
+    final byPerson = <String, List<LoanBalance>>{};
+    for (final l in loans) {
+      (byPerson[l.person] ??= []).add(l);
+    }
+    double value(bool ours) => s
+        .outstandingLoans(ours: ours)
+        .fold<double>(
+          0,
+          (a, l) => a + l.qty * (s.productById(l.productId)?.costPrice ?? 0),
+        );
+    return ListView(
+      padding: pagePadding,
+      children: [
+        _Actions(
+          children: [
+            FilledButton.icon(
+              onPressed: () => showLendForm(context, ours: _ours),
+              icon: const Icon(Icons.add),
+              label: const Text('عارية جديدة'),
+            ),
+          ],
+        ),
+        StatGrid(
+          children: [
+            StatCard(
+              label: 'لنا: بضاعتنا عند الناس',
+              value: fmt.money(value(true)),
+              icon: Icons.call_made,
+              colors: AppColors.income,
+            ),
+            StatCard(
+              label: 'علينا: بضاعة الناس عندنا',
+              value: fmt.money(value(false)),
+              icon: Icons.call_received,
+              colors: AppColors.expense,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        SegmentedButton<bool>(
+          segments: [
+            ButtonSegment(
+              value: true,
+              icon: const Icon(Icons.call_made),
+              label: Text(
+                'لنا (${s.outstandingLoans(ours: true).map((l) => l.person).toSet().length})',
+              ),
+            ),
+            ButtonSegment(
+              value: false,
+              icon: const Icon(Icons.call_received),
+              label: Text(
+                'علينا (${s.outstandingLoans(ours: false).map((l) => l.person).toSet().length})',
+              ),
+            ),
+          ],
+          selected: {_ours},
+          onSelectionChanged: (v) => setState(() => _ours = v.first),
+        ),
+        const SizedBox(height: 12),
+        if (loans.isEmpty)
+          Card(
+            child: EmptyState(
+              message: _ours
+                  ? 'لا توجد بضاعة لنا عند أحد'
+                  : 'لا توجد بضاعة لأحد عندنا',
+            ),
+          ),
+        for (final e in byPerson.entries)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.person_outline),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _ours ? 'عند ${e.key}' : 'من ${e.key}',
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(),
+                  for (final l in e.value)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        '${s.productById(l.productId)?.name ?? 'صنف محذوف'}: '
+                        '${fmt.number(l.qty)} ${s.productById(l.productId)?.unit ?? ''}',
+                      ),
+                      subtitle: Text(
+                        '${s.warehouseById(l.warehouseId)?.name ?? '-'} • '
+                        'منذ ${fmt.date(l.since)} '
+                        '(${DateTime.now().difference(l.since).inDays} يوم)',
+                      ),
+                      trailing: FilledButton.tonalIcon(
+                        onPressed: () => showReturnLoanForm(context, l),
+                        icon: const Icon(Icons.assignment_return_outlined),
+                        label: Text(_ours ? 'استلام' : 'إعادة'),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// عارية جديدة بعدة أصناف: لنا (نعطي) أو علينا (نأخذ).
+Future<void> showLendForm(BuildContext context, {bool ours = true}) {
+  final s = context.read<AppState>();
+  if (s.products.isEmpty || s.warehouses.isEmpty) {
+    _snack(context, 'أضف مخزناً واحداً وصنفاً واحداً على الأقل أولاً');
+    return Future.value();
+  }
+  final key = GlobalKey<FormState>();
+  final person = TextEditingController();
+  final note = TextEditingController();
+  var mine = ours;
+  var warehouseId = s.warehouses.first.id;
+  var date = DateTime.now();
+  final lines = [(id: s.products.first.id, qty: TextEditingController())];
+  final people = {for (final l in s.outstandingLoans()) l.person}.toList();
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'عارية جديدة',
+    fields: (setState) => [
+      SegmentedButton<bool>(
+        segments: const [
+          ButtonSegment(
+            value: true,
+            icon: Icon(Icons.call_made),
+            label: Text('لنا: نعطي بضاعة'),
+          ),
+          ButtonSegment(
+            value: false,
+            icon: Icon(Icons.call_received),
+            label: Text('علينا: نأخذ بضاعة'),
+          ),
+        ],
+        selected: {mine},
+        onSelectionChanged: (v) => setState(() => mine = v.first),
+      ),
+      TextFormField(
+        controller: person,
+        decoration: InputDecoration(
+          labelText: mine ? 'من أخذ العارية' : 'من أعطانا العارية',
+        ),
+        validator: requiredText,
+      ),
+      if (people.isNotEmpty)
+        Wrap(
+          spacing: 6,
+          children: [
+            for (final p in people)
+              ActionChip(
+                label: Text(p),
+                onPressed: () => setState(() => person.text = p),
+              ),
+          ],
+        ),
+      DropdownButtonFormField<String>(
+        initialValue: warehouseId,
+        isExpanded: true,
+        decoration: InputDecoration(
+          labelText: mine ? 'من المخزن' : 'إلى المخزن',
+        ),
+        items: [
+          for (final w in s.warehouses)
+            DropdownMenuItem(value: w.id, child: Text(w.name)),
+        ],
+        onChanged: (v) => setState(() => warehouseId = v!),
+      ),
+      const Text('الأصناف', style: TextStyle(fontWeight: FontWeight.bold)),
+      for (final (i, l) in lines.indexed)
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: DropdownButtonFormField<String>(
+                key: ValueKey('loan$i${l.id}'),
+                initialValue: l.id,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'الصنف'),
+                items: [
+                  for (final p in s.products)
+                    DropdownMenuItem(
+                      value: p.id,
+                      child: Text(p.name, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (v) =>
+                    setState(() => lines[i] = (id: v!, qty: l.qty)),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
+              child: TextFormField(
+                controller: l.qty,
+                decoration: InputDecoration(
+                  labelText: 'الكمية',
+                  helperText: mine
+                      ? 'المتوفر ${fmt.number(s.stockOf(l.id, warehouseId: warehouseId))}'
+                      : null,
+                ),
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                validator: numberValidator(
+                  min: 0.001,
+                  max: mine ? s.stockOf(l.id, warehouseId: warehouseId) : null,
+                ),
+              ),
+            ),
+            if (lines.length > 1)
+              IconButton(
+                tooltip: 'إزالة',
+                icon: const Icon(Icons.close),
+                onPressed: () => setState(() => lines.removeAt(i)),
+              ),
+          ],
+        ),
+      Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: TextButton.icon(
+          onPressed: () => setState(
+            () => lines.add((
+              id: s.products.first.id,
+              qty: TextEditingController(),
+            )),
+          ),
+          icon: const Icon(Icons.add),
+          label: const Text('إضافة صنف'),
+        ),
+      ),
+      DateField(
+        label: 'التاريخ',
+        value: date,
+        onChanged: (d) => setState(() => date = d),
+      ),
+      TextFormField(
+        controller: note,
+        decoration: const InputDecoration(labelText: 'ملاحظات (الهاتف...)'),
+      ),
+    ],
+    onSave: () async {
+      final items = <String, double>{};
+      for (final l in lines) {
+        items[l.id] = (items[l.id] ?? 0) + (fmt.parseNumber(l.qty.text) ?? 0);
+      }
+      try {
+        await s.recordLoan(
+          person: person.text,
+          warehouseId: warehouseId,
+          items: items,
+          ours: mine,
+          date: date,
+          note: note.text,
+        );
+      } on StateError catch (e) {
+        if (context.mounted) _snack(context, e.message);
+      }
+    },
+  );
+}
+
+/// إرجاع عارية (كلها أو جزء منها): لنا تعود إلى المخزن، وعلينا تُعاد لصاحبها.
+Future<void> showReturnLoanForm(BuildContext context, LoanBalance l) {
+  final s = context.read<AppState>();
+  final key = GlobalKey<FormState>();
+  final qty = TextEditingController(text: fmt.number(l.qty));
+  final note = TextEditingController();
+  var date = DateTime.now();
+  final name = s.productById(l.productId)?.name ?? '';
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: l.ours
+        ? 'استلام عارية من ${l.person}'
+        : 'إعادة عارية إلى ${l.person}',
+    fields: (setState) => [
+      Text(
+        '$name • الباقي ${fmt.number(l.qty)} • '
+        '${s.warehouseById(l.warehouseId)?.name ?? ''}',
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+      TextFormField(
+        controller: qty,
+        autofocus: true,
+        decoration: InputDecoration(
+          labelText: l.ours ? 'الكمية المستلمة' : 'الكمية المُعادة',
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(min: 0.001, max: l.qty),
+      ),
+      DateField(
+        label: 'التاريخ',
+        value: date,
+        onChanged: (d) => setState(() => date = d),
+      ),
+      TextFormField(
+        controller: note,
+        decoration: const InputDecoration(labelText: 'ملاحظات'),
+      ),
+    ],
+    onSave: () async {
+      try {
+        await s.returnLoan(
+          person: l.person,
+          productId: l.productId,
+          warehouseId: l.warehouseId,
+          qty: fmt.parseNumber(qty.text)!,
+          ours: l.ours,
+          date: date,
+          note: note.text,
+        );
+      } on StateError catch (e) {
+        if (context.mounted) _snack(context, e.message);
+      }
+    },
+  );
+}

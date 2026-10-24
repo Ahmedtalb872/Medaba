@@ -1,0 +1,586 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../models/invoice.dart';
+import '../models/models.dart';
+import '../models/open_order.dart';
+import '../state/app_state.dart';
+import '../theme/app_colors.dart';
+import '../utils/format.dart' as fmt;
+import '../widgets/common.dart';
+import 'invoices_screen.dart';
+
+void _snack(BuildContext context, String msg) =>
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+
+/// قسم الفواتير المفتوحة في صفحة الفواتير.
+class OpenOrdersSection extends StatelessWidget {
+  const OpenOrdersSection({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    final orders = s.openOrders;
+    final active = orders.where((o) => !s.isOrderComplete(o)).length;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              alignment: WrapAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'الفواتير المفتوحة',
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'زبون يشتري كمية ويتركها في المخزن، ويأخذ منها على '
+                      'دفعات • $active جارية',
+                    ),
+                  ],
+                ),
+                FilledButton.icon(
+                  onPressed: () => showOpenOrderForm(context),
+                  icon: const Icon(Icons.inventory_outlined),
+                  label: const Text('فاتورة مفتوحة جديدة'),
+                ),
+              ],
+            ),
+            if (orders.isNotEmpty) const Divider(height: 24),
+            for (final o in orders) _OrderTile(order: o),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OrderTile extends StatelessWidget {
+  final OpenOrder order;
+  const _OrderTile({required this.order});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    final o = order;
+    final done = s.isOrderComplete(o);
+    final taken = o.lines.fold<double>(
+      0,
+      (a, l) => a + l.qty - s.remainingInOrder(o, l.productId),
+    );
+    final progress = o.totalQty == 0 ? 0.0 : taken / o.totalQty;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => OpenOrderPage(orderId: o.id)),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${o.number} • ${o.partyName}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  if (done)
+                    Chip(
+                      label: const Text('مكتملة'),
+                      backgroundColor: AppColors.ok.first.withValues(
+                        alpha: 0.15,
+                      ),
+                    )
+                  else
+                    FilledButton.tonalIcon(
+                      onPressed: () => showPickupForm(context, o),
+                      icon: const Icon(Icons.outbox_outlined),
+                      label: const Text('أخذ دفعة'),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              LinearProgressIndicator(
+                value: progress.clamp(0, 1),
+                minHeight: 8,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'أخذ ${fmt.number(taken)} من ${fmt.number(o.totalQty)} • '
+                'الباقي ${fmt.number(o.totalQty - taken)} • '
+                'المدفوع ${fmt.money(s.orderPaid(o))} من ${fmt.money(o.total)}',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// تفاصيل الفاتورة المفتوحة: الأصناف (المأخوذ والباقي) والدفعات.
+class OpenOrderPage extends StatelessWidget {
+  final String orderId;
+  const OpenOrderPage({super.key, required this.orderId});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    final o = s.orderById(orderId);
+    if (o == null) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: const Center(child: Text('حُذفت الفاتورة المفتوحة')),
+      );
+    }
+    final pickups = s.pickupsOf(o.id);
+    final done = s.isOrderComplete(o);
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('فاتورة مفتوحة ${o.number}'),
+        actions: [
+          IconButton(
+            tooltip: 'تعديل',
+            icon: const Icon(Icons.edit_outlined),
+            onPressed: () => showOpenOrderForm(context, existing: o),
+          ),
+          IconButton(
+            tooltip: 'حذف',
+            icon: const Icon(Icons.delete_outline),
+            onPressed: () async {
+              if (!await confirmDelete(context, o.number)) return;
+              if (await s.deleteOpenOrder(o.id)) {
+                if (context.mounted) Navigator.pop(context);
+              } else if (context.mounted) {
+                _snack(
+                  context,
+                  'أخذ الزبون منها دفعات؛ احذف فواتير الدفعات أولاً',
+                );
+              }
+            },
+          ),
+        ],
+      ),
+      floatingActionButton: done
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => showPickupForm(context, o),
+              icon: const Icon(Icons.outbox_outlined),
+              label: const Text('أخذ دفعة'),
+            ),
+      body: ListView(
+        padding: pagePadding.copyWith(top: 16, bottom: 96),
+        children: [
+          StatGrid(
+            children: [
+              StatCard(
+                label: 'قيمة الفاتورة',
+                value: fmt.money(o.total),
+                icon: Icons.receipt_long_outlined,
+                colors: AppColors.capital,
+              ),
+              StatCard(
+                label: 'قيمة ما أخذه',
+                value: fmt.money(s.orderTakenValue(o)),
+                icon: Icons.outbox_outlined,
+                colors: AppColors.stock,
+              ),
+              StatCard(
+                label: 'المدفوع',
+                value: fmt.money(s.orderPaid(o)),
+                icon: Icons.payments_outlined,
+                colors: AppColors.income,
+              ),
+              StatCard(
+                label: 'الباقي من القيمة',
+                value: fmt.money(o.total - s.orderPaid(o)),
+                icon: Icons.hourglass_bottom,
+                colors: AppColors.expense,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SectionCard(
+            title: o.partyName,
+            icon: Icons.person_outline,
+            child: Text(
+              [
+                if (o.partyPhone.isNotEmpty) o.partyPhone,
+                'المخزن: ${s.warehouseById(o.warehouseId)?.name ?? '-'}',
+                'التاريخ: ${fmt.date(o.date)}',
+                if (o.notes.isNotEmpty) o.notes,
+              ].join(' • '),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SectionCard(
+            title: 'الأصناف',
+            icon: Icons.inventory_2_outlined,
+            child: Column(
+              children: [
+                for (final l in o.lines)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      s.productById(l.productId)?.name ?? 'صنف محذوف',
+                    ),
+                    subtitle: Text(
+                      'اشترى ${fmt.number(l.qty)} • السعر ${fmt.money(l.unitPrice)} '
+                      '• أخذ ${fmt.number(l.qty - s.remainingInOrder(o, l.productId))}',
+                    ),
+                    trailing: Text(
+                      'الباقي ${fmt.number(s.remainingInOrder(o, l.productId))}',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SectionCard(
+            title: 'الدفعات المأخوذة',
+            icon: Icons.history,
+            child: pickups.isEmpty
+                ? const Text('لم يأخذ الزبون شيئاً بعد')
+                : Column(
+                    children: [
+                      for (final i in pickups)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text('${i.number} • ${fmt.date(i.date)}'),
+                          subtitle: Text(
+                            [
+                              for (final l in i.lines)
+                                '${s.productById(l.productId)?.name}: '
+                                    '${fmt.number(l.qty)}',
+                              if ((s.debtForInvoice(i.id)?.remaining ?? 0) > 0)
+                                'باقي عليه ${fmt.money(s.debtForInvoice(i.id)!.remaining)}',
+                            ].join(' • '),
+                          ),
+                          trailing: Text(
+                            fmt.money(i.total),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          onTap: () => openInvoicePdf(context, i),
+                        ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LineDraft {
+  String productId;
+  final TextEditingController qty;
+  final TextEditingController price;
+  _LineDraft(this.productId, {String qty = '', String price = ''})
+    : qty = TextEditingController(text: qty),
+      price = TextEditingController(text: price);
+}
+
+/// إنشاء فاتورة مفتوحة أو تعديلها: الزبون، المخزن، والأصناف بكمياتها وسعرها.
+Future<void> showOpenOrderForm(BuildContext context, {OpenOrder? existing}) {
+  final s = context.read<AppState>();
+  if (s.warehouses.isEmpty || s.products.isEmpty) {
+    _snack(context, 'أضف مخزناً وصنفاً أولاً');
+    return Future.value();
+  }
+  final key = GlobalKey<FormState>();
+  final party = TextEditingController(text: existing?.partyName);
+  final phone = TextEditingController(text: existing?.partyPhone);
+  final notes = TextEditingController(text: existing?.notes);
+  var warehouse = existing?.warehouseId ?? s.warehouses.first.id;
+  var date = existing?.date ?? DateTime.now();
+  final number = existing?.number ?? s.nextOrderNumber();
+  final lines = [
+    for (final l in existing?.lines ?? const <InvoiceLine>[])
+      _LineDraft(
+        l.productId,
+        qty: fmt.number(l.qty),
+        price: fmt.number(l.unitPrice),
+      ),
+  ];
+  if (lines.isEmpty) {
+    final p = s.products.first;
+    lines.add(_LineDraft(p.id, price: fmt.number(p.salePrice)));
+  }
+
+  double free(String productId) =>
+      s.stockOf(productId, warehouseId: warehouse) -
+      s.reservedQty(
+        productId,
+        warehouseId: warehouse,
+        excludeOrderId: existing?.id,
+      ) +
+      (existing == null ? 0 : s.takenFromOrder(existing.id, productId));
+
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: existing == null
+        ? 'فاتورة مفتوحة جديدة $number'
+        : 'تعديل الفاتورة المفتوحة $number',
+    fields: (setState) => [
+      TextFormField(
+        controller: party,
+        decoration: const InputDecoration(labelText: 'الزبون'),
+        validator: requiredText,
+      ),
+      TextFormField(
+        controller: phone,
+        decoration: const InputDecoration(labelText: 'هاتف الزبون'),
+        keyboardType: TextInputType.phone,
+        textDirection: TextDirection.ltr,
+      ),
+      DropdownButtonFormField<String>(
+        initialValue: warehouse,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          labelText: 'المخزن الذي تبقى فيه البضاعة',
+        ),
+        items: [
+          for (final w in s.warehouses)
+            DropdownMenuItem(value: w.id, child: Text(w.name)),
+        ],
+        onChanged: (v) => setState(() => warehouse = v!),
+      ),
+      DateField(
+        label: 'التاريخ',
+        value: date,
+        onChanged: (d) => setState(() => date = d),
+      ),
+      const Text('الأصناف', style: TextStyle(fontWeight: FontWeight.bold)),
+      for (final (i, l) in lines.indexed)
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    key: ValueKey('p$i${l.productId}'),
+                    initialValue: l.productId,
+                    isExpanded: true,
+                    decoration: const InputDecoration(labelText: 'الصنف'),
+                    items: [
+                      for (final p in s.products)
+                        DropdownMenuItem(
+                          value: p.id,
+                          child: Text(p.name, overflow: TextOverflow.ellipsis),
+                        ),
+                    ],
+                    onChanged: (v) => setState(() {
+                      l.productId = v!;
+                      final p = s.productById(v);
+                      if (p != null) l.price.text = fmt.number(p.salePrice);
+                    }),
+                  ),
+                ),
+                if (lines.length > 1)
+                  IconButton(
+                    tooltip: 'إزالة',
+                    icon: const Icon(Icons.close),
+                    onPressed: () => setState(() => lines.removeAt(i)),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: l.qty,
+                    decoration: InputDecoration(
+                      labelText: 'الكمية',
+                      helperText: 'المتوفر: ${fmt.number(free(l.productId))}',
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    validator: numberValidator(min: 0.001),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    controller: l.price,
+                    decoration: const InputDecoration(labelText: 'سعر الوحدة'),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    validator: numberValidator(min: 0.01),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: TextButton.icon(
+          onPressed: () => setState(() {
+            final p = s.products.first;
+            lines.add(_LineDraft(p.id, price: fmt.number(p.salePrice)));
+          }),
+          icon: const Icon(Icons.add),
+          label: const Text('إضافة صنف'),
+        ),
+      ),
+      TextFormField(
+        controller: notes,
+        decoration: const InputDecoration(labelText: 'ملاحظات'),
+      ),
+    ],
+    onSave: () async {
+      final merged = <String, InvoiceLine>{};
+      for (final l in lines) {
+        final qty = fmt.parseNumber(l.qty.text) ?? 0;
+        final price = fmt.parseNumber(l.price.text) ?? 0;
+        final prev = merged[l.productId];
+        merged[l.productId] = InvoiceLine(
+          productId: l.productId,
+          qty: qty + (prev?.qty ?? 0),
+          unitPrice: price,
+        );
+      }
+      try {
+        await s.saveOpenOrder(
+          OpenOrder(
+            id: existing?.id ?? newId(),
+            number: number,
+            date: date,
+            partyName: party.text.trim(),
+            partyPhone: phone.text.trim(),
+            warehouseId: warehouse,
+            lines: merged.values.toList(),
+            notes: notes.text.trim(),
+          ),
+        );
+      } on StateError catch (e) {
+        if (context.mounted) _snack(context, e.message);
+      }
+    },
+  );
+}
+
+/// الزبون يأخذ دفعة: كم أخذ من كل صنف وكم دفع. تُنشأ فاتورة بيع بها.
+Future<void> showPickupForm(BuildContext context, OpenOrder o) {
+  final s = context.read<AppState>();
+  final key = GlobalKey<FormState>();
+  final qty = {for (final l in o.lines) l.productId: TextEditingController()};
+  final paid = TextEditingController();
+  final notes = TextEditingController();
+  var paidTouched = false;
+  var date = DateTime.now();
+
+  double value() => o.lines.fold(
+    0,
+    (a, l) => a + (fmt.parseNumber(qty[l.productId]!.text) ?? 0) * l.unitPrice,
+  );
+
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'أخذ دفعة من ${o.number} • ${o.partyName}',
+    fields: (setState) => [
+      for (final l in o.lines)
+        TextFormField(
+          controller: qty[l.productId],
+          onChanged: (_) => setState(() {
+            if (!paidTouched) paid.text = fmt.number(value());
+          }),
+          decoration: InputDecoration(
+            labelText:
+                'الكمية المأخوذة: ${s.productById(l.productId)?.name ?? ''}',
+            helperText:
+                'الباقي له ${fmt.number(s.remainingInOrder(o, l.productId))} '
+                '• السعر ${fmt.money(l.unitPrice)}',
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          validator: (v) {
+            final n = fmt.parseNumber(v ?? '');
+            if (n == null || n == 0) return null;
+            if (n < 0) return 'كمية غير صحيحة';
+            if (n > s.remainingInOrder(o, l.productId) + 1e-9) {
+              return 'أكثر من الباقي له';
+            }
+            return null;
+          },
+        ),
+      Text(
+        'قيمة هذه الدفعة: ${fmt.money(value())}',
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
+      TextFormField(
+        controller: paid,
+        onChanged: (_) => setState(() => paidTouched = true),
+        decoration: InputDecoration(
+          labelText: 'المبلغ المدفوع',
+          helperText: () {
+            final rest = value() - (fmt.parseNumber(paid.text) ?? 0);
+            return rest > 0.0001
+                ? 'الباقي ${fmt.money(rest)} يُسجَّل ديناً على الزبون'
+                : 'مدفوعة كاملة';
+          }(),
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(required: false),
+      ),
+      DateField(
+        label: 'التاريخ',
+        value: date,
+        onChanged: (d) => setState(() => date = d),
+      ),
+      TextFormField(
+        controller: notes,
+        decoration: const InputDecoration(labelText: 'ملاحظات'),
+      ),
+    ],
+    onSave: () async {
+      try {
+        final inv = await s.pickupFromOrder(
+          o.id,
+          quantities: {
+            for (final e in qty.entries)
+              e.key: fmt.parseNumber(e.value.text) ?? 0,
+          },
+          paid: fmt.parseNumber(paid.text) ?? 0,
+          date: date,
+          notes: notes.text,
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('سُجّلت الدفعة في فاتورة البيع ${inv.number}'),
+              action: SnackBarAction(
+                label: 'عرض الفاتورة',
+                onPressed: () => openInvoicePdf(context, inv),
+              ),
+            ),
+          );
+        }
+      } on StateError catch (e) {
+        if (context.mounted) _snack(context, e.message);
+      }
+    },
+  );
+}
