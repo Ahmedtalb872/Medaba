@@ -147,7 +147,11 @@ void main() {
     expect(w.jobs.single.agreed, 500000);
 
     final jobs = find.byTooltip('الأعمال والمراحل');
-    await tester.ensureVisible(jobs);
+    await tester.scrollUntilVisible(
+      jobs,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(jobs);
     await tester.pumpAndSettle();
@@ -170,6 +174,44 @@ void main() {
     expect(find.textContaining('الأساس'), findsOneWidget);
     expect(find.textContaining('الباقي 300,000'), findsOneWidget);
     expect(find.text('فاتورة العمل PDF'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('contract jobs and their invoice show on the workers page', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(380, 820);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final job = WorkJob(id: 'j', title: 'بناء منزل', agreed: 500000, start: d);
+    await s.saveJob('w', job);
+    await s.payJobStage(
+      worker(),
+      job,
+      stage: 'الأساس',
+      amount: 200000,
+      date: d,
+    );
+
+    await tester.pumpWidget(MedabaApp(state: s));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.menu));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('العمال').last);
+    await tester.pumpAndSettle();
+
+    final row = find.text('بناء منزل • الشيخ');
+    await tester.scrollUntilVisible(
+      row,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('المقاولون وأعمالهم'), findsOneWidget);
+    expect(find.textContaining('الباقي 300,000'), findsOneWidget);
+    await tester.ensureVisible(find.text('الفاتورة'));
+    await tester.pumpAndSettle();
+    expect(find.text('دفع مرحلة'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

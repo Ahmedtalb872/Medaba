@@ -218,7 +218,7 @@ class _JobCard extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '${fmt.date(t.date)} • ${_stageName(t.note, j, worker)}',
+                                '${fmt.date(t.date)} • ${stageName(t.note, j, worker)}',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -273,24 +273,7 @@ class _JobCard extends StatelessWidget {
                     label: const Text('دفع مرحلة منتهية'),
                   ),
                 OutlinedButton.icon(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => _JobPdfPage(
-                        worker: worker,
-                        job: j,
-                        place: place,
-                        company: s.company,
-                        stages: [
-                          for (final t in stages)
-                            (
-                              date: t.date,
-                              stage: _stageName(t.note, j, worker),
-                              amount: t.amount,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
+                  onPressed: () => openJobInvoice(context, worker, j),
                   icon: const Icon(Icons.picture_as_pdf_outlined),
                   label: const Text('فاتورة العمل PDF'),
                 ),
@@ -301,10 +284,6 @@ class _JobCard extends StatelessWidget {
       ),
     );
   }
-
-  static String _stageName(String note, WorkJob j, Worker w) => note
-      .replaceFirst('مرحلة ', '')
-      .replaceFirst(' - ${j.title} - ${w.name}', '');
 
   Widget _amount(String label, double v, Color color) => Expanded(
     child: Column(
@@ -318,6 +297,172 @@ class _JobCard extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// اسم المرحلة من بيان معاملتها.
+String stageName(String note, WorkJob j, Worker w) => note
+    .replaceFirst('مرحلة ', '')
+    .replaceFirst(' - ${j.title} - ${w.name}', '');
+
+/// يفتح فاتورة العمل الواحدة (PDF) بكل مراحلها.
+Future<void> openJobInvoice(BuildContext context, Worker w, WorkJob j) {
+  final s = context.read<AppState>();
+  return Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => _JobPdfPage(
+        worker: w,
+        job: j,
+        place: s.jobPlaceName(j),
+        company: s.company,
+        stages: [
+          for (final t in s.jobPayments(j.id))
+            (date: t.date, stage: stageName(t.note, j, w), amount: t.amount),
+        ],
+      ),
+    ),
+  );
+}
+
+/// قسم المقاولين في صفحة العمال: كل عمل بمبلغه والمدفوع والباقي،
+/// مع دفع مرحلة وفاتورة العمل مباشرة.
+class ContractJobsCard extends StatelessWidget {
+  /// يفتح نموذج إضافة عامل بنوع «مقاولة».
+  final VoidCallback onNewContractor;
+  const ContractJobsCard({super.key, required this.onNewContractor});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    final jobs = [
+      for (final w in s.workers.where((w) => w.contract))
+        for (final j in w.jobs.reversed) (w, j),
+    ];
+    final left = jobs.fold<double>(
+      0,
+      (a, e) => a + s.jobLeft(e.$2).clamp(0, double.infinity),
+    );
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'المقاولون وأعمالهم',
+                      style: Theme.of(context).textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      'عمل بمبلغ متفق عليه يُدفع على مراحل • '
+                      'الباقي لهم ${fmt.money(left)}',
+                      style: TextStyle(color: muted),
+                    ),
+                  ],
+                ),
+                FilledButton.icon(
+                  onPressed: onNewContractor,
+                  icon: const Icon(Icons.construction_outlined),
+                  label: const Text('مقاول جديد'),
+                ),
+              ],
+            ),
+            if (jobs.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  'لا يوجد مقاولون بعد. اضغط «مقاول جديد» واكتب العمل '
+                  'والمبلغ المتفق عليه.',
+                  style: TextStyle(color: muted),
+                ),
+              ),
+            for (final (w, j) in jobs) ...[
+              const Divider(height: 24),
+              _ContractJobRow(worker: w, job: j),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ContractJobRow extends StatelessWidget {
+  final Worker worker;
+  final WorkJob job;
+  const _ContractJobRow({required this.worker, required this.job});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    final j = job;
+    final paid = s.jobPaid(j.id);
+    final left = j.agreed - paid;
+    final done = left <= 1e-9;
+    final stages = s.jobPayments(j.id).length;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => openWorkerJobs(context, worker),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${j.title} • ${worker.name}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+              if (done)
+                Chip(
+                  label: const Text('اكتمل'),
+                  backgroundColor: AppColors.ok.first.withValues(alpha: 0.15),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          LinearProgressIndicator(
+            value: j.agreed <= 0 ? 0 : (paid / j.agreed).clamp(0, 1),
+            minHeight: 8,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'المتفق عليه ${fmt.money(j.agreed)} • المدفوع ${fmt.money(paid)} '
+            '($stages مرحلة) • الباقي ${fmt.money(left)}',
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (!done)
+                FilledButton.tonalIcon(
+                  onPressed: () => showStageForm(context, worker, j),
+                  icon: const Icon(Icons.task_alt),
+                  label: const Text('دفع مرحلة'),
+                ),
+              OutlinedButton.icon(
+                onPressed: () => openJobInvoice(context, worker, j),
+                icon: const Icon(Icons.picture_as_pdf_outlined),
+                label: const Text('الفاتورة'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// إضافة عمل لعامل المقاولة أو تعديله: الاسم، المبلغ المتفق عليه، والمكان.

@@ -40,6 +40,10 @@ class WorkersScreen extends StatelessWidget {
         ),
         const LaborPaymentsCard(),
         const SizedBox(height: 16),
+        ContractJobsCard(
+          onNewContractor: () => showWorkerForm(context, contract: true),
+        ),
+        const SizedBox(height: 16),
         if (s.workers.isEmpty)
           const Card(
             child: EmptyState(
@@ -470,7 +474,11 @@ class WorkerCardPage extends StatelessWidget {
   );
 }
 
-Future<void> showWorkerForm(BuildContext context, {Worker? existing}) {
+Future<void> showWorkerForm(
+  BuildContext context, {
+  Worker? existing,
+  bool contract = false,
+}) {
   final s = context.read<AppState>();
   final key = GlobalKey<FormState>();
   final name = TextEditingController(text: existing?.name);
@@ -485,7 +493,7 @@ Future<void> showWorkerForm(BuildContext context, {Worker? existing}) {
   var active = existing?.active ?? true;
   // 0 راتب شهري، 1 يومية، 2 مقاولة.
   var kind = existing == null
-      ? 0
+      ? (contract ? 2 : 0)
       : existing.contract
       ? 2
       : existing.daily
@@ -497,7 +505,9 @@ Future<void> showWorkerForm(BuildContext context, {Worker? existing}) {
   return showFormDialog(
     context: context,
     formKey: key,
-    title: existing == null ? 'إضافة عامل' : 'تعديل بيانات العامل',
+    title: existing == null
+        ? (contract ? 'إضافة مقاول' : 'إضافة عامل')
+        : 'تعديل بيانات العامل',
     fields: (setState) => [
       Row(
         children: [
