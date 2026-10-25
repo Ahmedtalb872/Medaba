@@ -4,8 +4,9 @@ import 'dart:typed_data';
 import 'package:printing/printing.dart';
 import 'package:web/web.dart' as web;
 
-/// في المتصفح: على الهاتف تُفتح قائمة المشاركة بالملف وحده (بدون رابط blob
-/// الذي كان يظهر مع الفاتورة في واتساب)، وعلى الحاسوب يُنزَّل الملف.
+/// في المتصفح: على الهاتف والجهاز اللوحي تُفتح قائمة المشاركة بالملف وحده
+/// (بدون رابط blob الذي كان يظهر مع الفاتورة في واتساب)، وعلى الحاسوب
+/// يُنزَّل الملف.
 Future<void> sharePdfFile(Uint8List bytes, String filename) async {
   if (_isPhone) {
     final file = web.File(
@@ -35,7 +36,20 @@ Future<void> sharePdfFile(Uint8List bytes, String filename) async {
   await Printing.sharePdf(bytes: bytes, filename: filename);
 }
 
-bool get _isPhone => RegExp(
-  'Android|iPhone|iPad|iPod|Mobile',
-  caseSensitive: false,
-).hasMatch(web.window.navigator.userAgent);
+/// هاتف أو جهاز لوحي. الأجهزة اللوحية تفتح المواقع غالباً بوضع الحاسوب
+/// فلا يظهر نوعها في userAgent، فنعتمد أيضاً على شاشة اللمس.
+bool get _isPhone {
+  final nav = web.window.navigator;
+  if (RegExp(
+    'Android|iPhone|iPad|iPod|Mobile',
+    caseSensitive: false,
+  ).hasMatch(nav.userAgent)) {
+    return true;
+  }
+  try {
+    return nav.maxTouchPoints > 0 &&
+        web.window.matchMedia('(pointer: coarse)').matches;
+  } catch (_) {
+    return false;
+  }
+}

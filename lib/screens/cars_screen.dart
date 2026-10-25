@@ -996,8 +996,8 @@ class _CarPdfPage extends StatelessWidget {
         Padding(
           padding: const EdgeInsetsDirectional.only(end: 8),
           child: FilledButton.icon(
-            icon: const Icon(Icons.download),
-            label: const Text('تنزيل PDF'),
+            icon: const Icon(Icons.share_outlined),
+            label: const Text('إرسال / تنزيل'),
             onPressed: () async => sharePdfFile(await _build(), fileName),
           ),
         ),
@@ -1016,7 +1016,7 @@ class _CarPdfPage extends StatelessWidget {
           padding: EdgeInsets.all(24),
           child: Text(
             'تعذّر عرض المعاينة في هذا المتصفح.\n'
-            'استخدم زر «تنزيل PDF» أو «طباعة» في الأعلى.',
+            'استخدم زر «إرسال / تنزيل» أو «طباعة» في الأعلى.',
             textAlign: TextAlign.center,
           ),
         ),
