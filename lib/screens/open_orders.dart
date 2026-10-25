@@ -151,6 +151,33 @@ class OpenOrderPage extends StatelessWidget {
     }
     final pickups = s.pickupsOf(o.id);
     final done = s.isOrderComplete(o);
+    final paid = s.orderPaid(o);
+    final payments = s.orderPayments(o);
+    final taken = o.lines.fold<double>(
+      0,
+      (a, l) => a + l.qty - s.remainingInOrder(o, l.productId),
+    );
+    String name(String id) => s.productById(id)?.name ?? 'صنف محذوف';
+    // الوحدة تُكتب إذا كانت كل الأصناف بنفس الوحدة.
+    final units = {for (final l in o.lines) s.productById(l.productId)?.unit};
+    String qty(double v) => units.length == 1 && units.first != null
+        ? '${fmt.number(v)} ${units.first}'
+        : fmt.number(v);
+    // المدفوع بعد كل دفعة، والمتبقي من كل صنف بعد كل أخذ.
+    final paidUntil = <double>[];
+    for (final p in payments) {
+      paidUntil.add((paidUntil.lastOrNull ?? 0) + p.amount);
+    }
+    final leftAfter = <Map<String, double>>[];
+    final left = {
+      for (final pid in o.lines.map((l) => l.productId)) pid: o.qtyOf(pid),
+    };
+    for (final i in pickups) {
+      for (final l in i.lines) {
+        left[l.productId] = (left[l.productId] ?? 0) - l.qty;
+      }
+      leftAfter.add({...left});
+    }
     return Scaffold(
       appBar: AppBar(
         title: Text('فاتورة مفتوحة ${o.number}'),
@@ -190,27 +217,39 @@ class OpenOrderPage extends StatelessWidget {
           StatGrid(
             children: [
               StatCard(
-                label: 'قيمة الفاتورة',
+                label: 'المبلغ الكلي',
                 value: fmt.money(o.total),
                 icon: Icons.receipt_long_outlined,
                 colors: AppColors.capital,
               ),
               StatCard(
-                label: 'قيمة ما أخذه',
-                value: fmt.money(s.orderTakenValue(o)),
-                icon: Icons.outbox_outlined,
-                colors: AppColors.stock,
-              ),
-              StatCard(
                 label: 'المدفوع',
-                value: fmt.money(s.orderPaid(o)),
+                value: fmt.money(paid),
                 icon: Icons.payments_outlined,
                 colors: AppColors.income,
               ),
               StatCard(
-                label: 'الباقي من القيمة',
-                value: fmt.money(o.total - s.orderPaid(o)),
+                label: 'الباقي من المبلغ',
+                value: fmt.money(o.total - paid),
                 icon: Icons.hourglass_bottom,
+                colors: AppColors.loss,
+              ),
+              StatCard(
+                label: 'الكمية الكلية',
+                value: qty(o.totalQty),
+                icon: Icons.inventory_2_outlined,
+                colors: AppColors.capital,
+              ),
+              StatCard(
+                label: 'المأخوذ',
+                value: qty(taken),
+                icon: Icons.outbox_outlined,
+                colors: AppColors.stock,
+              ),
+              StatCard(
+                label: 'المتبقي في المخزن',
+                value: qty(o.totalQty - taken),
+                icon: Icons.warehouse_outlined,
                 colors: AppColors.expense,
               ),
             ],
@@ -224,6 +263,7 @@ class OpenOrderPage extends StatelessWidget {
                 if (o.partyPhone.isNotEmpty) o.partyPhone,
                 'المخزن: ${s.warehouseById(o.warehouseId)?.name ?? '-'}',
                 'التاريخ: ${fmt.date(o.date)}',
+                'قيمة ما أخذه: ${fmt.money(s.orderTakenValue(o))}',
                 if (o.notes.isNotEmpty) o.notes,
               ].join(' • '),
             ),
@@ -237,15 +277,13 @@ class OpenOrderPage extends StatelessWidget {
                 for (final l in o.lines)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      s.productById(l.productId)?.name ?? 'صنف محذوف',
-                    ),
+                    title: Text(name(l.productId)),
                     subtitle: Text(
-                      'اشترى ${fmt.number(l.qty)} • السعر ${fmt.money(l.unitPrice)} '
+                      'الأصلية ${fmt.number(l.qty)} • السعر ${fmt.money(l.unitPrice)} '
                       '• أخذ ${fmt.number(l.qty - s.remainingInOrder(o, l.productId))}',
                     ),
                     trailing: Text(
-                      'الباقي ${fmt.number(s.remainingInOrder(o, l.productId))}',
+                      'المتبقي ${fmt.number(s.remainingInOrder(o, l.productId))}',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -254,29 +292,48 @@ class OpenOrderPage extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           SectionCard(
-            title: 'الدفعات المأخوذة',
+            title: 'سجل الدفع',
+            icon: Icons.payments_outlined,
+            child: payments.isEmpty
+                ? const Text('لم يدفع الزبون شيئاً بعد')
+                : Column(
+                    children: [
+                      for (final (n, p) in payments.indexed)
+                        _HistoryTile(
+                          index: n + 1,
+                          title: '${fmt.date(p.date)} • ${p.source}',
+                          lines: [
+                            'المدفوع حتى الآن ${fmt.money(paidUntil[n])}',
+                            'الباقي ${fmt.money(o.total - paidUntil[n])}',
+                          ],
+                          amount: fmt.money(p.amount),
+                          color: AppColors.income.last,
+                        ),
+                    ],
+                  ),
+          ),
+          const SizedBox(height: 12),
+          SectionCard(
+            title: 'سجل الأخذ من الكمية',
             icon: Icons.history,
             child: pickups.isEmpty
                 ? const Text('لم يأخذ الزبون شيئاً بعد')
                 : Column(
                     children: [
-                      for (final i in pickups)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: Text('${i.number} • ${fmt.date(i.date)}'),
-                          subtitle: Text(
-                            [
-                              for (final l in i.lines)
-                                '${s.productById(l.productId)?.name}: '
-                                    '${fmt.number(l.qty)}',
-                              if ((s.debtForInvoice(i.id)?.remaining ?? 0) > 0)
-                                'باقي عليه ${fmt.money(s.debtForInvoice(i.id)!.remaining)}',
-                            ].join(' • '),
-                          ),
-                          trailing: Text(
-                            fmt.money(i.total),
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
+                      for (final (n, i) in pickups.indexed)
+                        _HistoryTile(
+                          index: n + 1,
+                          title: '${fmt.date(i.date)} • ${i.number}',
+                          lines: [
+                            for (final l in i.lines)
+                              '${name(l.productId)}: أخذ ${fmt.number(l.qty)} '
+                                  'من ${fmt.number(o.qtyOf(l.productId))} '
+                                  '← بقي ${fmt.number(leftAfter[n][l.productId] ?? 0)}',
+                            if ((s.debtForInvoice(i.id)?.remaining ?? 0) > 0)
+                              'باقي عليه ${fmt.money(s.debtForInvoice(i.id)!.remaining)}',
+                          ],
+                          amount: fmt.money(i.total),
+                          color: AppColors.stock.last,
                           onTap: () => openInvoicePdf(context, i),
                         ),
                     ],
@@ -286,6 +343,45 @@ class OpenOrderPage extends StatelessWidget {
       ),
     );
   }
+}
+
+/// سطر مرقّم في سجل الدفع أو سجل الأخذ.
+class _HistoryTile extends StatelessWidget {
+  final int index;
+  final String title;
+  final List<String> lines;
+  final String amount;
+  final Color color;
+  final VoidCallback? onTap;
+  const _HistoryTile({
+    required this.index,
+    required this.title,
+    required this.lines,
+    required this.amount,
+    required this.color,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    contentPadding: EdgeInsets.zero,
+    onTap: onTap,
+    leading: CircleAvatar(
+      radius: 16,
+      backgroundColor: color.withValues(alpha: 0.12),
+      child: Text(
+        '$index',
+        style: TextStyle(color: color, fontWeight: FontWeight.bold),
+      ),
+    ),
+    title: Text(title),
+    subtitle: Text(lines.join('\n')),
+    isThreeLine: lines.length > 1,
+    trailing: Text(
+      amount,
+      style: TextStyle(fontWeight: FontWeight.bold, color: color),
+    ),
+  );
 }
 
 class _LineDraft {

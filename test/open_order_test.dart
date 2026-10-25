@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:medaba/data/storage.dart';
 import 'package:medaba/main.dart';
+import 'package:medaba/models/debt.dart';
 import 'package:medaba/models/invoice.dart';
 import 'package:medaba/models/inventory.dart';
 import 'package:medaba/models/open_order.dart';
+import 'package:medaba/screens/open_orders.dart';
 import 'package:medaba/state/app_state.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   late AppState s;
@@ -163,6 +166,53 @@ void main() {
     expect(s.pickupsOf(o.id), hasLength(1));
     expect(s.remainingInOrder(o, 'p'), 800);
     expect(s.debtForInvoice(s.pickupsOf(o.id).single.id), isNull);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the open invoice page lists every payment and every pickup', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 2400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await s.saveOpenOrder(order());
+    // أخذ 200 ودفع ثمنها كاملاً، ثم أخذ 300 ودفع نصفها وسدّد الباقي لاحقاً.
+    await s.pickupFromOrder(
+      'o',
+      quantities: {'p': 200},
+      paid: 28000,
+      date: day,
+    );
+    final second = await s.pickupFromOrder(
+      'o',
+      quantities: {'p': 300},
+      paid: 20000,
+      date: day.add(const Duration(days: 2)),
+    );
+    await s.addDebtPayment(
+      s.debtForInvoice(second.id)!.id,
+      DebtPayment(amount: 22000, date: day.add(const Duration(days: 5))),
+    );
+
+    final pays = s.orderPayments(s.orderById('o')!);
+    expect(pays.map((p) => p.amount), [28000, 20000, 22000]);
+    expect(s.orderPaid(s.orderById('o')!), 70000);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider.value(
+          value: s,
+          child: const OpenOrderPage(orderId: 'o'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('المبلغ الكلي'), findsOneWidget);
+    expect(find.text('الكمية الكلية'), findsOneWidget);
+    expect(find.text('سجل الدفع'), findsOneWidget);
+    expect(find.textContaining('المدفوع حتى الآن 70,000'), findsOneWidget);
+    expect(find.textContaining('أخذ 200 من 1,000 ← بقي 800'), findsOneWidget);
+    expect(find.textContaining('أخذ 300 من 1,000 ← بقي 500'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

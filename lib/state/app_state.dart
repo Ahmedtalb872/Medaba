@@ -53,6 +53,9 @@ typedef DealStatement = ({
   List<Partner> partners,
 });
 
+/// دفعة مالية من زبون فاتورة مفتوحة.
+typedef OrderPayment = ({DateTime date, double amount, String source});
+
 typedef LoanBalance = ({
   bool ours,
   String person,
@@ -1493,8 +1496,37 @@ class AppState extends ChangeNotifier {
 
   /// فواتير البيع (الدفعات) المسحوبة من فاتورة مفتوحة، الأقدم أولاً.
   List<Invoice> pickupsOf(String orderId) =>
-      _invoices.where((i) => i.openOrderId == orderId).toList()
-        ..sort((a, b) => a.date.compareTo(b.date));
+      _invoices.where((i) => i.openOrderId == orderId).toList()..sort(
+        (a, b) => a.date != b.date
+            ? a.date.compareTo(b.date)
+            : a.number.compareTo(b.number),
+      );
+
+  /// كل ما دفعه الزبون في فاتورة مفتوحة، بالترتيب: ما دفعه عند أخذ كل دفعة،
+  /// ثم ما سدّده لاحقاً من دين تلك الدفعات.
+  List<OrderPayment> orderPayments(OpenOrder o) {
+    final out = <OrderPayment>[];
+    for (final i in pickupsOf(o.id)) {
+      final debt = debtForInvoice(i.id);
+      final atPickup = i.total - (debt?.amount ?? 0);
+      if (atPickup > 1e-9) {
+        out.add((
+          date: i.date,
+          amount: atPickup,
+          source: 'عند أخذ ${i.number}',
+        ));
+      }
+      for (final p in debt?.payments ?? const <DebtPayment>[]) {
+        out.add((
+          date: p.date,
+          amount: p.amount,
+          source:
+              'تسديد دين ${i.number}${p.note.isEmpty ? '' : ' • ${p.note}'}',
+        ));
+      }
+    }
+    return out..sort((a, b) => a.date.compareTo(b.date));
+  }
 
   /// ما أخذه الزبون من صنف في فاتورة مفتوحة.
   double takenFromOrder(
