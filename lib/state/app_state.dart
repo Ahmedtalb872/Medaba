@@ -54,7 +54,13 @@ typedef DealStatement = ({
 });
 
 /// دفعة مالية من زبون فاتورة مفتوحة.
-typedef OrderPayment = ({DateTime date, double amount, String source});
+/// [advanceId] للدفعة المقدمة (يمكن حذفها)، و null لما دُفع عند الأخذ.
+typedef OrderPayment = ({
+  DateTime date,
+  double amount,
+  String source,
+  String? advanceId,
+});
 
 typedef LoanBalance = ({
   bool ours,
@@ -1339,6 +1345,12 @@ class AppState extends ChangeNotifier {
     if (inv.debt < 0 || inv.debt > inv.total + 0.0001) {
       throw StateError('مبلغ الدين يجب أن يكون بين 0 وإجمالي الفاتورة');
     }
+    if (inv.debt + inv.prepaid > inv.total + 0.0001) {
+      throw StateError(
+        'دُفع ${fmt.number(inv.prepaid)} من هذه الفاتورة مقدماً، '
+        'فلا يمكن أن يقل المدفوع عن ذلك',
+      );
+    }
     final linked = debtForInvoice(inv.id);
     if (linked != null && linked.paid > inv.debt + 0.0001) {
       throw StateError(
@@ -1431,11 +1443,13 @@ class AppState extends ChangeNotifier {
       category: inv.type == InvoiceType.sale
           ? TxCategory.sales
           : TxCategory.supplies,
-      amount: inv.total,
+      // المدفوع مقدماً دخل الحسابات يوم دُفع.
+      amount: inv.total - inv.prepaid,
       date: inv.date,
       note: [
         '${inv.type.label} ${inv.number}',
         if (inv.partyName.isNotEmpty) inv.partyName,
+        if (inv.prepaid > 0) 'منها ${fmt.number(inv.prepaid)} مدفوعة مقدماً',
       ].join(' - '),
     );
     _upsert(_transactions, tx, (e) => e.id);
@@ -1505,15 +1519,24 @@ class AppState extends ChangeNotifier {
   /// كل ما دفعه الزبون في فاتورة مفتوحة، بالترتيب: ما دفعه عند أخذ كل دفعة،
   /// ثم ما سدّده لاحقاً من دين تلك الدفعات.
   List<OrderPayment> orderPayments(OpenOrder o) {
-    final out = <OrderPayment>[];
+    final out = <OrderPayment>[
+      for (final t in orderAdvances(o.id))
+        (
+          date: t.date,
+          amount: t.amount,
+          source: t.note.replaceFirst(' - ${o.partyName}', ''),
+          advanceId: t.id,
+        ),
+    ];
     for (final i in pickupsOf(o.id)) {
       final debt = debtForInvoice(i.id);
-      final atPickup = i.total - (debt?.amount ?? 0);
+      final atPickup = i.total - i.prepaid - (debt?.amount ?? 0);
       if (atPickup > 1e-9) {
         out.add((
           date: i.date,
           amount: atPickup,
           source: 'عند أخذ ${i.number}',
+          advanceId: null,
         ));
       }
       for (final p in debt?.payments ?? const <DebtPayment>[]) {
@@ -1522,6 +1545,7 @@ class AppState extends ChangeNotifier {
           amount: p.amount,
           source:
               'تسديد دين ${i.number}${p.note.isEmpty ? '' : ' • ${p.note}'}',
+          advanceId: null,
         ));
       }
     }
@@ -1548,8 +1572,70 @@ class AppState extends ChangeNotifier {
       o.lines.every((l) => remainingInOrder(o, l.productId) <= 1e-9);
 
   /// المدفوع من قيمة الفاتورة المفتوحة (مجموع الدفعات بعد ديونها).
-  double orderPaid(OpenOrder o) => pickupsOf(o.id)
-      .fold(0, (s, i) => s + i.total - (debtForInvoice(i.id)?.remaining ?? 0));
+  double orderPaid(OpenOrder o) =>
+      orderAdvances(o.id).fold<double>(0, (s, t) => s + t.amount) +
+      pickupsOf(o.id).fold(
+        0,
+        (s, i) =>
+            s + i.total - i.prepaid - (debtForInvoice(i.id)?.remaining ?? 0),
+      );
+
+  /// المبالغ التي دفعها الزبون مقدماً في فاتورة مفتوحة (قبل أن يأخذ).
+  List<Transaction> orderAdvances(String orderId) =>
+      _transactions
+          .where((t) => t.refId == orderId && t.category == TxCategory.sales)
+          .toList()
+        ..sort((a, b) => a.date.compareTo(b.date));
+
+  /// رصيد الزبون من المدفوع مقدماً الذي لم يُستعمل بعد في أخذ بضاعة.
+  double orderCredit(String orderId) =>
+      orderAdvances(orderId).fold<double>(0, (s, t) => s + t.amount) -
+      pickupsOf(orderId).fold<double>(0, (s, i) => s + i.prepaid);
+
+  /// يسجّل مبلغاً دفعه الزبون مقدماً، ويُخصم من قيمة ما يأخذه لاحقاً.
+  Future<void> addOrderAdvance(
+    String orderId, {
+    required double amount,
+    required DateTime date,
+    String note = '',
+  }) async {
+    final o = orderById(orderId);
+    if (o == null) throw StateError('الفاتورة المفتوحة غير موجودة');
+    if (amount <= 0) throw StateError('اكتب المبلغ المدفوع');
+    final left = o.total - orderPaid(o);
+    if (amount > left + 1e-9) {
+      throw StateError('الباقي من مبلغ الفاتورة ${fmt.money(left)} فقط');
+    }
+    _transactions.add(
+      Transaction(
+        id: newId(),
+        category: TxCategory.sales,
+        amount: amount,
+        date: date,
+        note: [
+          'دفعة مقدمة ${o.number} - ${o.partyName}',
+          if (note.trim().isNotEmpty) note.trim(),
+        ].join(' - '),
+        refId: o.id,
+      ),
+    );
+    notifyListeners();
+    await _saveTx();
+  }
+
+  /// يحذف دفعة مقدمة، إلا إذا استُعملت في بضاعة أخذها الزبون.
+  Future<void> deleteOrderAdvance(String orderId, String txId) async {
+    final t = orderAdvances(orderId).where((t) => t.id == txId).firstOrNull;
+    if (t == null) return;
+    if (orderCredit(orderId) < t.amount - 1e-9) {
+      throw StateError(
+        'استُعمل هذا المبلغ في بضاعة أخذها الزبون؛ احذف تلك الفاتورة أولاً',
+      );
+    }
+    _transactions.removeWhere((x) => x.id == txId);
+    notifyListeners();
+    await _saveTx();
+  }
 
   /// قيمة ما أخذه الزبون حتى الآن.
   double orderTakenValue(OpenOrder o) =>
@@ -1635,7 +1721,7 @@ class AppState extends ChangeNotifier {
 
   /// يُرفض حذف فاتورة مفتوحة أخذ الزبون منها (احذف دفعاتها أولاً).
   Future<bool> deleteOpenOrder(String id) async {
-    if (pickupsOf(id).isNotEmpty) return false;
+    if (pickupsOf(id).isNotEmpty || orderAdvances(id).isNotEmpty) return false;
     _orders.removeWhere((o) => o.id == id);
     notifyListeners();
     await _saveOrders();
@@ -1664,6 +1750,8 @@ class AppState extends ChangeNotifier {
     ];
     if (lines.isEmpty) throw StateError('اكتب الكمية التي أخذها الزبون');
     final total = lines.fold<double>(0, (s, l) => s + l.total);
+    // يُخصم أولاً من المدفوع مقدماً، ثم يُدفع الباقي أو يصبح ديناً.
+    final prepaid = orderCredit(o.id).clamp(0.0, total);
     final inv = Invoice(
       id: newId(),
       type: InvoiceType.sale,
@@ -1677,8 +1765,9 @@ class AppState extends ChangeNotifier {
         'دفعة من الفاتورة المفتوحة ${o.number}',
         if (notes.trim().isNotEmpty) notes.trim(),
       ].join(' - '),
-      debt: (total - paid).clamp(0.0, total),
+      debt: (total - prepaid - paid).clamp(0.0, total - prepaid),
       openOrderId: o.id,
+      prepaid: prepaid,
     );
     await saveInvoice(inv);
     return invoiceById(inv.id)!;

@@ -152,6 +152,7 @@ class OpenOrderPage extends StatelessWidget {
     final pickups = s.pickupsOf(o.id);
     final done = s.isOrderComplete(o);
     final paid = s.orderPaid(o);
+    final credit = s.orderCredit(o.id);
     final payments = s.orderPayments(o);
     final taken = o.lines.fold<double>(
       0,
@@ -197,7 +198,8 @@ class OpenOrderPage extends StatelessWidget {
               } else if (context.mounted) {
                 _snack(
                   context,
-                  'أخذ الزبون منها دفعات؛ احذف فواتير الدفعات أولاً',
+                  'أخذ الزبون منها أو دفع مقدماً؛ احذف فواتير الدفعات '
+                  'والمبالغ المدفوعة أولاً',
                 );
               }
             },
@@ -294,23 +296,69 @@ class OpenOrderPage extends StatelessWidget {
           SectionCard(
             title: 'سجل الدفع',
             icon: Icons.payments_outlined,
-            child: payments.isEmpty
-                ? const Text('لم يدفع الزبون شيئاً بعد')
-                : Column(
-                    children: [
-                      for (final (n, p) in payments.indexed)
-                        _HistoryTile(
-                          index: n + 1,
-                          title: '${fmt.date(p.date)} • ${p.source}',
-                          lines: [
-                            'المدفوع حتى الآن ${fmt.money(paidUntil[n])}',
-                            'الباقي ${fmt.money(o.total - paidUntil[n])}',
-                          ],
-                          amount: fmt.money(p.amount),
-                          color: AppColors.income.last,
-                        ),
-                    ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (o.total - paid > 1e-9)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: FilledButton.icon(
+                      onPressed: () => showOrderPaymentForm(context, o),
+                      icon: const Icon(Icons.add_card_outlined),
+                      label: const Text('تسجيل دفعة مالية'),
+                    ),
                   ),
+                payments.isEmpty
+                    ? const Text('لم يدفع الزبون شيئاً بعد')
+                    : Column(
+                        children: [
+                          if (credit > 1e-9)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text(
+                                'رصيد مدفوع مقدماً لم يأخذ به بضاعة بعد: '
+                                '${fmt.money(credit)} • يُخصم تلقائياً عند الأخذ',
+                                style: TextStyle(
+                                  color: AppColors.income.last,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          for (final (n, p) in payments.indexed)
+                            _HistoryTile(
+                              index: n + 1,
+                              title: '${fmt.date(p.date)} • ${p.source}',
+                              lines: [
+                                'المدفوع حتى الآن ${fmt.money(paidUntil[n])}',
+                                'الباقي ${fmt.money(o.total - paidUntil[n])}',
+                              ],
+                              amount: fmt.money(p.amount),
+                              color: AppColors.income.last,
+                              onDelete: p.advanceId == null
+                                  ? null
+                                  : () async {
+                                      if (!await confirmDelete(
+                                        context,
+                                        'دفعة ${fmt.money(p.amount)}',
+                                      )) {
+                                        return;
+                                      }
+                                      try {
+                                        await s.deleteOrderAdvance(
+                                          o.id,
+                                          p.advanceId!,
+                                        );
+                                      } on StateError catch (e) {
+                                        if (context.mounted) {
+                                          _snack(context, e.message);
+                                        }
+                                      }
+                                    },
+                            ),
+                        ],
+                      ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
           SectionCard(
@@ -353,6 +401,7 @@ class _HistoryTile extends StatelessWidget {
   final String amount;
   final Color color;
   final VoidCallback? onTap;
+  final VoidCallback? onDelete;
   const _HistoryTile({
     required this.index,
     required this.title,
@@ -360,26 +409,63 @@ class _HistoryTile extends StatelessWidget {
     required this.amount,
     required this.color,
     this.onTap,
+    this.onDelete,
   });
 
   @override
-  Widget build(BuildContext context) => ListTile(
-    contentPadding: EdgeInsets.zero,
+  Widget build(BuildContext context) => InkWell(
     onTap: onTap,
-    leading: CircleAvatar(
-      radius: 16,
-      backgroundColor: color.withValues(alpha: 0.12),
-      child: Text(
-        '$index',
-        style: TextStyle(color: color, fontWeight: FontWeight.bold),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 15,
+            backgroundColor: color.withValues(alpha: 0.12),
+            child: Text(
+              '$index',
+              style: TextStyle(color: color, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                for (final l in lines)
+                  Text(
+                    l,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                amount,
+                style: TextStyle(fontWeight: FontWeight.bold, color: color),
+              ),
+              if (onDelete != null)
+                IconButton(
+                  tooltip: 'حذف',
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.delete_outline, size: 20),
+                  onPressed: onDelete,
+                ),
+            ],
+          ),
+        ],
       ),
-    ),
-    title: Text(title),
-    subtitle: Text(lines.join('\n')),
-    isThreeLine: lines.length > 1,
-    trailing: Text(
-      amount,
-      style: TextStyle(fontWeight: FontWeight.bold, color: color),
     ),
   );
 }
@@ -587,11 +673,16 @@ Future<void> showPickupForm(BuildContext context, OpenOrder o) {
   final notes = TextEditingController();
   var paidTouched = false;
   var date = DateTime.now();
+  final credit = s.orderCredit(o.id);
 
   double value() => o.lines.fold(
     0,
     (a, l) => a + (fmt.parseNumber(qty[l.productId]!.text) ?? 0) * l.unitPrice,
   );
+
+  /// ما يُخصم من المدفوع مقدماً، وما بقي ليُدفع الآن.
+  double fromCredit() => credit.clamp(0.0, value());
+  double due() => value() - fromCredit();
 
   return showFormDialog(
     context: context,
@@ -602,7 +693,7 @@ Future<void> showPickupForm(BuildContext context, OpenOrder o) {
         TextFormField(
           controller: qty[l.productId],
           onChanged: (_) => setState(() {
-            if (!paidTouched) paid.text = fmt.number(value());
+            if (!paidTouched) paid.text = fmt.number(due());
           }),
           decoration: InputDecoration(
             labelText:
@@ -626,13 +717,19 @@ Future<void> showPickupForm(BuildContext context, OpenOrder o) {
         'قيمة هذه الدفعة: ${fmt.money(value())}',
         style: const TextStyle(fontWeight: FontWeight.bold),
       ),
+      if (credit > 1e-9)
+        Text(
+          'يُخصم من المدفوع مقدماً: ${fmt.money(fromCredit())} '
+          '(الرصيد ${fmt.money(credit)}) • الباقي للدفع ${fmt.money(due())}',
+          style: TextStyle(color: AppColors.income.last),
+        ),
       TextFormField(
         controller: paid,
         onChanged: (_) => setState(() => paidTouched = true),
         decoration: InputDecoration(
           labelText: 'المبلغ المدفوع',
           helperText: () {
-            final rest = value() - (fmt.parseNumber(paid.text) ?? 0);
+            final rest = due() - (fmt.parseNumber(paid.text) ?? 0);
             return rest > 0.0001
                 ? 'الباقي ${fmt.money(rest)} يُسجَّل ديناً على الزبون'
                 : 'مدفوعة كاملة';
@@ -674,6 +771,60 @@ Future<void> showPickupForm(BuildContext context, OpenOrder o) {
             ),
           );
         }
+      } on StateError catch (e) {
+        if (context.mounted) _snack(context, e.message);
+      }
+    },
+  );
+}
+
+/// يسجّل مبلغاً دفعه الزبون في الفاتورة المفتوحة دون أن يأخذ بضاعة.
+Future<void> showOrderPaymentForm(BuildContext context, OpenOrder o) {
+  final s = context.read<AppState>();
+  final key = GlobalKey<FormState>();
+  final amount = TextEditingController();
+  final note = TextEditingController();
+  var date = DateTime.now();
+  final left = o.total - s.orderPaid(o);
+  return showFormDialog(
+    context: context,
+    formKey: key,
+    title: 'دفعة مالية من ${o.partyName} • ${o.number}',
+    fields: (setState) => [
+      Text('الباقي من مبلغ الفاتورة: ${fmt.money(left)}'),
+      TextFormField(
+        controller: amount,
+        decoration: InputDecoration(
+          labelText: 'المبلغ المدفوع',
+          suffixIcon: TextButton(
+            onPressed: () => amount.text = fmt.number(left),
+            child: const Text('الكل'),
+          ),
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validator: numberValidator(min: 0.01, max: left),
+      ),
+      DateField(
+        label: 'التاريخ',
+        value: date,
+        onChanged: (d) => setState(() => date = d),
+      ),
+      TextFormField(
+        controller: note,
+        decoration: const InputDecoration(
+          labelText: 'ملاحظة (نقداً، تحويل Bankily...)',
+        ),
+      ),
+      const Text('يُخصم هذا المبلغ تلقائياً من قيمة ما يأخذه الزبون لاحقاً.'),
+    ],
+    onSave: () async {
+      try {
+        await s.addOrderAdvance(
+          o.id,
+          amount: fmt.parseNumber(amount.text) ?? 0,
+          date: date,
+          note: note.text,
+        );
       } on StateError catch (e) {
         if (context.mounted) _snack(context, e.message);
       }

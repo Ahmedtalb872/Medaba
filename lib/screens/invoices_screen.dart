@@ -713,6 +713,7 @@ class _InvoiceEditorPageState extends State<InvoiceEditorPage> {
     notes: _notes.text.trim(),
     txId: widget.existing?.txId,
     openOrderId: widget.existing?.openOrderId,
+    prepaid: widget.existing?.prepaid ?? 0,
     partialDelivery: _isSale && _partial,
     deliveries: _isSale ? _deliveries : const [],
   );

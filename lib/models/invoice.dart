@@ -110,6 +110,10 @@ class Invoice {
   /// الفاتورة المفتوحة التي سُحبت منها هذه الكمية، إن وُجدت.
   final String? openOrderId;
 
+  /// ما غطّاه المبلغ المدفوع مقدماً في الفاتورة المفتوحة من قيمة هذه الفاتورة.
+  /// دخل الحسابات يوم دُفع، فلا يُحسب هنا مرة ثانية.
+  final double prepaid;
+
   /// الزبون دفع ثمن البضاعة كلها لكنه يأخذها على دفعات.
   /// عند تفعيله تُحسب الكمية المأخوذة من [deliveries]، وإلا فكلها مأخوذة.
   final bool partialDelivery;
@@ -131,6 +135,7 @@ class Invoice {
     this.txId,
     this.debt = 0,
     this.openOrderId,
+    this.prepaid = 0,
     this.partialDelivery = false,
     this.deliveries = const [],
   });
@@ -174,6 +179,7 @@ class Invoice {
     txId: txId,
     debt: debt,
     openOrderId: openOrderId,
+    prepaid: prepaid,
     partialDelivery: partialDelivery,
     deliveries: deliveries,
   );
@@ -192,6 +198,7 @@ class Invoice {
     'txId': txId,
     'debt': debt,
     if (openOrderId != null) 'openOrderId': openOrderId,
+    if (prepaid > 0) 'prepaid': prepaid,
     if (partialDelivery) 'partialDelivery': true,
     if (deliveries.isNotEmpty)
       'deliveries': [for (final d in deliveries) d.toJson()],
@@ -214,6 +221,7 @@ class Invoice {
     txId: j['txId'] as String?,
     debt: (j['debt'] as num?)?.toDouble() ?? 0,
     openOrderId: j['openOrderId'] as String?,
+    prepaid: (j['prepaid'] as num?)?.toDouble() ?? 0,
     partialDelivery: j['partialDelivery'] as bool? ?? false,
     deliveries: [
       for (final d in j['deliveries'] as List? ?? [])

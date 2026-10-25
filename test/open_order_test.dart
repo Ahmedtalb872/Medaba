@@ -215,4 +215,77 @@ void main() {
     expect(find.textContaining('أخذ 300 من 1,000 ← بقي 500'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  test('an advance payment is used up by later pickups', () async {
+    await s.saveOpenOrder(order()); // 1000 × 140 = 140000
+    await s.addOrderAdvance('o', amount: 50000, date: day);
+    var o = s.orderById('o')!;
+    expect(s.orderPaid(o), 50000);
+    expect(s.orderCredit('o'), 50000);
+    // المبلغ المقدم دخل الحسابات يوم دُفع.
+    expect(s.transactions.where((t) => t.refId == 'o').single.amount, 50000);
+
+    // أخذ 200 (28000): تُخصم كلها من المقدم، ولا يدفع شيئاً.
+    final a = await s.pickupFromOrder('o', quantities: {'p': 200}, paid: 0);
+    expect(a.prepaid, 28000);
+    expect(s.debtForInvoice(a.id), isNull);
+    expect(s.transactions.firstWhere((t) => t.id == a.txId).amount, 0);
+    expect(s.orderCredit('o'), 22000);
+
+    // أخذ 300 (42000): 22000 من المقدم، دفع 10000، والباقي 10000 دين.
+    final b = await s.pickupFromOrder('o', quantities: {'p': 300}, paid: 10000);
+    expect(b.prepaid, 22000);
+    expect(s.debtForInvoice(b.id)!.amount, 10000);
+    expect(s.orderCredit('o'), 0);
+    o = s.orderById('o')!;
+    expect(s.orderPaid(o), 60000);
+    expect(s.orderPayments(o).map((p) => p.amount), [50000, 10000]);
+
+    // المقدم المستعمل لا يُحذف، ولا الفاتورة المفتوحة.
+    final adv = s.orderAdvances('o').single;
+    expect(() => s.deleteOrderAdvance('o', adv.id), throwsStateError);
+    expect(await s.deleteOpenOrder('o'), isFalse);
+    // ولا يُدفع أكثر من الباقي من المبلغ.
+    expect(
+      () => s.addOrderAdvance('o', amount: 90000, date: day),
+      throwsStateError,
+    );
+  });
+
+  testWidgets('a payment is recorded from the open invoice page on a phone', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await s.saveOpenOrder(order());
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider.value(
+          value: s,
+          child: const OpenOrderPage(orderId: 'o'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final button = find.text('تسجيل دفعة مالية');
+    await tester.scrollUntilVisible(
+      button,
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'المبلغ المدفوع'),
+      '30000',
+    );
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+    expect(s.orderCredit('o'), 30000);
+    expect(find.textContaining('رصيد مدفوع مقدماً'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
