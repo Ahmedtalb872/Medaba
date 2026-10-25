@@ -605,7 +605,7 @@ class AppState extends ChangeNotifier {
 
   /// مجموع الرواتب الشهرية (بدون عمال اليومية).
   double get monthlyPayroll => _workers
-      .where((w) => w.active && !w.daily)
+      .where((w) => w.active && !w.daily && !w.contract)
       .fold(0, (s, w) => s + w.monthlySalary);
 
   /// يسجّل صرف راتب الشهر (أو أجرة يوم للعامل اليومي) كمعاملة مصروف.
@@ -619,6 +619,160 @@ class AppState extends ChangeNotifier {
       personId: w.id,
     ),
   );
+
+  // ---------- عمال المقاولة ----------
+
+  /// مراحل عمل مدفوعة، بالترتيب.
+  List<Transaction> jobPayments(String jobId) =>
+      _transactions
+          .where((t) => t.refId == jobId && t.category == TxCategory.salary)
+          .toList()
+        ..sort((a, b) => a.date.compareTo(b.date));
+
+  double jobPaid(String jobId) =>
+      jobPayments(jobId).fold(0, (s, t) => s + t.amount);
+
+  double jobLeft(WorkJob j) => j.agreed - jobPaid(j.id);
+
+  /// الباقي لعامل المقاولة في كل أعماله.
+  double workerJobsLeft(Worker w) =>
+      w.jobs.fold(0, (s, j) => s + jobLeft(j).clamp(0, double.infinity));
+
+  /// اسم مكان العمل (قطعة، سيارة) أو null.
+  String? jobPlaceName(WorkJob j) => laborPlaceName(
+    LaborPlace.values.where((p) => p.name == j.place).firstOrNull ??
+        LaborPlace.other,
+    j.refId,
+  );
+
+  /// يضيف عملاً لعامل المقاولة أو يعدّله.
+  Future<void> saveJob(String workerId, WorkJob job) async {
+    final w = _workers.where((x) => x.id == workerId).firstOrNull;
+    if (w == null) throw StateError('العامل غير موجود');
+    if (job.title.trim().isEmpty) throw StateError('اكتب اسم العمل');
+    final paid = jobPaid(job.id);
+    if (job.agreed + 1e-9 < paid) {
+      throw StateError(
+        'دُفع ${fmt.money(paid)} لهذا العمل، فلا يمكن أن يقل المبلغ عن ذلك',
+      );
+    }
+    final old = w.jobById(job.id);
+    if (old != null &&
+        (old.place != job.place || old.refId != job.refId) &&
+        paid > 0) {
+      throw StateError('لا يمكن تغيير مكان العمل بعد دفع مراحل منه');
+    }
+    _upsert(
+      _workers,
+      w.withJobs(
+        [
+          for (final x in w.jobs)
+            if (x.id != job.id) x,
+          job,
+        ]..sort((a, b) => a.start.compareTo(b.start)),
+      ),
+      (e) => e.id,
+    );
+    notifyListeners();
+    await _saveWorkers();
+  }
+
+  /// يحذف عملاً لم تُدفع منه أي مرحلة.
+  Future<void> deleteJob(String workerId, String jobId) async {
+    final w = _workers.where((x) => x.id == workerId).firstOrNull;
+    if (w == null) return;
+    if (jobPayments(jobId).isNotEmpty) {
+      throw StateError('دُفعت مراحل من هذا العمل؛ احذفها أولاً');
+    }
+    _upsert(
+      _workers,
+      w.withJobs([
+        for (final x in w.jobs)
+          if (x.id != jobId) x,
+      ]),
+      (e) => e.id,
+    );
+    notifyListeners();
+    await _saveWorkers();
+  }
+
+  /// يدفع لعامل المقاولة مبلغ مرحلة انتهت من العمل.
+  Future<void> payJobStage(
+    Worker w,
+    WorkJob j, {
+    required String stage,
+    required double amount,
+    required DateTime date,
+  }) async {
+    if (amount <= 0) throw StateError('اكتب المبلغ');
+    final left = jobLeft(j);
+    if (amount > left + 1e-9) {
+      throw StateError('الباقي من المبلغ المتفق عليه ${fmt.money(left)} فقط');
+    }
+    final label = 'مرحلة ${stage.trim()} - ${j.title} - ${w.name}';
+    _transactions.add(
+      Transaction(
+        id: newId(),
+        category: TxCategory.salary,
+        amount: amount,
+        date: date,
+        note: label,
+        personId: w.id,
+        refId: j.id,
+      ),
+    );
+    _placeCost(j, label, amount, date, add: true);
+    notifyListeners();
+    await Future.wait([_saveTx(), _saveCars(), _savePlots()]);
+  }
+
+  /// يحذف مرحلة مدفوعة، ويزيلها من تكاليف القطعة أو السيارة.
+  Future<void> deleteJobStage(WorkJob j, String txId) async {
+    final t = jobPayments(j.id).where((t) => t.id == txId).firstOrNull;
+    if (t == null) return;
+    _transactions.removeWhere((x) => x.id == txId);
+    _placeCost(j, t.note, t.amount, t.date, add: false);
+    notifyListeners();
+    await Future.wait([_saveTx(), _saveCars(), _savePlots()]);
+  }
+
+  /// يضيف مبلغ المرحلة لتكاليف القطعة أو السيارة، أو يزيله منها.
+  void _placeCost(
+    WorkJob j,
+    String label,
+    double amount,
+    DateTime date, {
+    required bool add,
+  }) {
+    bool same(String l, double a, DateTime d) =>
+        l == label && a == amount && d == date;
+    switch (j.place) {
+      case 'car':
+        final car = carById(j.refId ?? '');
+        if (car == null) return;
+        final costs = [...car.costs];
+        if (add) {
+          costs.add(CarCost(label, amount, date));
+        } else {
+          final i = costs.indexWhere((c) => same(c.label, c.amount, c.date));
+          if (i < 0) return;
+          costs.removeAt(i);
+        }
+        _upsert(_cars, car.copyWith(costs: costs), (e) => e.id);
+      case 'plot':
+        final plot = plotById(j.refId ?? '');
+        if (plot == null) return;
+        final costs = [...plot.costs];
+        if (add) {
+          costs.add(PlotCost(label, amount, date));
+        } else {
+          final i = costs.indexWhere((c) => same(c.label, c.amount, c.date));
+          if (i < 0) return;
+          costs.removeAt(i);
+        }
+        _upsert(_plots, plot.copyWith(costs: costs), (e) => e.id);
+    }
+  }
 
   /// أعمال عمال اليومية.
   static const workTasks = ['تنزيل البضاعة', 'رفع البضاعة', 'ترتيب المخزن'];

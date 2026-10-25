@@ -102,6 +102,53 @@ class Partner {
 }
 
 /// عامل/موظف براتب شهري.
+/// عمل متفق عليه مع عامل بالمقاولة، مثل بناء منزل: مبلغ كلي يُدفع
+/// على مراحل كلما انتهت مرحلة، حتى يكتمل.
+class WorkJob {
+  final String id;
+  final String title;
+
+  /// المبلغ الكلي المتفق عليه.
+  final double agreed;
+  final DateTime start;
+
+  /// مكان العمل: plot أو car أو other، ومعرّف القطعة أو السيارة.
+  /// ما يُدفع للمراحل يُضاف لتكاليف القطعة أو السيارة.
+  final String place;
+  final String? refId;
+  final String notes;
+
+  const WorkJob({
+    required this.id,
+    required this.title,
+    required this.agreed,
+    required this.start,
+    this.place = 'other',
+    this.refId,
+    this.notes = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'agreed': agreed,
+    'start': start.toIso8601String(),
+    'place': place,
+    'refId': refId,
+    'notes': notes,
+  };
+
+  factory WorkJob.fromJson(Map<String, dynamic> j) => WorkJob(
+    id: j['id'] as String,
+    title: j['title'] as String? ?? '',
+    agreed: (j['agreed'] as num?)?.toDouble() ?? 0,
+    start: parseDate(j['start']),
+    place: j['place'] as String? ?? 'other',
+    refId: j['refId'] as String?,
+    notes: j['notes'] as String? ?? '',
+  );
+}
+
 class Worker {
   final String id;
   final String name;
@@ -124,6 +171,12 @@ class Worker {
   /// عامل باليومية (مثل عمال تفريغ الحاويات) بدل الراتب الشهري.
   final bool daily;
 
+  /// عامل بالمقاولة: يُدفع له على مراحل [jobs] بدل الراتب أو اليومية.
+  final bool contract;
+
+  /// أعمال عامل المقاولة.
+  final List<WorkJob> jobs;
+
   const Worker({
     required this.id,
     required this.name,
@@ -135,10 +188,30 @@ class Worker {
     required this.hiredAt,
     this.active = true,
     this.daily = false,
+    this.contract = false,
+    this.jobs = const [],
   });
 
   /// «الراتب الشهري» أو «الأجرة اليومية».
-  String get wageLabel => daily ? 'الأجرة اليومية' : 'الراتب الشهري';
+  String get wageLabel => contract
+      ? 'مقاولة (حسب الإنجاز)'
+      : daily
+      ? 'الأجرة اليومية'
+      : 'الراتب الشهري';
+
+  /// نوع الأجر كما يظهر للمستخدم.
+  String get payKind => contract
+      ? 'مقاولة'
+      : daily
+      ? 'يومية'
+      : 'راتب شهري';
+
+  WorkJob? jobById(String id) => jobs.where((j) => j.id == id).firstOrNull;
+
+  Worker withJobs(List<WorkJob> jobs) => Worker.fromJson({
+    ...toJson(),
+    'jobs': [for (final j in jobs) j.toJson()],
+  });
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -151,6 +224,8 @@ class Worker {
     'hiredAt': hiredAt.toIso8601String(),
     'active': active,
     'daily': daily,
+    if (contract) 'contract': true,
+    if (jobs.isNotEmpty) 'jobs': [for (final j in jobs) j.toJson()],
   };
 
   /// نسخة بصورة جديدة (أو بدون صورة).
@@ -165,6 +240,8 @@ class Worker {
     hiredAt: hiredAt,
     active: active,
     daily: daily,
+    contract: contract,
+    jobs: jobs,
   );
 
   factory Worker.fromJson(Map<String, dynamic> j) => Worker(
@@ -178,6 +255,11 @@ class Worker {
     hiredAt: parseDate(j['hiredAt']),
     active: j['active'] as bool? ?? true,
     daily: j['daily'] as bool? ?? false,
+    contract: j['contract'] as bool? ?? false,
+    jobs: [
+      for (final x in j['jobs'] as List? ?? const [])
+        WorkJob.fromJson(Map<String, dynamic>.from(x as Map)),
+    ],
   );
 }
 

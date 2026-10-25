@@ -13,6 +13,7 @@ import '../utils/format.dart' as fmt;
 import '../utils/product_image.dart';
 import '../widgets/common.dart';
 import '../widgets/data_table_card.dart' show TableAction;
+import 'worker_jobs.dart';
 
 class WorkersScreen extends StatelessWidget {
   const WorkersScreen({super.key});
@@ -97,7 +98,13 @@ class WorkerCard extends StatelessWidget {
         children: [
           Icon(icon, size: 16, color: cs.onSurfaceVariant),
           const SizedBox(width: 6),
-          Text('$label: ', style: muted),
+          Flexible(
+            child: Text(
+              '$label: ',
+              style: muted,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
           Flexible(
             child: Text(
               value,
@@ -209,11 +216,18 @@ class WorkerCard extends StatelessWidget {
                           w.phone,
                           ltr: true,
                         ),
-                      field(
-                        Icons.payments_outlined,
-                        w.daily ? 'الأجرة اليومية' : 'الراتب الشهري',
-                        fmt.money(w.monthlySalary),
-                      ),
+                      if (w.contract)
+                        field(
+                          Icons.construction_outlined,
+                          'باقي المقاولة',
+                          fmt.money(s.workerJobsLeft(w)),
+                        )
+                      else
+                        field(
+                          Icons.payments_outlined,
+                          w.daily ? 'الأجرة اليومية' : 'الراتب الشهري',
+                          fmt.money(w.monthlySalary),
+                        ),
                       if (w.daily)
                         field(
                           Icons.calendar_month_outlined,
@@ -244,25 +258,33 @@ class WorkerCard extends StatelessWidget {
             child: Wrap(
               alignment: WrapAlignment.end,
               children: [
-                TableAction(
-                  tooltip: w.daily ? 'صرف يومية اليوم' : 'صرف راتب هذا الشهر',
-                  icon: Icons.payments_outlined,
-                  color: AppColors.income.last,
-                  onTap: !w.active
-                      ? null
-                      : () async {
-                          await s.paySalary(w, DateTime.now());
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'تم تسجيل ${w.daily ? 'يومية' : 'راتب'} ${w.name}: ${fmt.money(w.monthlySalary)}',
+                if (w.contract)
+                  TableAction(
+                    tooltip: 'الأعمال والمراحل',
+                    icon: Icons.construction_outlined,
+                    color: AppColors.income.last,
+                    onTap: () => openWorkerJobs(context, w),
+                  )
+                else
+                  TableAction(
+                    tooltip: w.daily ? 'صرف يومية اليوم' : 'صرف راتب هذا الشهر',
+                    icon: Icons.payments_outlined,
+                    color: AppColors.income.last,
+                    onTap: !w.active
+                        ? null
+                        : () async {
+                            await s.paySalary(w, DateTime.now());
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'تم تسجيل ${w.daily ? 'يومية' : 'راتب'} ${w.name}: ${fmt.money(w.monthlySalary)}',
+                                  ),
                                 ),
-                              ),
-                            );
-                          }
-                        },
-                ),
+                              );
+                            }
+                          },
+                  ),
                 TableAction(
                   tooltip: 'المصاريف',
                   icon: Icons.receipt_long_outlined,
@@ -461,7 +483,16 @@ Future<void> showWorkerForm(BuildContext context, {Worker? existing}) {
   );
   var hired = existing?.hiredAt ?? DateTime.now();
   var active = existing?.active ?? true;
-  var daily = existing?.daily ?? false;
+  // 0 راتب شهري، 1 يومية، 2 مقاولة.
+  var kind = existing == null
+      ? 0
+      : existing.contract
+      ? 2
+      : existing.daily
+      ? 1
+      : 0;
+  final jobTitle = TextEditingController();
+  final jobAmount = TextEditingController();
 
   return showFormDialog(
     context: context,
@@ -524,7 +555,7 @@ Future<void> showWorkerForm(BuildContext context, {Worker? existing}) {
         validator: (v) {
           final t = v?.trim() ?? '';
           // عامل اليومية قد لا يُعرف رقمه الوطني.
-          if (t.isEmpty) return daily ? null : 'الرقم الوطني مطلوب';
+          if (t.isEmpty) return kind != 0 ? null : 'الرقم الوطني مطلوب';
           if (!RegExp(r'^[0-9]+$').hasMatch(t)) return 'أرقام فقط';
           return null;
         },
@@ -534,23 +565,52 @@ Future<void> showWorkerForm(BuildContext context, {Worker? existing}) {
         decoration: const InputDecoration(labelText: 'رقم الهاتف'),
         keyboardType: TextInputType.phone,
       ),
-      SegmentedButton<bool>(
+      SegmentedButton<int>(
         showSelectedIcon: false,
         segments: const [
-          ButtonSegment(value: false, label: Text('راتب شهري')),
-          ButtonSegment(value: true, label: Text('يومية (حسب الأيام)')),
+          ButtonSegment(value: 0, label: Text('راتب شهري')),
+          ButtonSegment(value: 1, label: Text('يومية')),
+          ButtonSegment(value: 2, label: Text('مقاولة')),
         ],
-        selected: {daily},
-        onSelectionChanged: (v) => setState(() => daily = v.first),
+        selected: {kind},
+        onSelectionChanged: (v) => setState(() => kind = v.first),
       ),
-      TextFormField(
-        controller: salary,
-        decoration: InputDecoration(
-          labelText: daily ? 'الأجرة اليومية' : 'الراتب الشهري',
+      if (kind != 2)
+        TextFormField(
+          controller: salary,
+          decoration: InputDecoration(
+            labelText: kind == 1 ? 'الأجرة اليومية' : 'الراتب الشهري',
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          validator: numberValidator(),
+        )
+      else if (existing == null || existing.jobs.isEmpty) ...[
+        const Text(
+          'عامل بالمقاولة: يُتفق معه على مبلغ كلي للعمل، ويُدفع له على '
+          'مراحل كلما انتهت مرحلة. يمكن إضافة أعمال أخرى لاحقاً من بطاقته.',
+          style: TextStyle(fontSize: 12),
         ),
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        validator: numberValidator(),
-      ),
+        TextFormField(
+          controller: jobTitle,
+          decoration: const InputDecoration(
+            labelText: 'العمل (مثلاً: بناء منزل)',
+          ),
+        ),
+        TextFormField(
+          controller: jobAmount,
+          decoration: const InputDecoration(
+            labelText: 'المبلغ الكلي المتفق عليه',
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          validator: (v) => jobTitle.text.trim().isEmpty
+              ? null
+              : numberValidator(min: 0.01)(v),
+        ),
+      ] else
+        Text(
+          'أعماله: ${existing.jobs.length} • تُدار من زر «الأعمال والمراحل» '
+          'في بطاقته',
+        ),
       DateField(
         label: 'تاريخ التعيين',
         value: hired,
@@ -571,10 +631,21 @@ Future<void> showWorkerForm(BuildContext context, {Worker? existing}) {
         jobTitle: job.text.trim(),
         nationalId: nationalId.text.trim(),
         photo: photo,
-        monthlySalary: fmt.parseNumber(salary.text)!,
+        monthlySalary: kind == 2 ? 0 : fmt.parseNumber(salary.text)!,
         hiredAt: hired,
         active: active,
-        daily: daily,
+        daily: kind == 1,
+        contract: kind == 2,
+        jobs: [
+          ...?existing?.jobs,
+          if (kind == 2 && jobTitle.text.trim().isNotEmpty)
+            WorkJob(
+              id: newId(),
+              title: jobTitle.text.trim(),
+              agreed: fmt.parseNumber(jobAmount.text) ?? 0,
+              start: DateTime.now(),
+            ),
+        ],
       ),
     ),
   );
@@ -822,8 +893,10 @@ class WorkerExpensesPage extends StatelessWidget {
                 colors: AppColors.workers,
               ),
               StatCard(
-                label: w.wageLabel,
-                value: fmt.money(w.monthlySalary),
+                label: w.contract ? 'الباقي من المقاولة' : w.wageLabel,
+                value: fmt.money(
+                  w.contract ? s.workerJobsLeft(w) : w.monthlySalary,
+                ),
                 icon: Icons.payments_outlined,
                 colors: AppColors.payroll,
               ),
