@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import '../models/invoice.dart';
 import '../models/models.dart';
+import '../pdf/invoice_strings.dart' show InvoiceLanguage;
 import '../pdf/job_invoice_pdf.dart';
 import '../utils/share_pdf.dart';
 import '../state/app_state.dart';
@@ -658,21 +659,59 @@ class _JobPdfPage extends StatefulWidget {
 }
 
 class _JobPdfPageState extends State<_JobPdfPage> {
-  /// يُبنى الملف مرة واحدة فيكون جاهزاً للمشاركة مباشرة على الهاتف.
-  late final Future<Uint8List> _pdf = buildJobInvoicePdf(
+  /// آخر لغة اختارها المدير، تبقى للفاتورة التالية خلال الجلسة.
+  static InvoiceLanguage _lastLanguage = InvoiceLanguage.ar;
+  InvoiceLanguage _language = _lastLanguage;
+
+  /// ملف كل لغة يُبنى مرة واحدة فيكون جاهزاً للمشاركة مباشرة على الهاتف.
+  final _files = <InvoiceLanguage, Future<Uint8List>>{};
+
+  Future<Uint8List> get _pdf => _files[_language] ??= buildJobInvoicePdf(
     worker: widget.worker,
     job: widget.job,
     stages: widget.stages,
     company: widget.company,
     place: widget.place,
+    language: _language,
   );
 
-  String get fileName => 'فاتورة-${widget.job.title}-${widget.worker.name}.pdf';
+  String get fileName {
+    final base = 'فاتورة-${widget.job.title}-${widget.worker.name}';
+    return _language == InvoiceLanguage.ar
+        ? '$base.pdf'
+        : '$base-${_language.name}.pdf';
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
       title: Text('فاتورة ${widget.job.title}'),
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(56),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          child: Row(
+            children: [
+              const Icon(Icons.translate, size: 20),
+              const SizedBox(width: 8),
+              const Text('لغة الفاتورة'),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SegmentedButton<InvoiceLanguage>(
+                  showSelectedIcon: false,
+                  segments: [
+                    for (final l in InvoiceLanguage.values)
+                      ButtonSegment(value: l, label: Text(l.label)),
+                  ],
+                  selected: {_language},
+                  onSelectionChanged: (v) =>
+                      setState(() => _language = _lastLanguage = v.first),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
       actions: [
         IconButton(
           tooltip: 'طباعة',
@@ -691,6 +730,8 @@ class _JobPdfPageState extends State<_JobPdfPage> {
       ],
     ),
     body: PdfPreview(
+      // مفتاح باللغة حتى تُعاد المعاينة عند تغييرها.
+      key: ValueKey(_language),
       build: (_) => _pdf,
       pdfFileName: fileName,
       canChangeOrientation: false,

@@ -4,6 +4,7 @@ import 'package:medaba/data/storage.dart';
 import 'package:medaba/main.dart';
 import 'package:medaba/models/models.dart';
 import 'package:medaba/models/plot.dart';
+import 'package:medaba/pdf/invoice_strings.dart';
 import 'package:medaba/pdf/job_invoice_pdf.dart';
 import 'package:medaba/state/app_state.dart';
 
@@ -96,13 +97,16 @@ void main() {
     expect(s.jobPaid('j'), 200000);
     expect(s.plotById('p')!.costsTotal, 200000);
 
-    final pdf = await buildJobInvoicePdf(
-      worker: worker(),
-      job: job,
-      company: s.company,
-      stages: [(date: d, stage: 'الأساس', amount: 200000)],
-    );
-    expect(pdf.length, greaterThan(1000));
+    for (final l in InvoiceLanguage.values) {
+      final pdf = await buildJobInvoicePdf(
+        worker: worker(),
+        job: job,
+        company: s.company,
+        stages: [(date: d, stage: 'الأساس', amount: 200000)],
+        language: l,
+      );
+      expect(pdf.length, greaterThan(1000));
+    }
   });
 
   testWidgets('a contract worker is added and a stage is paid on a phone', (
