@@ -4,9 +4,11 @@ import 'package:medaba/data/storage.dart';
 import 'package:medaba/main.dart';
 import 'package:medaba/models/models.dart';
 import 'package:medaba/models/plot.dart';
+import 'package:medaba/pdf/job_invoice_pdf.dart';
 import 'package:medaba/state/app_state.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late AppState s;
   final d = DateTime(2026, 10, 1);
 
@@ -93,6 +95,14 @@ void main() {
     await s.deleteJobStage(job, s.jobPayments('j').last.id);
     expect(s.jobPaid('j'), 200000);
     expect(s.plotById('p')!.costsTotal, 200000);
+
+    final pdf = await buildJobInvoicePdf(
+      worker: worker(),
+      job: job,
+      company: s.company,
+      stages: [(date: d, stage: 'الأساس', amount: 200000)],
+    );
+    expect(pdf.length, greaterThan(1000));
   });
 
   testWidgets('a contract worker is added and a stage is paid on a phone', (
@@ -159,6 +169,7 @@ void main() {
     expect(s.jobPaid(w.jobs.single.id), 200000);
     expect(find.textContaining('الأساس'), findsOneWidget);
     expect(find.textContaining('الباقي 300,000'), findsOneWidget);
+    expect(find.text('فاتورة العمل PDF'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

@@ -1,7 +1,13 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
+import '../models/invoice.dart';
 import '../models/models.dart';
+import '../pdf/job_invoice_pdf.dart';
+import '../utils/share_pdf.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
@@ -255,14 +261,41 @@ class _JobCard extends StatelessWidget {
                   );
                 },
               ),
-            if (!done) ...[
-              const SizedBox(height: 8),
-              FilledButton.icon(
-                onPressed: () => showStageForm(context, worker, j),
-                icon: const Icon(Icons.task_alt),
-                label: const Text('دفع مرحلة منتهية'),
-              ),
-            ],
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (!done)
+                  FilledButton.icon(
+                    onPressed: () => showStageForm(context, worker, j),
+                    icon: const Icon(Icons.task_alt),
+                    label: const Text('دفع مرحلة منتهية'),
+                  ),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => _JobPdfPage(
+                        worker: worker,
+                        job: j,
+                        place: place,
+                        company: s.company,
+                        stages: [
+                          for (final t in stages)
+                            (
+                              date: t.date,
+                              stage: _stageName(t.note, j, worker),
+                              amount: t.amount,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  icon: const Icon(Icons.picture_as_pdf_outlined),
+                  label: const Text('فاتورة العمل PDF'),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -458,5 +491,78 @@ Future<void> showStageForm(BuildContext context, Worker w, WorkJob j) {
         if (context.mounted) _snack(context, e.message);
       }
     },
+  );
+}
+
+class _JobPdfPage extends StatefulWidget {
+  final Worker worker;
+  final WorkJob job;
+  final String? place;
+  final CompanyInfo company;
+  final List<JobStageLine> stages;
+  const _JobPdfPage({
+    required this.worker,
+    required this.job,
+    required this.place,
+    required this.company,
+    required this.stages,
+  });
+
+  @override
+  State<_JobPdfPage> createState() => _JobPdfPageState();
+}
+
+class _JobPdfPageState extends State<_JobPdfPage> {
+  /// يُبنى الملف مرة واحدة فيكون جاهزاً للمشاركة مباشرة على الهاتف.
+  late final Future<Uint8List> _pdf = buildJobInvoicePdf(
+    worker: widget.worker,
+    job: widget.job,
+    stages: widget.stages,
+    company: widget.company,
+    place: widget.place,
+  );
+
+  String get fileName => 'فاتورة-${widget.job.title}-${widget.worker.name}.pdf';
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: Text('فاتورة ${widget.job.title}'),
+      actions: [
+        IconButton(
+          tooltip: 'طباعة',
+          icon: const Icon(Icons.print_outlined),
+          onPressed: () =>
+              Printing.layoutPdf(name: fileName, onLayout: (_) => _pdf),
+        ),
+        Padding(
+          padding: const EdgeInsetsDirectional.only(end: 8),
+          child: FilledButton.icon(
+            icon: const Icon(Icons.share_outlined),
+            label: const Text('إرسال / تنزيل'),
+            onPressed: () async => sharePdfFile(await _pdf, fileName),
+          ),
+        ),
+      ],
+    ),
+    body: PdfPreview(
+      build: (_) => _pdf,
+      pdfFileName: fileName,
+      canChangeOrientation: false,
+      canChangePageFormat: false,
+      canDebug: false,
+      allowPrinting: false,
+      allowSharing: false,
+      onError: (context, error) => const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'تعذّر عرض المعاينة في هذا المتصفح.\n'
+            'استخدم زر «إرسال / تنزيل» أو «طباعة» في الأعلى.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    ),
   );
 }
