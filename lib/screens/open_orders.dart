@@ -68,6 +68,11 @@ class _OrderTile extends StatelessWidget {
   final OpenOrder order;
   const _OrderTile({required this.order});
 
+  void _open(BuildContext context) => Navigator.push(
+    context,
+    MaterialPageRoute(builder: (_) => OpenOrderPage(orderId: order.id)),
+  );
+
   @override
   Widget build(BuildContext context) {
     final s = context.watch<AppState>();
@@ -82,10 +87,7 @@ class _OrderTile extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => OpenOrderPage(orderId: o.id)),
-        ),
+        onTap: () => _open(context),
         child: Padding(
           padding: const EdgeInsets.all(8),
           child: Column(
@@ -105,12 +107,6 @@ class _OrderTile extends StatelessWidget {
                       backgroundColor: AppColors.ok.first.withValues(
                         alpha: 0.15,
                       ),
-                    )
-                  else
-                    FilledButton.tonalIcon(
-                      onPressed: () => showPickupForm(context, o),
-                      icon: const Icon(Icons.outbox_outlined),
-                      label: const Text('أخذ دفعة'),
                     ),
                 ],
               ),
@@ -125,6 +121,29 @@ class _OrderTile extends StatelessWidget {
                 'أخذ ${fmt.number(taken)} من ${fmt.number(o.totalQty)} • '
                 'الباقي ${fmt.number(o.totalQty - taken)} • '
                 'المدفوع ${fmt.money(s.orderPaid(o))} من ${fmt.money(o.total)}',
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  FilledButton.icon(
+                    onPressed: () => _open(context),
+                    icon: const Icon(Icons.open_in_new),
+                    label: const Text('فتح الفاتورة'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => showOpenOrderForm(context, existing: o),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text('تعديل'),
+                  ),
+                  if (!done)
+                    OutlinedButton.icon(
+                      onPressed: () => showPickupForm(context, o),
+                      icon: const Icon(Icons.outbox_outlined),
+                      label: const Text('أخذ دفعة'),
+                    ),
+                ],
               ),
             ],
           ),

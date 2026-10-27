@@ -85,6 +85,9 @@ ThemeData _theme(Brightness b) {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         backgroundColor: dark ? null : AppColors.brand,
+        // يشمل الأزرار «الهادئة» (tonal)، فبدونه يُكتب نصها بلون داكن
+        // على الخلفية الداكنة ولا يظهر.
+        foregroundColor: dark ? null : Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),

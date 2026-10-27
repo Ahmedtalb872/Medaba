@@ -288,4 +288,27 @@ void main() {
     expect(find.textContaining('رصيد مدفوع مقدماً'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('an open invoice row has open and edit buttons', (tester) async {
+    tester.view.physicalSize = const Size(1180, 1100);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await s.saveOpenOrder(order());
+
+    await tester.pumpWidget(MedabaApp(state: s));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('الفواتير').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('تعديل').first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('تعديل الفاتورة المفتوحة'), findsOneWidget);
+    await tester.tap(find.text('إلغاء'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('فتح الفاتورة'));
+    await tester.pumpAndSettle();
+    expect(find.text('سجل الدفع'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
