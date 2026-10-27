@@ -525,14 +525,16 @@ Future<void> showOpenOrderForm(BuildContext context, {OpenOrder? existing}) {
     lines.add(_LineDraft(p.id, price: fmt.number(p.salePrice)));
   }
 
+  // لا يُعرض رقم سالب إذا قلّ المخزون عن المحجوز.
   double free(String productId) =>
-      s.stockOf(productId, warehouseId: warehouse) -
-      s.reservedQty(
-        productId,
-        warehouseId: warehouse,
-        excludeOrderId: existing?.id,
-      ) +
-      (existing == null ? 0 : s.takenFromOrder(existing.id, productId));
+      (s.stockOf(productId, warehouseId: warehouse) -
+              s.reservedQty(
+                productId,
+                warehouseId: warehouse,
+                excludeOrderId: existing?.id,
+              ) +
+              (existing == null ? 0 : s.takenFromOrder(existing.id, productId)))
+          .clamp(0.0, double.infinity);
 
   return showFormDialog(
     context: context,
