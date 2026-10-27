@@ -311,4 +311,41 @@ void main() {
     expect(find.text('سجل الدفع'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('a second open invoice is created and both are listed', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1180, 1400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    // الأولى تحجز 1000 من 1200، وأخذ الزبون منها 1000 فاكتملت.
+    await s.saveOpenOrder(order());
+    await s.pickupFromOrder('o', quantities: {'p': 1000}, paid: 140000);
+
+    await tester.pumpWidget(MedabaApp(state: s));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('الفواتير').first);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('فاتورة مفتوحة جديدة'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextFormField, 'الزبون'),
+      'كريس',
+    );
+    await tester.enterText(find.widgetWithText(TextFormField, 'الكمية'), '500');
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+    // المتوفر 200 فقط: يبقى النموذج مفتوحاً ويظهر السبب.
+    expect(find.text('المتوفر 200 فقط'), findsOneWidget);
+    expect(s.openOrders, hasLength(1));
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'الكمية'), '150');
+    await tester.tap(find.text('حفظ'));
+    await tester.pumpAndSettle();
+    expect(s.openOrders, hasLength(2));
+    expect(find.textContaining('O-0002 • كريس'), findsOneWidget);
+    expect(find.textContaining('O-0001 • سيدي'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }

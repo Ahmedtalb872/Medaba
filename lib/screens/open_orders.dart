@@ -617,7 +617,21 @@ Future<void> showOpenOrderForm(BuildContext context, {OpenOrder? existing}) {
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    validator: numberValidator(min: 0.001),
+                    validator: (v) {
+                      final base = numberValidator(min: 0.001)(v);
+                      if (base != null) return base;
+                      // مجموع الصنف في كل الأسطر لا يتجاوز المتوفر.
+                      final want = lines
+                          .where((x) => x.productId == l.productId)
+                          .fold<double>(
+                            0,
+                            (a, x) => a + (fmt.parseNumber(x.qty.text) ?? 0),
+                          );
+                      final have = free(l.productId);
+                      return want > have + 1e-9
+                          ? 'المتوفر ${fmt.number(have)} فقط'
+                          : null;
+                    },
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -663,21 +677,26 @@ Future<void> showOpenOrderForm(BuildContext context, {OpenOrder? existing}) {
           unitPrice: price,
         );
       }
-      try {
-        await s.saveOpenOrder(
-          OpenOrder(
-            id: existing?.id ?? newId(),
-            number: number,
-            date: date,
-            partyName: party.text.trim(),
-            partyPhone: phone.text.trim(),
-            warehouseId: warehouse,
-            lines: merged.values.toList(),
-            notes: notes.text.trim(),
-          ),
+      // الرفض (مثل كمية أكبر من المتوفر) يظهر داخل النموذج ويبقى مفتوحاً.
+      await s.saveOpenOrder(
+        OpenOrder(
+          id: existing?.id ?? newId(),
+          number: number,
+          date: date,
+          partyName: party.text.trim(),
+          partyPhone: phone.text.trim(),
+          warehouseId: warehouse,
+          lines: merged.values.toList(),
+          notes: notes.text.trim(),
+        ),
+      );
+      if (context.mounted) {
+        _snack(
+          context,
+          existing == null
+              ? 'تم إنشاء الفاتورة المفتوحة $number'
+              : 'تم حفظ الفاتورة المفتوحة $number',
         );
-      } on StateError catch (e) {
-        if (context.mounted) _snack(context, e.message);
       }
     },
   );

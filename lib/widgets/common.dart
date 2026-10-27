@@ -549,6 +549,8 @@ Future<void> showFormDialog({
   required GlobalKey<FormState> formKey,
   required Future<void> Function() onSave,
 }) {
+  // رسالة رفض الحفظ تظهر داخل الحوار، ويبقى مفتوحاً حتى لا تضيع البيانات.
+  String? error;
   return showDialog(
     context: context,
     builder: (c) => StatefulBuilder(
@@ -567,6 +569,22 @@ Future<void> showFormDialog({
                       padding: const EdgeInsets.only(bottom: 12),
                       child: f,
                     ),
+                  if (error != null)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(c).colorScheme.errorContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        error!,
+                        style: TextStyle(
+                          color: Theme.of(c).colorScheme.onErrorContainer,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -580,7 +598,12 @@ Future<void> showFormDialog({
           FilledButton(
             onPressed: () async {
               if (!formKey.currentState!.validate()) return;
-              await onSave();
+              try {
+                await onSave();
+              } on StateError catch (e) {
+                setState(() => error = e.message);
+                return;
+              }
               if (c.mounted) Navigator.pop(c);
             },
             child: const Text('حفظ'),
