@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/debt.dart';
+import '../models/invoice.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
@@ -335,4 +336,282 @@ class _DayCard extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// تقرير ما دفعه زبون فاتورة مفتوحة: كل دفعة يوماً بيوم، مع المدفوع
+/// حتى تلك اللحظة والباقي من المبلغ الكلي.
+class OrderPaymentsReport extends StatefulWidget {
+  final String orderId;
+  const OrderPaymentsReport({super.key, required this.orderId});
+
+  @override
+  State<OrderPaymentsReport> createState() => _OrderPaymentsReportState();
+}
+
+class _OrderPaymentsReportState extends State<OrderPaymentsReport> {
+  DayRange _range = DayRange.all;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    final o = s.orderById(widget.orderId);
+    if (o == null) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: const Center(child: Text('حُذفت الفاتورة المفتوحة')),
+      );
+    }
+    // المدفوع حتى كل دفعة يُحسب من كل الدفعات، ثم تُعرض دفعات الفترة.
+    final all = s.orderPayments(o);
+    final until = <double>[];
+    for (final p in all) {
+      until.add((until.lastOrNull ?? 0) + p.amount);
+    }
+    final period = _range.period;
+    final shown = [
+      for (final (i, p) in all.indexed)
+        if (period == null || period.contains(p.date)) (i: i, p: p),
+    ].reversed.toList();
+    final inRange = shown.fold<double>(0, (a, e) => a + e.p.amount);
+    final paid = s.orderPaid(o);
+
+    return Scaffold(
+      appBar: AppBar(title: Text('المدفوع • ${o.number} • ${o.partyName}')),
+      body: ListView(
+        padding: pagePadding.copyWith(top: 16),
+        children: [
+          _rangePicker(_range, (r) => setState(() => _range = r)),
+          const SizedBox(height: 12),
+          StatGrid(
+            children: [
+              StatCard(
+                label: _range == DayRange.all
+                    ? 'كل المدفوع'
+                    : 'المدفوع (${_range.label})',
+                value: fmt.money(inRange),
+                icon: Icons.payments_outlined,
+                colors: AppColors.income,
+              ),
+              StatCard(
+                label: 'عدد الدفعات',
+                value: '${shown.length}',
+                icon: Icons.receipt_long_outlined,
+                colors: AppColors.capital,
+              ),
+              StatCard(
+                label: 'الباقي من المبلغ الكلي',
+                value: fmt.money(o.total - paid),
+                icon: Icons.hourglass_bottom,
+                colors: AppColors.expense,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (shown.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: Text('لا توجد دفعات في هذه الفترة')),
+            ),
+          for (final (day, items) in _byDay(shown, (e) => e.p.date))
+            _DayCard(
+              title: _dayTitle(day),
+              trailing: Text(
+                fmt.money(items.fold<double>(0, (a, e) => a + e.p.amount)),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.income.last,
+                ),
+              ),
+              children: [
+                for (final e in items)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.income.last.withValues(
+                        alpha: 0.12,
+                      ),
+                      child: Text(
+                        '${e.i + 1}',
+                        style: TextStyle(
+                          color: AppColors.income.last,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    title: Text(e.p.source),
+                    subtitle: Text(
+                      'المدفوع حتى الآن ${fmt.money(until[e.i])} • '
+                      'الباقي ${fmt.money(o.total - until[e.i])}',
+                    ),
+                    trailing: Text(
+                      fmt.money(e.p.amount),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// تقرير ما أخذه زبون فاتورة مفتوحة: كل أخذ يوماً بيوم، بكمياته ومخزنه
+/// وما بقي له بعده.
+class OrderPickupsReport extends StatefulWidget {
+  final String orderId;
+
+  /// يفتح فاتورة البيع لكل أخذ.
+  final void Function(BuildContext, Invoice)? openInvoice;
+  const OrderPickupsReport({
+    super.key,
+    required this.orderId,
+    this.openInvoice,
+  });
+
+  @override
+  State<OrderPickupsReport> createState() => _OrderPickupsReportState();
+}
+
+class _OrderPickupsReportState extends State<OrderPickupsReport> {
+  DayRange _range = DayRange.all;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = context.watch<AppState>();
+    final o = s.orderById(widget.orderId);
+    if (o == null) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: const Center(child: Text('حُذفت الفاتورة المفتوحة')),
+      );
+    }
+    String name(String id) => s.productById(id)?.name ?? 'صنف محذوف';
+    String unit(String id) => s.productById(id)?.unit ?? '';
+    String whName(String id) => s.warehouseById(id)?.name ?? '-';
+    final multi = o.warehouseIds.length > 1;
+    // الوحدة تُكتب مع المجاميع إذا كانت كل الأصناف بنفس الوحدة.
+    final units = {for (final l in o.lines) unit(l.productId)};
+    String q(double v) => units.length == 1
+        ? '${fmt.number(v)} ${units.first}'.trim()
+        : fmt.number(v);
+
+    // الباقي من كل صنف في كل مخزن بعد كل أخذ، من أول الفاتورة.
+    final pickups = s.pickupsOf(o.id);
+    final left = {
+      for (final l in o.lines)
+        '${l.productId}|${o.whOf(l)}': o.qtyOf(l.productId, at: o.whOf(l)),
+    };
+    final leftAfter = <Map<String, double>>[];
+    for (final i in pickups) {
+      for (final l in i.lines) {
+        final k = '${l.productId}|${i.warehouseId}';
+        left[k] = (left[k] ?? 0) - l.qty;
+      }
+      leftAfter.add({...left});
+    }
+    final period = _range.period;
+    final shown = [
+      for (final (n, i) in pickups.indexed)
+        if (period == null || period.contains(i.date)) (n: n, i: i),
+    ].reversed.toList();
+    double qtyOf(Invoice i) => i.lines.fold(0, (a, l) => a + l.qty);
+    final qty = shown.fold<double>(0, (a, e) => a + qtyOf(e.i));
+    final value = shown.fold<double>(0, (a, e) => a + e.i.total);
+    final remaining = o.lines.fold<double>(
+      0,
+      (a, l) => a + s.remainingInOrder(o, l.productId, at: o.whOf(l)),
+    );
+
+    return Scaffold(
+      appBar: AppBar(title: Text('المأخوذ • ${o.number} • ${o.partyName}')),
+      body: ListView(
+        padding: pagePadding.copyWith(top: 16),
+        children: [
+          _rangePicker(_range, (r) => setState(() => _range = r)),
+          const SizedBox(height: 12),
+          StatGrid(
+            children: [
+              StatCard(
+                label: _range == DayRange.all
+                    ? 'كل المأخوذ'
+                    : 'المأخوذ (${_range.label})',
+                value: q(qty),
+                icon: Icons.outbox_outlined,
+                colors: AppColors.stock,
+              ),
+              StatCard(
+                label: 'قيمته',
+                value: fmt.money(value),
+                icon: Icons.receipt_long_outlined,
+                colors: AppColors.capital,
+              ),
+              StatCard(
+                label: 'المتبقي في المخزن',
+                value: q(remaining),
+                icon: Icons.warehouse_outlined,
+                colors: AppColors.expense,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (shown.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: Text('لم يأخذ الزبون شيئاً في هذه الفترة')),
+            ),
+          for (final (day, items) in _byDay(shown, (e) => e.i.date))
+            _DayCard(
+              title: _dayTitle(day),
+              trailing: Text(
+                'أخذ ${q(items.fold<double>(0, (a, e) => a + qtyOf(e.i)))}',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.stock.last,
+                ),
+              ),
+              children: [
+                for (final e in items)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    onTap: widget.openInvoice == null
+                        ? null
+                        : () => widget.openInvoice!(context, e.i),
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.stock.last.withValues(
+                        alpha: 0.12,
+                      ),
+                      child: Text(
+                        '${e.n + 1}',
+                        style: TextStyle(
+                          color: AppColors.stock.last,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    title: Text(
+                      '${e.i.number}${multi ? ' • ${whName(e.i.warehouseId)}' : ''}',
+                    ),
+                    subtitle: Text(
+                      [
+                        for (final l in e.i.lines)
+                          '${name(l.productId)}: أخذ ${fmt.number(l.qty)} '
+                              '${unit(l.productId)} من '
+                              '${fmt.number(o.qtyOf(l.productId, at: e.i.warehouseId))} '
+                              '← بقي ${fmt.number(leftAfter[e.n]['${l.productId}|${e.i.warehouseId}'] ?? 0)}',
+                        if ((s.debtForInvoice(e.i.id)?.remaining ?? 0) > 0)
+                          'باقي عليه ${fmt.money(s.debtForInvoice(e.i.id)!.remaining)}',
+                      ].join('\n'),
+                    ),
+                    trailing: Text(
+                      fmt.money(e.i.total),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
 }

@@ -134,6 +134,9 @@ class StatCard extends StatelessWidget {
 
   /// هل الارتفاع خبر جيد؟ (للمصروفات: لا، فيُلوَّن الارتفاع بالأحمر).
   final bool upIsGood;
+
+  /// عند تمريره تصبح البطاقة زراً يفتح التفاصيل.
+  final VoidCallback? onTap;
   const StatCard({
     super.key,
     required this.label,
@@ -144,10 +147,27 @@ class StatCard extends StatelessWidget {
     this.previous,
     this.unit,
     this.upIsGood = true,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    // البطاقة الضيقة (عمودان على الهاتف) تصغّر الأيقونة ليتسع النص.
+    final card = LayoutBuilder(
+      builder: (context, c) => _card(context, compact: c.maxWidth < 220),
+    );
+    if (onTap == null) return card;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: onTap,
+        child: card,
+      ),
+    );
+  }
+
+  Widget _card(BuildContext context, {required bool compact}) {
     final cs = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final tone = dark ? colors.first : colors.last;
@@ -165,7 +185,7 @@ class StatCard extends StatelessWidget {
         ? AppColors.income.last
         : AppColors.expense.last;
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(compact ? 12 : 18),
       decoration: BoxDecoration(
         color: tint,
         borderRadius: BorderRadius.circular(18),
@@ -182,7 +202,7 @@ class StatCard extends StatelessWidget {
                   style: TextStyle(
                     color: tone,
                     fontWeight: FontWeight.bold,
-                    fontSize: 15,
+                    fontSize: compact ? 14 : 15,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -199,6 +219,20 @@ class StatCard extends StatelessWidget {
                 ),
                 if (unit != null)
                   Text(unit!, style: TextStyle(color: cs.onSurfaceVariant)),
+                if (onTap != null)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          compact ? 'التفاصيل' : 'اضغط للتفاصيل',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: tone, fontSize: 12),
+                        ),
+                      ),
+                      Icon(Icons.chevron_left, size: 16, color: tone),
+                    ],
+                  ),
                 if (hasTrend) ...[
                   const SizedBox(height: 4),
                   Row(
@@ -234,15 +268,15 @@ class StatCard extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: compact ? 8 : 12),
           Container(
-            width: 58,
-            height: 58,
+            width: compact ? 38 : 58,
+            height: compact ? 38 : 58,
             decoration: BoxDecoration(
               color: tone.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(compact ? 12 : 16),
             ),
-            child: Icon(icon, color: tone, size: 30),
+            child: Icon(icon, color: tone, size: compact ? 20 : 30),
           ),
         ],
       ),

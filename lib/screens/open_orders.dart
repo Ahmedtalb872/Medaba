@@ -8,6 +8,7 @@ import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
 import '../widgets/common.dart';
+import 'daily_screens.dart';
 import 'invoices_screen.dart';
 
 void _snack(BuildContext context, String msg) =>
@@ -203,6 +204,18 @@ class OpenOrderPage extends StatelessWidget {
     }
     final multi = o.warehouseIds.length > 1;
     String whName(String id) => s.warehouseById(id)?.name ?? '-';
+    String unit(String id) => s.productById(id)?.unit ?? '';
+    // تقارير المدفوع والمأخوذ يوماً بيوم.
+    void openReport(Widget page) => Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChangeNotifierProvider.value(value: s, child: page),
+      ),
+    );
+    void openPayments() => openReport(OrderPaymentsReport(orderId: o.id));
+    void openPickups() => openReport(
+      OrderPickupsReport(orderId: o.id, openInvoice: openInvoicePdf),
+    );
     return Scaffold(
       appBar: AppBar(
         title: Text('فاتورة مفتوحة ${o.number}'),
@@ -253,12 +266,14 @@ class OpenOrderPage extends StatelessWidget {
                 value: fmt.money(paid),
                 icon: Icons.payments_outlined,
                 colors: AppColors.income,
+                onTap: openPayments,
               ),
               StatCard(
                 label: 'الباقي من المبلغ',
                 value: fmt.money(o.total - paid),
                 icon: Icons.hourglass_bottom,
                 colors: AppColors.loss,
+                onTap: openPayments,
               ),
               StatCard(
                 label: 'الكمية الكلية',
@@ -271,12 +286,14 @@ class OpenOrderPage extends StatelessWidget {
                 value: qty(taken),
                 icon: Icons.outbox_outlined,
                 colors: AppColors.stock,
+                onTap: openPickups,
               ),
               StatCard(
                 label: 'المتبقي في المخزن',
                 value: qty(o.totalQty - taken),
                 icon: Icons.warehouse_outlined,
                 colors: AppColors.expense,
+                onTap: openPickups,
               ),
             ],
           ),
@@ -304,13 +321,10 @@ class OpenOrderPage extends StatelessWidget {
                 for (final l in o.lines)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(
-                      multi
-                          ? '${name(l.productId)} • ${whName(o.whOf(l))}'
-                          : name(l.productId),
-                    ),
+                    title: Text('${name(l.productId)} • ${whName(o.whOf(l))}'),
                     subtitle: Text(
-                      'الأصلية ${fmt.number(l.qty)} • السعر ${fmt.money(l.unitPrice)} '
+                      'الأصلية ${fmt.number(l.qty)} ${unit(l.productId)} • '
+                      'السعر ${fmt.money(l.unitPrice)} '
                       '• أخذ ${fmt.number(l.qty - s.remainingInOrder(o, l.productId, at: o.whOf(l)))}',
                     ),
                     trailing: Text(
@@ -401,12 +415,13 @@ class OpenOrderPage extends StatelessWidget {
                         _HistoryTile(
                           index: n + 1,
                           title:
-                              '${fmt.date(i.date)} • ${i.number}'
-                              '${multi ? ' • ${whName(i.warehouseId)}' : ''}',
+                              '${fmt.date(i.date)} • ${i.number} • '
+                              'من ${whName(i.warehouseId)}',
                           lines: [
                             for (final l in i.lines)
                               '${name(l.productId)}: أخذ ${fmt.number(l.qty)} '
-                                  'من ${fmt.number(o.qtyOf(l.productId, at: i.warehouseId))} '
+                                  '${unit(l.productId)} من '
+                                  '${fmt.number(o.qtyOf(l.productId, at: i.warehouseId))} '
                                   '← بقي ${fmt.number(leftAfter[n]['${l.productId}|${i.warehouseId}'] ?? 0)}',
                             if ((s.debtForInvoice(i.id)?.remaining ?? 0) > 0)
                               'باقي عليه ${fmt.money(s.debtForInvoice(i.id)!.remaining)}',
@@ -795,7 +810,10 @@ Future<void> showPickupForm(BuildContext context, OpenOrder o) {
           }),
         )
       else
-        Text('من ${s.warehouseById(wh)?.name ?? '-'}'),
+        InputDecorator(
+          decoration: const InputDecoration(labelText: 'يأخذ من مخزن'),
+          child: Text(s.warehouseById(wh)?.name ?? '-'),
+        ),
       for (final l in here())
         TextFormField(
           key: ValueKey(keyOf(l)),
@@ -806,9 +824,13 @@ Future<void> showPickupForm(BuildContext context, OpenOrder o) {
           decoration: InputDecoration(
             labelText:
                 'الكمية المأخوذة: ${s.productById(l.productId)?.name ?? ''}',
+            suffixText: s.productById(l.productId)?.unit,
             helperText:
-                'الباقي له هنا ${fmt.number(s.remainingInOrder(o, l.productId, at: wh))} '
+                'الباقي له في ${s.warehouseById(wh)?.name ?? ''}: '
+                '${fmt.number(s.remainingInOrder(o, l.productId, at: wh))} '
+                '${s.productById(l.productId)?.unit ?? ''} '
                 '• السعر ${fmt.money(l.unitPrice)}',
+            helperMaxLines: 2,
           ),
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           validator: (v) {
@@ -872,7 +894,10 @@ Future<void> showPickupForm(BuildContext context, OpenOrder o) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('سُجّلت الدفعة في فاتورة البيع ${inv.number}'),
+              content: Text(
+                'سُجّلت في ${inv.number} من ${s.warehouseById(inv.warehouseId)?.name ?? ''}: '
+                '${inv.lines.map((l) => '${fmt.number(l.qty)} ${s.productById(l.productId)?.unit ?? ''} ${s.productById(l.productId)?.name ?? ''}').join('، ')}',
+              ),
               action: SnackBarAction(
                 label: 'عرض الفاتورة',
                 onPressed: () => openInvoicePdf(context, inv),

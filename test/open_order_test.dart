@@ -211,8 +211,14 @@ void main() {
     expect(find.text('الكمية الكلية'), findsOneWidget);
     expect(find.text('سجل الدفع'), findsOneWidget);
     expect(find.textContaining('المدفوع حتى الآن 70,000'), findsOneWidget);
-    expect(find.textContaining('أخذ 200 من 1,000 ← بقي 800'), findsOneWidget);
-    expect(find.textContaining('أخذ 300 من 1,000 ← بقي 500'), findsOneWidget);
+    expect(
+      find.textContaining('أخذ 200 قطعة من 1,000 ← بقي 800'),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('أخذ 300 قطعة من 1,000 ← بقي 500'),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -476,5 +482,44 @@ void main() {
       );
       expect(() => s.saveOpenOrder(tooMuch), throwsStateError);
     });
+  });
+
+  testWidgets('tapping paid and taken opens their daily reports', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await s.saveOpenOrder(order());
+    await s.addOrderAdvance('o', amount: 30000, date: day);
+    await s.pickupFromOrder('o', quantities: {'p': 200}, paid: 0, date: day);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChangeNotifierProvider.value(
+          value: s,
+          child: const OpenOrderPage(orderId: 'o'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('المدفوع'));
+    await tester.pumpAndSettle();
+    expect(find.text('كل المدفوع'), findsOneWidget);
+    expect(find.textContaining('دفعة مقدمة O-0001'), findsOneWidget);
+    expect(find.textContaining('المدفوع حتى الآن 30,000'), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('المأخوذ'));
+    await tester.pumpAndSettle();
+    expect(find.text('كل المأخوذ'), findsOneWidget);
+    expect(find.textContaining('أخذ 200'), findsWidgets);
+    expect(find.textContaining('← بقي 800'), findsOneWidget);
+    // تصفية: اليوم لا يحوي شيئاً (تاريخ الأخذ قديم).
+    await tester.tap(find.text('اليوم'));
+    await tester.pumpAndSettle();
+    expect(find.text('لم يأخذ الزبون شيئاً في هذه الفترة'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }
