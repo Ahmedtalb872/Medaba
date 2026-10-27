@@ -348,4 +348,133 @@ void main() {
     expect(find.textContaining('O-0001 • سيدي'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  group('an open invoice across several warehouses', () {
+    setUp(() async {
+      await s.saveWarehouse(const Warehouse(id: 'w2', name: 'مخزن 2'));
+      await s.saveMove(
+        StockMove(
+          id: 'in2',
+          type: MoveType.stockIn,
+          productId: 'p',
+          warehouseId: 'w2',
+          qty: 500,
+          date: day,
+        ),
+      );
+    });
+
+    OpenOrder split() => OpenOrder(
+      id: 'o',
+      number: s.nextOrderNumber(),
+      date: day,
+      partyName: 'كريس',
+      warehouseId: 'w',
+      lines: const [
+        InvoiceLine(productId: 'p', qty: 1000, unitPrice: 140),
+        InvoiceLine(
+          productId: 'p',
+          qty: 400,
+          unitPrice: 140,
+          warehouseId: 'w2',
+        ),
+      ],
+    );
+
+    test('each warehouse reserves its part and pickups use it', () async {
+      await s.saveOpenOrder(split());
+      var o = s.orderById('o')!;
+      expect(o.warehouseIds, ['w', 'w2']);
+      expect(o.qtyOf('p'), 1400);
+      expect(s.reservedQty('p', warehouseId: 'w'), 1000);
+      expect(s.reservedQty('p', warehouseId: 'w2'), 400);
+
+      final a = await s.pickupFromOrder(
+        'o',
+        quantities: {'p': 300},
+        paid: 42000,
+        warehouseId: 'w2',
+      );
+      expect(a.warehouseId, 'w2');
+      expect(s.stockOf('p', warehouseId: 'w2'), 200);
+      expect(s.remainingInOrder(o, 'p', at: 'w2'), 100);
+      expect(s.remainingInOrder(o, 'p', at: 'w'), 1000);
+      expect(s.remainingInOrder(o, 'p'), 1100);
+      expect(s.reservedQty('p', warehouseId: 'w2'), 100);
+
+      // لا يأخذ من مخزن أكثر من الباقي له فيه.
+      expect(
+        () => s.pickupFromOrder(
+          'o',
+          quantities: {'p': 200},
+          paid: 0,
+          warehouseId: 'w2',
+        ),
+        throwsStateError,
+      );
+      // ولا من مخزن ليس في الفاتورة.
+      await s.saveWarehouse(const Warehouse(id: 'w3', name: 'مخزن 3'));
+      expect(
+        () => s.pickupFromOrder(
+          'o',
+          quantities: {'p': 1},
+          paid: 0,
+          warehouseId: 'w3',
+        ),
+        throwsStateError,
+      );
+
+      await s.pickupFromOrder(
+        'o',
+        quantities: {'p': 100},
+        paid: 14000,
+        warehouseId: 'w2',
+      );
+      await s.pickupFromOrder(
+        'o',
+        quantities: {'p': 1000},
+        paid: 140000,
+        warehouseId: 'w',
+      );
+      o = s.orderById('o')!;
+      expect(s.isOrderComplete(o), isTrue);
+      expect(OpenOrder.fromJson(o.toJson()).warehouseIds, ['w', 'w2']);
+    });
+
+    test('a warehouse taken from cannot be dropped from the order', () async {
+      await s.saveOpenOrder(split());
+      await s.pickupFromOrder(
+        'o',
+        quantities: {'p': 50},
+        paid: 7000,
+        warehouseId: 'w2',
+      );
+      final moved = OpenOrder(
+        id: 'o',
+        number: 'O-0001',
+        date: day,
+        partyName: 'كريس',
+        warehouseId: 'w',
+        lines: const [InvoiceLine(productId: 'p', qty: 1100, unitPrice: 140)],
+      );
+      expect(() => s.saveOpenOrder(moved), throwsStateError);
+      // ولا تتجاوز الكمية المتوفر في مخزنها.
+      final tooMuch = OpenOrder(
+        id: 'o2',
+        number: 'O-0002',
+        date: day,
+        partyName: 'أحمد',
+        warehouseId: 'w2',
+        lines: const [
+          InvoiceLine(
+            productId: 'p',
+            qty: 200,
+            unitPrice: 140,
+            warehouseId: 'w2',
+          ),
+        ],
+      );
+      expect(() => s.saveOpenOrder(tooMuch), throwsStateError);
+    });
+  });
 }

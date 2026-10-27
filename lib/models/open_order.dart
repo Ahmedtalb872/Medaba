@@ -14,7 +14,7 @@ class OpenOrder {
   final String partyName;
   final String partyPhone;
 
-  /// المخزن الذي تبقى فيه البضاعة محجوزة للزبون.
+  /// المخزن الأساسي. كل سطر يمكن أن يكون من مخزن آخر ([whOf]).
   final String warehouseId;
 
   /// الأصناف بكمياتها الكاملة وسعرها المتفق عليه.
@@ -37,13 +37,25 @@ class OpenOrder {
 
   double get totalQty => lines.fold(0, (s, l) => s + l.qty);
 
-  /// الكمية المتفق عليها من صنف.
-  double qtyOf(String productId) =>
-      lines.where((l) => l.productId == productId).fold(0, (s, l) => s + l.qty);
+  /// المخزن الذي يُحجز منه سطر.
+  String whOf(InvoiceLine l) => l.warehouseId ?? warehouseId;
 
-  /// السعر المتفق عليه لصنف.
-  double priceOf(String productId) =>
-      lines.where((l) => l.productId == productId).firstOrNull?.unitPrice ?? 0;
+  /// المخازن التي يأخذ منها الزبون، بترتيب الأسطر.
+  List<String> get warehouseIds => {for (final l in lines) whOf(l)}.toList();
+
+  bool _match(InvoiceLine l, String productId, String? at) =>
+      l.productId == productId && (at == null || whOf(l) == at);
+
+  /// الكمية المتفق عليها من صنف، في مخزن [at] أو في كل المخازن.
+  double qtyOf(String productId, {String? at}) =>
+      lines.where((l) => _match(l, productId, at)).fold(0, (s, l) => s + l.qty);
+
+  /// السعر المتفق عليه لصنف (في مخزن [at] إن وُجد).
+  double priceOf(String productId, {String? at}) =>
+      (lines.where((l) => _match(l, productId, at)).firstOrNull ??
+              lines.where((l) => l.productId == productId).firstOrNull)
+          ?.unitPrice ??
+      0;
 
   Map<String, dynamic> toJson() => {
     'id': id,

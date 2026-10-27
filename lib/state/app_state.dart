@@ -1540,12 +1540,18 @@ class AppState extends ChangeNotifier {
       if (order != null) {
         for (final e in needed.entries) {
           final left =
-              order.qtyOf(e.key) -
-              takenFromOrder(order.id, e.key, excludeInvoiceId: inv.id);
+              order.qtyOf(e.key, at: inv.warehouseId) -
+              takenFromOrder(
+                order.id,
+                e.key,
+                at: inv.warehouseId,
+                excludeInvoiceId: inv.id,
+              );
           if (e.value > left + 1e-9) {
             throw StateError(
               'المتبقي للزبون من "${productById(e.key)?.name}" '
-              'في ${order.number} هو ${fmt.number(left)} فقط',
+              'في ${warehouseById(inv.warehouseId)?.name ?? 'هذا المخزن'} '
+              'من ${order.number} هو ${fmt.number(left)} فقط',
             );
           }
         }
@@ -1706,24 +1712,38 @@ class AppState extends ChangeNotifier {
     return out..sort((a, b) => a.date.compareTo(b.date));
   }
 
-  /// ما أخذه الزبون من صنف في فاتورة مفتوحة.
+  /// ما أخذه الزبون من صنف في فاتورة مفتوحة، من مخزن [at] أو من كلها.
   double takenFromOrder(
     String orderId,
     String productId, {
+    String? at,
     String? excludeInvoiceId,
   }) => _invoices
-      .where((i) => i.openOrderId == orderId && i.id != excludeInvoiceId)
+      .where(
+        (i) =>
+            i.openOrderId == orderId &&
+            i.id != excludeInvoiceId &&
+            (at == null || i.warehouseId == at),
+      )
       .expand((i) => i.lines)
       .where((l) => l.productId == productId)
       .fold(0, (s, l) => s + l.qty);
 
-  double remainingInOrder(OpenOrder o, String productId) {
-    final left = o.qtyOf(productId) - takenFromOrder(o.id, productId);
-    return left > 0 ? left : 0;
+  /// الباقي للزبون من صنف، في مخزن [at] أو في كل المخازن.
+  double remainingInOrder(OpenOrder o, String productId, {String? at}) {
+    final whs = at == null ? o.warehouseIds : [at];
+    var total = 0.0;
+    for (final w in whs) {
+      final left =
+          o.qtyOf(productId, at: w) - takenFromOrder(o.id, productId, at: w);
+      if (left > 0) total += left;
+    }
+    return total;
   }
 
-  bool isOrderComplete(OpenOrder o) =>
-      o.lines.every((l) => remainingInOrder(o, l.productId) <= 1e-9);
+  bool isOrderComplete(OpenOrder o) => o.lines.every(
+    (l) => remainingInOrder(o, l.productId, at: o.whOf(l)) <= 1e-9,
+  );
 
   /// المدفوع من قيمة الفاتورة المفتوحة (مجموع الدفعات بعد ديونها).
   double orderPaid(OpenOrder o) =>
@@ -1819,11 +1839,18 @@ class AppState extends ChangeNotifier {
     var total = 0.0;
     for (final o in _orders) {
       if (o.id == excludeOrderId) continue;
-      if (warehouseId != null && o.warehouseId != warehouseId) continue;
-      final left =
-          o.qtyOf(productId) -
-          takenFromOrder(o.id, productId, excludeInvoiceId: excludeInvoiceId);
-      if (left > 0) total += left;
+      for (final w in o.warehouseIds) {
+        if (warehouseId != null && w != warehouseId) continue;
+        final left =
+            o.qtyOf(productId, at: w) -
+            takenFromOrder(
+              o.id,
+              productId,
+              at: w,
+              excludeInvoiceId: excludeInvoiceId,
+            );
+        if (left > 0) total += left;
+      }
     }
     return total;
   }
@@ -1833,39 +1860,31 @@ class AppState extends ChangeNotifier {
   Future<void> saveOpenOrder(OpenOrder o) async {
     if (o.lines.isEmpty) throw StateError('أضف صنفاً واحداً على الأقل');
     if (o.partyName.trim().isEmpty) throw StateError('اكتب اسم الزبون');
-    final old = orderById(o.id);
-    if (old != null &&
-        old.warehouseId != o.warehouseId &&
-        pickupsOf(o.id).isNotEmpty) {
-      throw StateError('لا يمكن تغيير المخزن بعد أن أخذ الزبون منها');
-    }
-    for (final pid in {for (final l in o.lines) l.productId}) {
-      final taken = takenFromOrder(o.id, pid);
-      final want = o.qtyOf(pid);
+    // كل صنف في كل مخزن: الأسطر الجديدة، وما أخذ منه الزبون سابقاً
+    // (حتى لا يُحذف أو يُنقل لمخزن آخر بعد أن أخذ منه).
+    final pairs = <(String, String)>{
+      for (final l in o.lines) (l.productId, o.whOf(l)),
+      for (final i in pickupsOf(o.id))
+        for (final l in i.lines) (l.productId, i.warehouseId),
+    };
+    for (final (pid, w) in pairs) {
+      final name = productById(pid)?.name;
+      final whName = warehouseById(w)?.name ?? '';
+      final taken = takenFromOrder(o.id, pid, at: w);
+      final want = o.qtyOf(pid, at: w);
       if (want + 1e-9 < taken) {
         throw StateError(
-          'أخذ الزبون ${fmt.number(taken)} من "${productById(pid)?.name}"، '
-          'فلا يمكن أن تقل الكمية عن ذلك',
+          'أخذ الزبون ${fmt.number(taken)} من "$name" من $whName، '
+          'فلا يمكن أن تقل كميته في هذا المخزن عن ذلك',
         );
       }
       final free =
-          stockOf(pid, warehouseId: o.warehouseId) -
-          reservedQty(pid, warehouseId: o.warehouseId, excludeOrderId: o.id);
+          stockOf(pid, warehouseId: w) -
+          reservedQty(pid, warehouseId: w, excludeOrderId: o.id);
       if (want - taken > free + 1e-9) {
         throw StateError(
-          'المتوفر من "${productById(pid)?.name}" في المخزن '
-          '${fmt.number(free)} فقط',
+          'المتوفر من "$name" في $whName ${fmt.number(free)} فقط',
         );
-      }
-    }
-    // صنف أُزيل من الفاتورة وقد أخذ الزبون منه.
-    for (final i in pickupsOf(o.id)) {
-      for (final l in i.lines) {
-        if (o.qtyOf(l.productId) <= 0) {
-          throw StateError(
-            'أخذ الزبون من "${productById(l.productId)?.name}"، فلا يمكن حذفه',
-          );
-        }
       }
     }
     _upsert(_orders, o, (e) => e.id);
@@ -1890,16 +1909,22 @@ class AppState extends ChangeNotifier {
     required double paid,
     DateTime? date,
     String notes = '',
+    String? warehouseId,
   }) async {
     final o = orderById(orderId);
     if (o == null) throw StateError('الفاتورة المفتوحة غير موجودة');
+    // كل دفعة تُؤخذ من مخزن واحد من مخازن الفاتورة المفتوحة.
+    final wh = warehouseId ?? o.warehouseIds.first;
+    if (!o.warehouseIds.contains(wh)) {
+      throw StateError('هذا المخزن ليس في الفاتورة المفتوحة');
+    }
     final lines = [
       for (final e in quantities.entries)
         if (e.value > 0)
           InvoiceLine(
             productId: e.key,
             qty: e.value,
-            unitPrice: o.priceOf(e.key),
+            unitPrice: o.priceOf(e.key, at: wh),
           ),
     ];
     if (lines.isEmpty) throw StateError('اكتب الكمية التي أخذها الزبون');
@@ -1913,7 +1938,7 @@ class AppState extends ChangeNotifier {
       date: date ?? DateTime.now(),
       partyName: o.partyName,
       partyPhone: o.partyPhone,
-      warehouseId: o.warehouseId,
+      warehouseId: wh,
       lines: lines,
       notes: [
         'دفعة من الفاتورة المفتوحة ${o.number}',

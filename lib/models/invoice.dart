@@ -27,11 +27,16 @@ class InvoiceLine {
   /// null في الفواتير القديمة (يُستعمل سعر الشراء الحالي للصنف).
   final double? unitCost;
 
+  /// في الفاتورة المفتوحة فقط: المخزن الذي يُحجز منه هذا السطر.
+  /// null يعني مخزن الفاتورة المفتوحة الأساسي.
+  final String? warehouseId;
+
   const InvoiceLine({
     required this.productId,
     required this.qty,
     required this.unitPrice,
     this.unitCost,
+    this.warehouseId,
   });
 
   double get total => qty * unitPrice;
@@ -41,6 +46,7 @@ class InvoiceLine {
     'qty': qty,
     'unitPrice': unitPrice,
     if (unitCost != null) 'unitCost': unitCost,
+    if (warehouseId != null) 'warehouseId': warehouseId,
   };
 
   factory InvoiceLine.fromJson(Map<String, dynamic> j) => InvoiceLine(
@@ -48,6 +54,7 @@ class InvoiceLine {
     qty: (j['qty'] as num).toDouble(),
     unitPrice: (j['unitPrice'] as num).toDouble(),
     unitCost: (j['unitCost'] as num?)?.toDouble(),
+    warehouseId: j['warehouseId'] as String?,
   );
 }
 

@@ -80,7 +80,7 @@ class _OrderTile extends StatelessWidget {
     final done = s.isOrderComplete(o);
     final taken = o.lines.fold<double>(
       0,
-      (a, l) => a + l.qty - s.remainingInOrder(o, l.productId),
+      (a, l) => a + l.qty - s.remainingInOrder(o, l.productId, at: o.whOf(l)),
     );
     final progress = o.totalQty == 0 ? 0.0 : taken / o.totalQty;
     return Padding(
@@ -175,7 +175,7 @@ class OpenOrderPage extends StatelessWidget {
     final payments = s.orderPayments(o);
     final taken = o.lines.fold<double>(
       0,
-      (a, l) => a + l.qty - s.remainingInOrder(o, l.productId),
+      (a, l) => a + l.qty - s.remainingInOrder(o, l.productId, at: o.whOf(l)),
     );
     String name(String id) => s.productById(id)?.name ?? 'صنف محذوف';
     // الوحدة تُكتب إذا كانت كل الأصناف بنفس الوحدة.
@@ -188,16 +188,21 @@ class OpenOrderPage extends StatelessWidget {
     for (final p in payments) {
       paidUntil.add((paidUntil.lastOrNull ?? 0) + p.amount);
     }
+    // المفتاح: الصنف والمخزن، لأن الصنف نفسه قد يُحجز من مخزنين.
     final leftAfter = <Map<String, double>>[];
     final left = {
-      for (final pid in o.lines.map((l) => l.productId)) pid: o.qtyOf(pid),
+      for (final l in o.lines)
+        '${l.productId}|${o.whOf(l)}': o.qtyOf(l.productId, at: o.whOf(l)),
     };
     for (final i in pickups) {
       for (final l in i.lines) {
-        left[l.productId] = (left[l.productId] ?? 0) - l.qty;
+        final k = '${l.productId}|${i.warehouseId}';
+        left[k] = (left[k] ?? 0) - l.qty;
       }
       leftAfter.add({...left});
     }
+    final multi = o.warehouseIds.length > 1;
+    String whName(String id) => s.warehouseById(id)?.name ?? '-';
     return Scaffold(
       appBar: AppBar(
         title: Text('فاتورة مفتوحة ${o.number}'),
@@ -282,7 +287,8 @@ class OpenOrderPage extends StatelessWidget {
             child: Text(
               [
                 if (o.partyPhone.isNotEmpty) o.partyPhone,
-                'المخزن: ${s.warehouseById(o.warehouseId)?.name ?? '-'}',
+                '${multi ? 'المخازن' : 'المخزن'}: '
+                    '${o.warehouseIds.map(whName).join('، ')}',
                 'التاريخ: ${fmt.date(o.date)}',
                 'قيمة ما أخذه: ${fmt.money(s.orderTakenValue(o))}',
                 if (o.notes.isNotEmpty) o.notes,
@@ -298,13 +304,17 @@ class OpenOrderPage extends StatelessWidget {
                 for (final l in o.lines)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    title: Text(name(l.productId)),
+                    title: Text(
+                      multi
+                          ? '${name(l.productId)} • ${whName(o.whOf(l))}'
+                          : name(l.productId),
+                    ),
                     subtitle: Text(
                       'الأصلية ${fmt.number(l.qty)} • السعر ${fmt.money(l.unitPrice)} '
-                      '• أخذ ${fmt.number(l.qty - s.remainingInOrder(o, l.productId))}',
+                      '• أخذ ${fmt.number(l.qty - s.remainingInOrder(o, l.productId, at: o.whOf(l)))}',
                     ),
                     trailing: Text(
-                      'المتبقي ${fmt.number(s.remainingInOrder(o, l.productId))}',
+                      'المتبقي ${fmt.number(s.remainingInOrder(o, l.productId, at: o.whOf(l)))}',
                       style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -390,12 +400,14 @@ class OpenOrderPage extends StatelessWidget {
                       for (final (n, i) in pickups.indexed)
                         _HistoryTile(
                           index: n + 1,
-                          title: '${fmt.date(i.date)} • ${i.number}',
+                          title:
+                              '${fmt.date(i.date)} • ${i.number}'
+                              '${multi ? ' • ${whName(i.warehouseId)}' : ''}',
                           lines: [
                             for (final l in i.lines)
                               '${name(l.productId)}: أخذ ${fmt.number(l.qty)} '
-                                  'من ${fmt.number(o.qtyOf(l.productId))} '
-                                  '← بقي ${fmt.number(leftAfter[n][l.productId] ?? 0)}',
+                                  'من ${fmt.number(o.qtyOf(l.productId, at: i.warehouseId))} '
+                                  '← بقي ${fmt.number(leftAfter[n]['${l.productId}|${i.warehouseId}'] ?? 0)}',
                             if ((s.debtForInvoice(i.id)?.remaining ?? 0) > 0)
                               'باقي عليه ${fmt.money(s.debtForInvoice(i.id)!.remaining)}',
                           ],
@@ -491,11 +503,18 @@ class _HistoryTile extends StatelessWidget {
 
 class _LineDraft {
   String productId;
+
+  /// المخزن الذي يُحجز منه هذا الصنف.
+  String warehouseId;
   final TextEditingController qty;
   final TextEditingController price;
-  _LineDraft(this.productId, {String qty = '', String price = ''})
-    : qty = TextEditingController(text: qty),
-      price = TextEditingController(text: price);
+  _LineDraft(
+    this.productId,
+    this.warehouseId, {
+    String qty = '',
+    String price = '',
+  }) : qty = TextEditingController(text: qty),
+       price = TextEditingController(text: price);
 }
 
 /// إنشاء فاتورة مفتوحة أو تعديلها: الزبون، المخزن، والأصناف بكمياتها وسعرها.
@@ -509,31 +528,37 @@ Future<void> showOpenOrderForm(BuildContext context, {OpenOrder? existing}) {
   final party = TextEditingController(text: existing?.partyName);
   final phone = TextEditingController(text: existing?.partyPhone);
   final notes = TextEditingController(text: existing?.notes);
-  var warehouse = existing?.warehouseId ?? s.warehouses.first.id;
   var date = existing?.date ?? DateTime.now();
   final number = existing?.number ?? s.nextOrderNumber();
   final lines = [
     for (final l in existing?.lines ?? const <InvoiceLine>[])
       _LineDraft(
         l.productId,
+        existing!.whOf(l),
         qty: fmt.number(l.qty),
         price: fmt.number(l.unitPrice),
       ),
   ];
-  if (lines.isEmpty) {
+  void addLine() {
     final p = s.products.first;
-    lines.add(_LineDraft(p.id, price: fmt.number(p.salePrice)));
+    // السطر الجديد من نفس مخزن السطر السابق.
+    final w = lines.lastOrNull?.warehouseId ?? s.warehouses.first.id;
+    lines.add(_LineDraft(p.id, w, price: fmt.number(p.salePrice)));
   }
 
-  // لا يُعرض رقم سالب إذا قلّ المخزون عن المحجوز.
-  double free(String productId) =>
-      (s.stockOf(productId, warehouseId: warehouse) -
+  if (lines.isEmpty) addLine();
+
+  // ما يمكن حجزه من صنف في مخزن. لا يُعرض رقم سالب إذا قلّ المخزون عن المحجوز.
+  double free(String productId, String w) =>
+      (s.stockOf(productId, warehouseId: w) -
               s.reservedQty(
                 productId,
-                warehouseId: warehouse,
+                warehouseId: w,
                 excludeOrderId: existing?.id,
               ) +
-              (existing == null ? 0 : s.takenFromOrder(existing.id, productId)))
+              (existing == null
+                  ? 0
+                  : s.takenFromOrder(existing.id, productId, at: w)))
           .clamp(0.0, double.infinity);
 
   return showFormDialog(
@@ -554,24 +579,16 @@ Future<void> showOpenOrderForm(BuildContext context, {OpenOrder? existing}) {
         keyboardType: TextInputType.phone,
         textDirection: TextDirection.ltr,
       ),
-      DropdownButtonFormField<String>(
-        initialValue: warehouse,
-        isExpanded: true,
-        decoration: const InputDecoration(
-          labelText: 'المخزن الذي تبقى فيه البضاعة',
-        ),
-        items: [
-          for (final w in s.warehouses)
-            DropdownMenuItem(value: w.id, child: Text(w.name)),
-        ],
-        onChanged: (v) => setState(() => warehouse = v!),
-      ),
       DateField(
         label: 'التاريخ',
         value: date,
         onChanged: (d) => setState(() => date = d),
       ),
       const Text('الأصناف', style: TextStyle(fontWeight: FontWeight.bold)),
+      const Text(
+        'لكل صنف مخزنه. لأخذ نفس الصنف من مخزنين أضفه مرتين بمخزنين مختلفين.',
+        style: TextStyle(fontSize: 12),
+      ),
       for (final (i, l) in lines.indexed)
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -607,6 +624,18 @@ Future<void> showOpenOrderForm(BuildContext context, {OpenOrder? existing}) {
               ],
             ),
             const SizedBox(height: 8),
+            DropdownButtonFormField<String>(
+              key: ValueKey('w$i${l.warehouseId}'),
+              initialValue: l.warehouseId,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'من مخزن'),
+              items: [
+                for (final w in s.warehouses)
+                  DropdownMenuItem(value: w.id, child: Text(w.name)),
+              ],
+              onChanged: (v) => setState(() => l.warehouseId = v!),
+            ),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -614,7 +643,8 @@ Future<void> showOpenOrderForm(BuildContext context, {OpenOrder? existing}) {
                     controller: l.qty,
                     decoration: InputDecoration(
                       labelText: 'الكمية',
-                      helperText: 'المتوفر: ${fmt.number(free(l.productId))}',
+                      helperText:
+                          'المتوفر: ${fmt.number(free(l.productId, l.warehouseId))}',
                     ),
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
@@ -622,14 +652,18 @@ Future<void> showOpenOrderForm(BuildContext context, {OpenOrder? existing}) {
                     validator: (v) {
                       final base = numberValidator(min: 0.001)(v);
                       if (base != null) return base;
-                      // مجموع الصنف في كل الأسطر لا يتجاوز المتوفر.
+                      // مجموع الصنف من نفس المخزن لا يتجاوز المتوفر فيه.
                       final want = lines
-                          .where((x) => x.productId == l.productId)
+                          .where(
+                            (x) =>
+                                x.productId == l.productId &&
+                                x.warehouseId == l.warehouseId,
+                          )
                           .fold<double>(
                             0,
                             (a, x) => a + (fmt.parseNumber(x.qty.text) ?? 0),
                           );
-                      final have = free(l.productId);
+                      final have = free(l.productId, l.warehouseId);
                       return want > have + 1e-9
                           ? 'المتوفر ${fmt.number(have)} فقط'
                           : null;
@@ -654,10 +688,7 @@ Future<void> showOpenOrderForm(BuildContext context, {OpenOrder? existing}) {
       Align(
         alignment: AlignmentDirectional.centerStart,
         child: TextButton.icon(
-          onPressed: () => setState(() {
-            final p = s.products.first;
-            lines.add(_LineDraft(p.id, price: fmt.number(p.salePrice)));
-          }),
+          onPressed: () => setState(addLine),
           icon: const Icon(Icons.add),
           label: const Text('إضافة صنف'),
         ),
@@ -668,15 +699,18 @@ Future<void> showOpenOrderForm(BuildContext context, {OpenOrder? existing}) {
       ),
     ],
     onSave: () async {
+      // نفس الصنف من نفس المخزن يُجمع في سطر واحد.
       final merged = <String, InvoiceLine>{};
       for (final l in lines) {
         final qty = fmt.parseNumber(l.qty.text) ?? 0;
         final price = fmt.parseNumber(l.price.text) ?? 0;
-        final prev = merged[l.productId];
-        merged[l.productId] = InvoiceLine(
+        final key = '${l.productId}|${l.warehouseId}';
+        final prev = merged[key];
+        merged[key] = InvoiceLine(
           productId: l.productId,
           qty: qty + (prev?.qty ?? 0),
           unitPrice: price,
+          warehouseId: l.warehouseId,
         );
       }
       // الرفض (مثل كمية أكبر من المتوفر) يظهر داخل النموذج ويبقى مفتوحاً.
@@ -687,7 +721,7 @@ Future<void> showOpenOrderForm(BuildContext context, {OpenOrder? existing}) {
           date: date,
           partyName: party.text.trim(),
           partyPhone: phone.text.trim(),
-          warehouseId: warehouse,
+          warehouseId: lines.first.warehouseId,
           lines: merged.values.toList(),
           notes: notes.text.trim(),
         ),
@@ -708,16 +742,30 @@ Future<void> showOpenOrderForm(BuildContext context, {OpenOrder? existing}) {
 Future<void> showPickupForm(BuildContext context, OpenOrder o) {
   final s = context.read<AppState>();
   final key = GlobalKey<FormState>();
-  final qty = {for (final l in o.lines) l.productId: TextEditingController()};
+  String keyOf(InvoiceLine l) => '${l.productId}|${o.whOf(l)}';
+  final qty = {for (final l in o.lines) keyOf(l): TextEditingController()};
   final paid = TextEditingController();
   final notes = TextEditingController();
   var paidTouched = false;
   var date = DateTime.now();
   final credit = s.orderCredit(o.id);
 
-  double value() => o.lines.fold(
+  // كل دفعة من مخزن واحد؛ يبدأ بأول مخزن بقي فيه شيء للزبون.
+  final whs = o.warehouseIds;
+  var wh = whs.firstWhere(
+    (w) => o.lines.any(
+      (l) => o.whOf(l) == w && s.remainingInOrder(o, l.productId, at: w) > 1e-9,
+    ),
+    orElse: () => whs.first,
+  );
+  List<InvoiceLine> here() => [
+    for (final l in o.lines)
+      if (o.whOf(l) == wh) l,
+  ];
+
+  double value() => here().fold(
     0,
-    (a, l) => a + (fmt.parseNumber(qty[l.productId]!.text) ?? 0) * l.unitPrice,
+    (a, l) => a + (fmt.parseNumber(qty[keyOf(l)]!.text) ?? 0) * l.unitPrice,
   );
 
   /// ما يُخصم من المدفوع مقدماً، وما بقي ليُدفع الآن.
@@ -729,9 +777,29 @@ Future<void> showPickupForm(BuildContext context, OpenOrder o) {
     formKey: key,
     title: 'أخذ دفعة من ${o.number} • ${o.partyName}',
     fields: (setState) => [
-      for (final l in o.lines)
+      if (whs.length > 1)
+        DropdownButtonFormField<String>(
+          initialValue: wh,
+          isExpanded: true,
+          decoration: const InputDecoration(labelText: 'يأخذ من مخزن'),
+          items: [
+            for (final w in whs)
+              DropdownMenuItem(
+                value: w,
+                child: Text(s.warehouseById(w)?.name ?? '-'),
+              ),
+          ],
+          onChanged: (v) => setState(() {
+            wh = v!;
+            if (!paidTouched) paid.text = fmt.number(due());
+          }),
+        )
+      else
+        Text('من ${s.warehouseById(wh)?.name ?? '-'}'),
+      for (final l in here())
         TextFormField(
-          controller: qty[l.productId],
+          key: ValueKey(keyOf(l)),
+          controller: qty[keyOf(l)],
           onChanged: (_) => setState(() {
             if (!paidTouched) paid.text = fmt.number(due());
           }),
@@ -739,7 +807,7 @@ Future<void> showPickupForm(BuildContext context, OpenOrder o) {
             labelText:
                 'الكمية المأخوذة: ${s.productById(l.productId)?.name ?? ''}',
             helperText:
-                'الباقي له ${fmt.number(s.remainingInOrder(o, l.productId))} '
+                'الباقي له هنا ${fmt.number(s.remainingInOrder(o, l.productId, at: wh))} '
                 '• السعر ${fmt.money(l.unitPrice)}',
           ),
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -747,7 +815,7 @@ Future<void> showPickupForm(BuildContext context, OpenOrder o) {
             final n = fmt.parseNumber(v ?? '');
             if (n == null || n == 0) return null;
             if (n < 0) return 'كمية غير صحيحة';
-            if (n > s.remainingInOrder(o, l.productId) + 1e-9) {
+            if (n > s.remainingInOrder(o, l.productId, at: wh) + 1e-9) {
               return 'أكثر من الباقي له';
             }
             return null;
@@ -793,12 +861,13 @@ Future<void> showPickupForm(BuildContext context, OpenOrder o) {
         final inv = await s.pickupFromOrder(
           o.id,
           quantities: {
-            for (final e in qty.entries)
-              e.key: fmt.parseNumber(e.value.text) ?? 0,
+            for (final l in here())
+              l.productId: fmt.parseNumber(qty[keyOf(l)]!.text) ?? 0,
           },
           paid: fmt.parseNumber(paid.text) ?? 0,
           date: date,
           notes: notes.text,
+          warehouseId: wh,
         );
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
