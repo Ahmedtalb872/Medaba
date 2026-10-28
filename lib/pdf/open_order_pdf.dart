@@ -7,7 +7,8 @@ import '../models/open_order.dart';
 import '../state/app_state.dart';
 import '../utils/format.dart' as fmt;
 import '../utils/product_image.dart';
-import 'invoice_pdf.dart' show loadPdfTheme;
+import 'invoice_pdf.dart' show loadPdfTheme, paymentAccountsCard;
+import 'invoice_strings.dart' show InvoiceStrings;
 
 const _brand = PdfColor.fromInt(0xFF0B4D38);
 const _brandDark = PdfColor.fromInt(0xFF07291F);
@@ -383,56 +384,13 @@ Future<Uint8List> buildOpenOrderPdf({
         ],
         if (company.paymentAccounts.isNotEmpty) ...[
           pw.SizedBox(height: 14),
-          _title('حسابات الدفع'),
-          pw.Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final a in company.paymentAccounts)
-                pw.Container(
-                  width: 128,
-                  padding: const pw.EdgeInsets.all(8),
-                  decoration: pw.BoxDecoration(
-                    color: _panel,
-                    borderRadius: pw.BorderRadius.circular(8),
-                    border: pw.Border.all(color: _line),
-                  ),
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        a.name,
-                        textDirection: _dir(a.name),
-                        style: pw.TextStyle(
-                          fontSize: 11,
-                          fontWeight: pw.FontWeight.bold,
-                          color: _blue,
-                        ),
-                      ),
-                      pw.SizedBox(height: 4),
-                      pw.Text(
-                        'رقم الحساب',
-                        textDirection: pw.TextDirection.rtl,
-                        style: const pw.TextStyle(fontSize: 7.5, color: _muted),
-                      ),
-                      pw.Text(
-                        a.number,
-                        textDirection: pw.TextDirection.ltr,
-                        style: pw.TextStyle(
-                          fontSize: 11,
-                          fontWeight: pw.FontWeight.bold,
-                        ),
-                      ),
-                      pw.SizedBox(height: 3),
-                      pw.Text(
-                        'مرجع الدفع: ${o.number}',
-                        textDirection: pw.TextDirection.rtl,
-                        style: const pw.TextStyle(fontSize: 7.5, color: _muted),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
+          // نفس قسم حسابات الدفع في فواتير البيع.
+          pw.Inseparable(
+            child: paymentAccountsCard(
+              InvoiceStrings.ar,
+              company.paymentAccounts,
+              o.number,
+            ),
           ),
         ],
         if (o.notes.isNotEmpty) ...[

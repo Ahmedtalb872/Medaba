@@ -135,7 +135,9 @@ Future<Uint8List> buildInvoicePdf({
         if (accounts.isNotEmpty) ...[
           pw.SizedBox(height: 8),
           // العنوان والبطاقات معاً حتى لا يبقى العنوان وحده آخر الصفحة.
-          pw.Inseparable(child: _accountsCard(t, accounts, invoice)),
+          pw.Inseparable(
+            child: paymentAccountsCard(t, accounts, invoice.number),
+          ),
         ],
       ],
     ),
@@ -795,10 +797,12 @@ pw.Widget _notesCard(InvoiceStrings t, String notes) => _card(
 
 // ---------- حسابات الدفع ----------
 
-pw.Widget _accountsCard(
+/// قسم حسابات الدفع بتصميم الفواتير (الأزرق)، ويُستعمل في الفاتورة المفتوحة
+/// أيضاً. [reference] رقم الفاتورة الذي يكتبه الزبون مرجعاً للدفع.
+pw.Widget paymentAccountsCard(
   InvoiceStrings t,
   List<PaymentAccount> accounts,
-  Invoice inv,
+  String reference,
 ) {
   final mono = pw.TextStyle(font: pw.Font.courier(), fontSize: 11);
   const label = pw.TextStyle(fontSize: 9.5, color: _muted);
@@ -867,7 +871,7 @@ pw.Widget _accountsCard(
           field(t.accountNumber, _ltr(a.number, mono)),
           field(
             t.paymentReference,
-            _ltr(inv.number, const pw.TextStyle(fontSize: 10.5)),
+            _ltr(reference, const pw.TextStyle(fontSize: 10.5)),
             last: true,
           ),
         ],
