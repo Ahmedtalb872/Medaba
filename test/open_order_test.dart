@@ -563,4 +563,31 @@ void main() {
     final pdf = await buildOpenOrderPdf(order: s.orderById('o')!, s: s);
     expect(pdf.length, greaterThan(2000));
   });
+
+  test('each payment says which goods it paid for', () async {
+    await s.saveOpenOrder(order()); // 140 للوحدة
+    await s.addOrderAdvance('o', amount: 50000, date: day);
+    // 200 = 28000 من المقدم، ثم 300 = 22000 من المقدم و20000 نقداً.
+    await s.pickupFromOrder('o', quantities: {'p': 200}, paid: 0);
+    await s.pickupFromOrder('o', quantities: {'p': 300}, paid: 20000);
+    final pays = s.orderPayments(s.orderById('o')!);
+    final first = pays.first.goods.map(paidForText).join('\n');
+    expect(first, contains('S-0001 • 200 قطعة 0.66 غ من مخزن 1 • 28,000'));
+    expect(first, contains('S-0002 • 300 قطعة'));
+    expect(first, isNot(contains('رصيد')));
+    expect(pays.last.goods.single.what, '300 قطعة 0.66 غ من مخزن 1');
+
+    // مبلغ مقدم لم يُستعمل بعد.
+    await s.addOrderAdvance('o', amount: 10000, date: day);
+    expect(
+      s
+          .orderPayments(s.orderById('o')!)
+          .where((p) => p.advanceId != null)
+          .last
+          .goods
+          .map(paidForText)
+          .join(),
+      contains('رصيد لم يأخذ به بضاعة بعد • 10,000'),
+    );
+  });
 }

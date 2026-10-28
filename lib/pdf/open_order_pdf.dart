@@ -276,11 +276,18 @@ Future<Uint8List> buildOpenOrderPdf({
           )
         else ...[
           _row(
-            ['#', 'التاريخ', 'البيان', 'المبلغ', 'المدفوع حتى الآن', 'الباقي'],
-            const [1, 3, 5, 3, 3, 3],
+            [
+              '#',
+              'التاريخ',
+              'البيان وعن أي بضاعة',
+              'المبلغ',
+              'المدفوع حتى الآن',
+              'الباقي',
+            ],
+            const [1, 3, 8, 3, 3, 3],
             head: true,
           ),
-          for (final (n, p) in payments.indexed)
+          for (final (n, p) in payments.indexed) ...[
             () {
               running += p.amount;
               return _row(
@@ -292,9 +299,24 @@ Future<Uint8List> buildOpenOrderPdf({
                   fmt.money(running),
                   fmt.money(o.total - running),
                 ],
-                const [1, 3, 5, 3, 3, 3],
+                const [1, 3, 8, 3, 3, 3],
               );
             }(),
+            // كل بضاعة دُفع عنها في سطر مستقل: الفاتورة، البضاعة، المبلغ.
+            for (final g in p.goods)
+              _row(
+                [
+                  '',
+                  g.ref,
+                  g.what,
+                  g.amount == null ? '' : fmt.money(g.amount!),
+                  '',
+                  '',
+                ],
+                const [1, 3, 8, 3, 3, 3],
+                sub: true,
+              ),
+          ],
         ],
         if (o.notes.isNotEmpty) ...[
           pw.SizedBox(height: 12),
@@ -380,17 +402,20 @@ pw.Widget _row(
   List<int> flex, {
   bool head = false,
   bool light = false,
+  bool sub = false,
 }) {
   final style = pw.TextStyle(
-    fontSize: head ? 9 : 8.5,
+    fontSize: head ? 9 : (sub ? 7.5 : 8.5),
     fontWeight: head ? pw.FontWeight.bold : null,
-    color: head && !light ? PdfColors.white : (head ? _brand : null),
+    color: head && !light
+        ? PdfColors.white
+        : (head ? _brand : (sub ? _blue : null)),
   );
   return pw.Container(
-    padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+    padding: pw.EdgeInsets.symmetric(horizontal: 6, vertical: sub ? 2 : 5),
     decoration: pw.BoxDecoration(
       color: head ? (light ? _panel : _brand) : null,
-      border: head
+      border: head || sub
           ? null
           : const pw.Border(bottom: pw.BorderSide(color: _line)),
     ),

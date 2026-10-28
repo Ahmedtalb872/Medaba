@@ -440,8 +440,11 @@ class _OrderPaymentsReportState extends State<OrderPaymentsReport> {
                     ),
                     title: Text(e.p.source),
                     subtitle: Text(
-                      'المدفوع حتى الآن ${fmt.money(until[e.i])} • '
-                      'الباقي ${fmt.money(o.total - until[e.i])}',
+                      [
+                        for (final g in e.p.goods) 'عن: ${paidForText(g)}',
+                        'المدفوع حتى الآن ${fmt.money(until[e.i])} • '
+                            'الباقي ${fmt.money(o.total - until[e.i])}',
+                      ].join('\n'),
                     ),
                     trailing: Text(
                       fmt.money(e.p.amount),

@@ -387,6 +387,8 @@ class OpenOrderPage extends StatelessWidget {
                               index: n + 1,
                               title: '${fmt.date(p.date)} • ${p.source}',
                               lines: [
+                                for (final g in p.goods)
+                                  'عن: ${paidForText(g)}',
                                 'المدفوع حتى الآن ${fmt.money(paidUntil[n])}',
                                 'الباقي ${fmt.money(o.total - paidUntil[n])}',
                               ],

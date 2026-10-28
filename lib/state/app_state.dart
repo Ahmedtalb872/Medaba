@@ -55,12 +55,24 @@ typedef DealStatement = ({
 
 /// دفعة مالية من زبون فاتورة مفتوحة.
 /// [advanceId] للدفعة المقدمة (يمكن حذفها)، و null لما دُفع عند الأخذ.
+/// جزء مما دُفع: الفاتورة [ref] والبضاعة [what] والمبلغ عنها (null = كل الدفعة).
+typedef PaidFor = ({String ref, String what, double? amount});
+
+/// [goods] البضاعة التي دُفع عنها هذا المبلغ (الكمية والوحدة والصنف والمخزن).
 typedef OrderPayment = ({
   DateTime date,
   double amount,
   String source,
   String? advanceId,
+  List<PaidFor> goods,
 });
+
+/// سطر نصي لما دُفع عنه، للعرض في الشاشات.
+String paidForText(PaidFor g) => [
+  if (g.ref.isNotEmpty) g.ref,
+  g.what,
+  if (g.amount != null) fmt.money(g.amount!),
+].join(' • ');
 
 typedef LoanBalance = ({
   bool ours,
@@ -1679,16 +1691,52 @@ class AppState extends ChangeNotifier {
   /// كل ما دفعه الزبون في فاتورة مفتوحة، بالترتيب: ما دفعه عند أخذ كل دفعة،
   /// ثم ما سدّده لاحقاً من دين تلك الدفعات.
   List<OrderPayment> orderPayments(OpenOrder o) {
+    final pickups = pickupsOf(o.id);
+    // المدفوع مقدماً يُوزَّع على ما أُخذ به بالترتيب (الأقدم أولاً)،
+    // ليظهر عن أي بضاعة دُفع كل مبلغ.
+    final usage = <String, List<PaidFor>>{};
+    final advances = orderAdvances(o.id);
+    var ai = 0;
+    var leftInAdvance = advances.isEmpty ? 0.0 : advances.first.amount;
+    for (final i in pickups) {
+      var need = i.prepaid;
+      while (need > 1e-9 && ai < advances.length) {
+        final use = need < leftInAdvance ? need : leftInAdvance;
+        if (use > 1e-9) {
+          (usage[advances[ai].id] ??= []).add((
+            ref: i.number,
+            what: pickupGoods(i),
+            amount: use,
+          ));
+        }
+        need -= use;
+        leftInAdvance -= use;
+        if (leftInAdvance <= 1e-9) {
+          ai++;
+          leftInAdvance = ai < advances.length ? advances[ai].amount : 0;
+        }
+      }
+    }
     final out = <OrderPayment>[
-      for (final t in orderAdvances(o.id))
+      for (final (k, t) in advances.indexed)
         (
           date: t.date,
           amount: t.amount,
           source: t.note.replaceFirst(' - ${o.partyName}', ''),
           advanceId: t.id,
+          goods: [
+            ...?usage[t.id],
+            // ما لم يُستعمل بعد من هذه الدفعة.
+            if (k > ai || (k == ai && leftInAdvance > 1e-9))
+              (
+                ref: '',
+                what: 'رصيد لم يأخذ به بضاعة بعد',
+                amount: k == ai ? leftInAdvance : t.amount,
+              ),
+          ],
         ),
     ];
-    for (final i in pickupsOf(o.id)) {
+    for (final i in pickups) {
       final debt = debtForInvoice(i.id);
       final atPickup = i.total - i.prepaid - (debt?.amount ?? 0);
       if (atPickup > 1e-9) {
@@ -1697,6 +1745,7 @@ class AppState extends ChangeNotifier {
           amount: atPickup,
           source: 'عند أخذ ${i.number}',
           advanceId: null,
+          goods: [(ref: '', what: pickupGoods(i), amount: null)],
         ));
       }
       for (final p in debt?.payments ?? const <DebtPayment>[]) {
@@ -1706,11 +1755,19 @@ class AppState extends ChangeNotifier {
           source:
               'تسديد دين ${i.number}${p.note.isEmpty ? '' : ' • ${p.note}'}',
           advanceId: null,
+          goods: [(ref: '', what: pickupGoods(i), amount: null)],
         ));
       }
     }
     return out..sort((a, b) => a.date.compareTo(b.date));
   }
+
+  /// وصف ما أخذه الزبون في دفعة: «400 قطعة 3.20 غ من مخزن 1».
+  String pickupGoods(Invoice i) =>
+      '${i.lines.map((l) {
+        final p = productById(l.productId);
+        return '${fmt.number(l.qty)} ${p?.unit ?? ''} ${p?.name ?? 'صنف محذوف'}';
+      }).join('، ')} من ${warehouseById(i.warehouseId)?.name ?? '-'}';
 
   /// ما أخذه الزبون من صنف في فاتورة مفتوحة، من مخزن [at] أو من كلها.
   double takenFromOrder(
