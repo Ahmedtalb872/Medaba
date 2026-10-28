@@ -994,11 +994,22 @@ class _OrderPdfPage extends StatefulWidget {
 }
 
 class _OrderPdfPageState extends State<_OrderPdfPage> {
-  /// يُبنى الملف مرة واحدة فيكون جاهزاً للمشاركة مباشرة على الهاتف.
-  late final Future<Uint8List> _pdf = buildOpenOrderPdf(
-    order: widget.order,
-    s: widget.s,
-  );
+  /// التاريخ المطبوع على الكشف، يغيّره المدير.
+  DateTime _issued = DateTime.now();
+
+  /// نسخة المدير تُظهر المخازن؛ نسخة الزبون (الافتراضية) لا تُظهرها.
+  bool _withWarehouses = false;
+
+  /// كل نسخة تُبنى مرة واحدة فتكون جاهزة للمشاركة مباشرة على الهاتف.
+  final _files = <String, Future<Uint8List>>{};
+
+  Future<Uint8List> get _pdf =>
+      _files['${fmt.date(_issued)}|$_withWarehouses'] ??= buildOpenOrderPdf(
+        order: widget.order,
+        s: widget.s,
+        showWarehouses: _withWarehouses,
+        issued: _issued,
+      );
 
   String get fileName => '${widget.order.number}-${widget.order.partyName}.pdf';
 
@@ -1006,6 +1017,37 @@ class _OrderPdfPageState extends State<_OrderPdfPage> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
       title: Text('فاتورة مفتوحة ${widget.order.number}'),
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(56),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          child: Row(
+            children: [
+              ActionChip(
+                avatar: const Icon(Icons.event_outlined, size: 18),
+                label: Text('تاريخ الكشف: ${fmt.date(_issued)}'),
+                onPressed: () async {
+                  final d = await showDatePicker(
+                    context: context,
+                    initialDate: _issued,
+                    firstDate: DateTime(2000),
+                    lastDate: DateTime(2100),
+                  );
+                  if (d != null) setState(() => _issued = d);
+                },
+              ),
+              const SizedBox(width: 8),
+              FilterChip(
+                avatar: const Icon(Icons.warehouse_outlined, size: 18),
+                label: const Text('إظهار المخازن (نسخة للمدير)'),
+                selected: _withWarehouses,
+                onSelected: (v) => setState(() => _withWarehouses = v),
+              ),
+            ],
+          ),
+        ),
+      ),
       actions: [
         IconButton(
           tooltip: 'طباعة',
@@ -1024,6 +1066,8 @@ class _OrderPdfPageState extends State<_OrderPdfPage> {
       ],
     ),
     body: PdfPreview(
+      // مفتاح بالتاريخ والنسخة حتى تُعاد المعاينة عند تغييرهما.
+      key: ValueKey('${fmt.date(_issued)}|$_withWarehouses'),
       build: (_) => _pdf,
       pdfFileName: fileName,
       canChangeOrientation: false,

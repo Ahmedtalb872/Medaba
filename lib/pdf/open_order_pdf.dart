@@ -23,7 +23,10 @@ const _blue = PdfColor.fromInt(0xFF274C86);
 Future<Uint8List> buildOpenOrderPdf({
   required OpenOrder order,
   required AppState s,
+  bool showWarehouses = false,
+  DateTime? issued,
 }) async {
+  final printedOn = issued ?? DateTime.now();
   final o = order;
   final company = s.company;
   final doc = pw.Document(
@@ -36,7 +39,8 @@ Future<Uint8List> buildOpenOrderPdf({
   String whName(String id) => s.warehouseById(id)?.name ?? '-';
 
   final pickups = s.pickupsOf(o.id);
-  final payments = s.orderPayments(o);
+  // نسخة الزبون لا تذكر المخازن حتى في وصف ما دُفع عنه.
+  final payments = s.orderPayments(o, withWarehouse: showWarehouses);
   final paid = s.orderPaid(o);
   final credit = s.orderCredit(o.id);
   final taken = o.lines.fold<double>(
@@ -49,35 +53,49 @@ Future<Uint8List> buildOpenOrderPdf({
       ? '${fmt.number(v)} ${units.first}'.trim()
       : fmt.number(v);
 
-  // الباقي من كل صنف في كل مخزن بعد كل أخذ.
-  final left = {
-    for (final l in o.lines)
-      '${l.productId}|${o.whOf(l)}': o.qtyOf(l.productId, at: o.whOf(l)),
-  };
+  // نسخة الزبون بلا مخازن: مجموعة واحدة لكل الأصناف (المخزن null).
+  final groups = showWarehouses
+      ? <String?>[...o.warehouseIds]
+      : <String?>[null];
+  String keyOf(String pid, String? w) => showWarehouses ? '$pid|$w' : pid;
+
+  // الباقي من كل صنف (في كل مخزن للمدير) بعد كل أخذ.
+  final left = <String, double>{};
+  for (final l in o.lines) {
+    final k = keyOf(l.productId, o.whOf(l));
+    left[k] = (left[k] ?? 0) + l.qty;
+  }
   final leftAfter = <String, Map<String, double>>{};
   for (final i in pickups) {
     for (final l in i.lines) {
-      final k = '${l.productId}|${i.warehouseId}';
+      final k = keyOf(l.productId, i.warehouseId);
       left[k] = (left[k] ?? 0) - l.qty;
     }
     leftAfter[i.id] = {...left};
   }
 
   final sections = <pw.Widget>[];
-  for (final w in o.warehouseIds) {
-    final lines = [
-      for (final l in o.lines)
-        if (o.whOf(l) == w) l,
-    ];
+  for (final w in groups) {
+    // الأصناف: للزبون يُجمع الصنف الواحد من كل المخازن في سطر.
+    final rows = <String, ({String pid, double qty, double price})>{};
+    for (final l in o.lines) {
+      if (w != null && o.whOf(l) != w) continue;
+      final k = '${l.productId}|${l.unitPrice}';
+      final prev = rows[k];
+      rows[k] = (
+        pid: l.productId,
+        qty: (prev?.qty ?? 0) + l.qty,
+        price: l.unitPrice,
+      );
+    }
+    double remaining(String pid) => s.remainingInOrder(o, pid, at: w);
     final from = [
       for (final i in pickups)
-        if (i.warehouseId == w) i,
+        if (w == null || i.warehouseId == w) i,
     ];
-    final whQty = lines.fold<double>(0, (a, l) => a + l.qty);
-    final whTaken = lines.fold<double>(
-      0,
-      (a, l) => a + l.qty - s.remainingInOrder(o, l.productId, at: w),
-    );
+    final grpQty = rows.values.fold<double>(0, (a, r) => a + r.qty);
+    final grpLeft = {for (final r in rows.values) r.pid}
+        .fold<double>(0, (a, pid) => a + remaining(pid));
     sections.addAll([
       pw.SizedBox(height: 14),
       pw.Container(
@@ -91,8 +109,8 @@ Future<Uint8List> buildOpenOrderPdf({
           children: [
             pw.Expanded(
               child: pw.Text(
-                whName(w),
-                textDirection: _dir(whName(w)),
+                w == null ? 'الأصناف' : whName(w),
+                textDirection: pw.TextDirection.rtl,
                 style: pw.TextStyle(
                   color: PdfColors.white,
                   fontWeight: pw.FontWeight.bold,
@@ -101,8 +119,8 @@ Future<Uint8List> buildOpenOrderPdf({
               ),
             ),
             pw.Text(
-              'الأصلية ${q(whQty)} • المأخوذ ${q(whTaken)} • '
-              'المتبقي ${q(whQty - whTaken)}',
+              'الأصلية ${q(grpQty)} • المأخوذ ${q(grpQty - grpLeft)} • '
+              'المتبقي ${q(grpLeft)}',
               textDirection: pw.TextDirection.rtl,
               style: const pw.TextStyle(color: PdfColors.white, fontSize: 9),
             ),
@@ -115,21 +133,25 @@ Future<Uint8List> buildOpenOrderPdf({
         const [4, 2, 3, 2, 2, 2, 3],
         head: true,
       ),
-      for (final l in lines)
-        _row(
-          [
-            name(l.productId),
-            unit(l.productId),
-            fmt.money(l.unitPrice),
-            fmt.number(l.qty),
-            fmt.number(l.qty - s.remainingInOrder(o, l.productId, at: w)),
-            fmt.number(s.remainingInOrder(o, l.productId, at: w)),
-            fmt.money(l.total),
-          ],
-          const [4, 2, 3, 2, 2, 2, 3],
-        ),
+      for (final r in rows.values)
+        () {
+          // المتبقي لسطر بسعر واحد: لا يتجاوز كميته.
+          final rem = remaining(r.pid).clamp(0.0, r.qty);
+          return _row(
+            [
+              name(r.pid),
+              unit(r.pid),
+              fmt.money(r.price),
+              fmt.number(r.qty),
+              fmt.number(r.qty - rem),
+              fmt.number(rem),
+              fmt.money(r.qty * r.price),
+            ],
+            const [4, 2, 3, 2, 2, 2, 3],
+          );
+        }(),
       pw.SizedBox(height: 8),
-      _sub('ما أخذه الزبون من ${whName(w)}'),
+      _sub(w == null ? 'ما أخذه الزبون' : 'ما أخذه الزبون من ${whName(w)}'),
       if (from.isEmpty)
         pw.Text(
           'لم يأخذ شيئاً بعد',
@@ -152,7 +174,9 @@ Future<Uint8List> buildOpenOrderPdf({
                 k == 0 ? i.number : '',
                 name(l.productId),
                 '${fmt.number(l.qty)} ${unit(l.productId)}',
-                fmt.number(leftAfter[i.id]?['${l.productId}|$w'] ?? 0),
+                fmt.number(
+                  leftAfter[i.id]?[keyOf(l.productId, i.warehouseId)] ?? 0,
+                ),
                 fmt.money(l.total),
               ],
               const [1, 3, 2, 4, 2, 2, 3],
@@ -172,7 +196,7 @@ Future<Uint8List> buildOpenOrderPdf({
         padding: const pw.EdgeInsets.only(top: 8),
         child: pw.Text(
           '${company.name} • ${company.address} • ${company.phone}'
-          ' • ${fmt.date(DateTime.now())} • ${ctx.pageNumber}/${ctx.pagesCount}',
+          ' • ${fmt.date(printedOn)} • ${ctx.pageNumber}/${ctx.pagesCount}',
           textDirection: pw.TextDirection.rtl,
           style: const pw.TextStyle(fontSize: 8, color: _muted),
         ),
@@ -240,7 +264,8 @@ Future<Uint8List> buildOpenOrderPdf({
           children: [
             _box('الزبون', o.partyName),
             _box('الهاتف', o.partyPhone),
-            _box('التاريخ', fmt.date(o.date)),
+            _box('تاريخ الفاتورة', fmt.date(o.date)),
+            _box('تاريخ الكشف', fmt.date(printedOn)),
             _box('الحالة', s.isOrderComplete(o) ? 'مكتملة' : 'جارية'),
           ],
         ),
@@ -256,13 +281,20 @@ Future<Uint8List> buildOpenOrderPdf({
           children: [
             _box('الكمية الكلية', q(o.totalQty), color: _blue),
             _box('المأخوذ', q(taken), color: _green),
-            _box('المتبقي في المخازن', q(o.totalQty - taken), color: _red),
             _box(
-              credit > 1e-9 ? 'رصيد مدفوع مقدماً' : 'المخازن',
-              credit > 1e-9
-                  ? fmt.money(credit)
-                  : o.warehouseIds.map(whName).join('، '),
+              showWarehouses ? 'المتبقي في المخازن' : 'المتبقي له',
+              q(o.totalQty - taken),
+              color: _red,
             ),
+            if (credit > 1e-9)
+              _box('رصيد مدفوع مقدماً', fmt.money(credit), color: _green)
+            else if (showWarehouses)
+              _box('المخازن', o.warehouseIds.map(whName).join('، '))
+            else
+              _box(
+                'عدد الأصناف',
+                '${{for (final l in o.lines) l.productId}.length}',
+              ),
           ],
         ),
         ...sections,
@@ -317,6 +349,60 @@ Future<Uint8List> buildOpenOrderPdf({
                 sub: true,
               ),
           ],
+        ],
+        if (company.paymentAccounts.isNotEmpty) ...[
+          pw.SizedBox(height: 14),
+          _title('حسابات الدفع'),
+          pw.Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final a in company.paymentAccounts)
+                pw.Container(
+                  width: 128,
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    color: _panel,
+                    borderRadius: pw.BorderRadius.circular(8),
+                    border: pw.Border.all(color: _line),
+                  ),
+                  child: pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        a.name,
+                        textDirection: _dir(a.name),
+                        style: pw.TextStyle(
+                          fontSize: 11,
+                          fontWeight: pw.FontWeight.bold,
+                          color: _blue,
+                        ),
+                      ),
+                      pw.SizedBox(height: 4),
+                      pw.Text(
+                        'رقم الحساب',
+                        textDirection: pw.TextDirection.rtl,
+                        style: const pw.TextStyle(fontSize: 7.5, color: _muted),
+                      ),
+                      pw.Text(
+                        a.number,
+                        textDirection: pw.TextDirection.ltr,
+                        style: pw.TextStyle(
+                          fontSize: 11,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                      pw.SizedBox(height: 3),
+                      pw.Text(
+                        'مرجع الدفع: ${o.number}',
+                        textDirection: pw.TextDirection.rtl,
+                        style: const pw.TextStyle(fontSize: 7.5, color: _muted),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ],
         if (o.notes.isNotEmpty) ...[
           pw.SizedBox(height: 12),

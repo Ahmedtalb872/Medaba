@@ -560,8 +560,25 @@ void main() {
       paid: 2800,
       warehouseId: 'w2',
     );
-    final pdf = await buildOpenOrderPdf(order: s.orderById('o')!, s: s);
-    expect(pdf.length, greaterThan(2000));
+    for (final manager in [false, true]) {
+      final pdf = await buildOpenOrderPdf(
+        order: s.orderById('o')!,
+        s: s,
+        showWarehouses: manager,
+        issued: day,
+      );
+      expect(pdf.length, greaterThan(2000));
+    }
+    // وصف ما دُفع عنه في نسخة الزبون بلا مخزن.
+    expect(
+      s
+          .orderPayments(s.orderById('o')!, withWarehouse: false)
+          .first
+          .goods
+          .single
+          .what,
+      '20 قطعة 0.66 غ',
+    );
   });
 
   test('each payment says which goods it paid for', () async {

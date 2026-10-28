@@ -1690,7 +1690,8 @@ class AppState extends ChangeNotifier {
 
   /// كل ما دفعه الزبون في فاتورة مفتوحة، بالترتيب: ما دفعه عند أخذ كل دفعة،
   /// ثم ما سدّده لاحقاً من دين تلك الدفعات.
-  List<OrderPayment> orderPayments(OpenOrder o) {
+  /// [withWarehouse] يذكر المخزن في وصف البضاعة (يُخفى في نسخة الزبون).
+  List<OrderPayment> orderPayments(OpenOrder o, {bool withWarehouse = true}) {
     final pickups = pickupsOf(o.id);
     // المدفوع مقدماً يُوزَّع على ما أُخذ به بالترتيب (الأقدم أولاً)،
     // ليظهر عن أي بضاعة دُفع كل مبلغ.
@@ -1705,7 +1706,7 @@ class AppState extends ChangeNotifier {
         if (use > 1e-9) {
           (usage[advances[ai].id] ??= []).add((
             ref: i.number,
-            what: pickupGoods(i),
+            what: pickupGoods(i, withWarehouse: withWarehouse),
             amount: use,
           ));
         }
@@ -1745,7 +1746,13 @@ class AppState extends ChangeNotifier {
           amount: atPickup,
           source: 'عند أخذ ${i.number}',
           advanceId: null,
-          goods: [(ref: '', what: pickupGoods(i), amount: null)],
+          goods: [
+            (
+              ref: '',
+              what: pickupGoods(i, withWarehouse: withWarehouse),
+              amount: null,
+            ),
+          ],
         ));
       }
       for (final p in debt?.payments ?? const <DebtPayment>[]) {
@@ -1755,7 +1762,13 @@ class AppState extends ChangeNotifier {
           source:
               'تسديد دين ${i.number}${p.note.isEmpty ? '' : ' • ${p.note}'}',
           advanceId: null,
-          goods: [(ref: '', what: pickupGoods(i), amount: null)],
+          goods: [
+            (
+              ref: '',
+              what: pickupGoods(i, withWarehouse: withWarehouse),
+              amount: null,
+            ),
+          ],
         ));
       }
     }
@@ -1763,11 +1776,17 @@ class AppState extends ChangeNotifier {
   }
 
   /// وصف ما أخذه الزبون في دفعة: «400 قطعة 3.20 غ من مخزن 1».
-  String pickupGoods(Invoice i) =>
-      '${i.lines.map((l) {
-        final p = productById(l.productId);
-        return '${fmt.number(l.qty)} ${p?.unit ?? ''} ${p?.name ?? 'صنف محذوف'}';
-      }).join('، ')} من ${warehouseById(i.warehouseId)?.name ?? '-'}';
+  String pickupGoods(Invoice i, {bool withWarehouse = true}) {
+    final goods = i.lines
+        .map((l) {
+          final p = productById(l.productId);
+          return '${fmt.number(l.qty)} ${p?.unit ?? ''} ${p?.name ?? 'صنف محذوف'}';
+        })
+        .join('، ');
+    return withWarehouse
+        ? '$goods من ${warehouseById(i.warehouseId)?.name ?? '-'}'
+        : goods;
+  }
 
   /// ما أخذه الزبون من صنف في فاتورة مفتوحة، من مخزن [at] أو من كلها.
   double takenFromOrder(
