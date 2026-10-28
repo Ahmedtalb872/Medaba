@@ -1693,46 +1693,38 @@ class AppState extends ChangeNotifier {
   /// [withWarehouse] يذكر المخزن في وصف البضاعة (يُخفى في نسخة الزبون).
   List<OrderPayment> orderPayments(OpenOrder o, {bool withWarehouse = true}) {
     final pickups = pickupsOf(o.id);
-    // المدفوع مقدماً يُوزَّع على ما أُخذ به بالترتيب (الأقدم أولاً)،
-    // ليظهر عن أي بضاعة دُفع كل مبلغ.
-    final usage = <String, List<PaidFor>>{};
+    // المدفوع مقدماً يُوزَّع على ما أُخذ به، ليظهر عن أي بضاعة دُفع كل مبلغ.
+    final plan = _replayAdvances(o.id);
     final advances = orderAdvances(o.id);
-    var ai = 0;
-    var leftInAdvance = advances.isEmpty ? 0.0 : advances.first.amount;
-    for (final i in pickups) {
-      var need = i.prepaid;
-      while (need > 1e-9 && ai < advances.length) {
-        final use = need < leftInAdvance ? need : leftInAdvance;
-        if (use > 1e-9) {
-          (usage[advances[ai].id] ??= []).add((
-            ref: i.number,
-            what: pickupGoods(i, withWarehouse: withWarehouse),
-            amount: use,
-          ));
-        }
-        need -= use;
-        leftInAdvance -= use;
-        if (leftInAdvance <= 1e-9) {
-          ai++;
-          leftInAdvance = ai < advances.length ? advances[ai].amount : 0;
-        }
-      }
-    }
+    final byId = {for (final i in pickups) i.id: i};
     final out = <OrderPayment>[
-      for (final (k, t) in advances.indexed)
+      for (final t in advances)
         (
           date: t.date,
           amount: t.amount,
-          source: t.note.replaceFirst(' - ${o.partyName}', ''),
+          source: [
+            t.note.replaceFirst(' - ${o.partyName}', ''),
+            if (t.productId != null)
+              'عن ${productById(t.productId!)?.name ?? 'صنف محذوف'}',
+          ].join(' • '),
           advanceId: t.id,
           goods: [
-            ...?usage[t.id],
+            for (final e in (plan.usage[t.id] ?? const {}).entries)
+              (
+                ref: byId[e.key]?.number ?? '',
+                what: byId[e.key] == null
+                    ? ''
+                    : pickupGoods(byId[e.key]!, withWarehouse: withWarehouse),
+                amount: e.value,
+              ),
             // ما لم يُستعمل بعد من هذه الدفعة.
-            if (k > ai || (k == ai && leftInAdvance > 1e-9))
+            if ((plan.left[t.id] ?? 0) > 1e-9)
               (
                 ref: '',
-                what: 'رصيد لم يأخذ به بضاعة بعد',
-                amount: k == ai ? leftInAdvance : t.amount,
+                what: t.productId == null
+                    ? 'رصيد لم يأخذ به بضاعة بعد'
+                    : 'رصيد لـ ${productById(t.productId!)?.name ?? ''} لم يأخذه بعد',
+                amount: plan.left[t.id],
               ),
           ],
         ),
@@ -1842,12 +1834,80 @@ class AppState extends ChangeNotifier {
       orderAdvances(orderId).fold<double>(0, (s, t) => s + t.amount) -
       pickupsOf(orderId).fold<double>(0, (s, i) => s + i.prepaid);
 
+  /// يعيد توزيع الدفعات المقدمة على ما أخذه الزبون، بالترتيب:
+  /// لكل صنف تُستعمل أولاً الدفعات المخصصة له، ثم الدفعات العامة.
+  /// [usage]: لكل دفعة ما غطّته من كل فاتورة أخذ؛ [left]: ما بقي منها.
+  ({Map<String, Map<String, double>> usage, Map<String, double> left})
+  _replayAdvances(String orderId) {
+    final advances = orderAdvances(orderId);
+    final left = {for (final t in advances) t.id: t.amount};
+    final usage = <String, Map<String, double>>{};
+    void take(Transaction t, Invoice i, double amount) {
+      left[t.id] = left[t.id]! - amount;
+      final m = usage[t.id] ??= {};
+      m[i.id] = (m[i.id] ?? 0) + amount;
+    }
+
+    for (final i in pickupsOf(orderId)) {
+      var need = i.prepaid;
+      for (final l in i.lines) {
+        var lineNeed = need < l.total ? need : l.total;
+        for (final specific in [true, false]) {
+          for (final t in advances) {
+            if (lineNeed <= 1e-9) break;
+            final ok = specific
+                ? t.productId == l.productId
+                : t.productId == null;
+            if (!ok || left[t.id]! <= 1e-9) continue;
+            final use = lineNeed < left[t.id]! ? lineNeed : left[t.id]!;
+            take(t, i, use);
+            lineNeed -= use;
+            need -= use;
+          }
+        }
+      }
+      // بيانات قديمة: ما بقي من المقدم المسجّل يُؤخذ من أي دفعة.
+      for (final t in advances) {
+        if (need <= 1e-9) break;
+        if (left[t.id]! <= 1e-9) continue;
+        final use = need < left[t.id]! ? need : left[t.id]!;
+        take(t, i, use);
+        need -= use;
+      }
+    }
+    return (usage: usage, left: left);
+  }
+
+  /// ما يُخصم من المدفوع مقدماً لبضاعة قيمها [values] (لكل صنف قيمته):
+  /// دفعات الصنف نفسه أولاً، ثم الدفعات العامة.
+  double creditFor(String orderId, Map<String, double> values) {
+    final advances = orderAdvances(orderId);
+    final left = Map.of(_replayAdvances(orderId).left);
+    var total = 0.0;
+    for (final e in values.entries) {
+      var need = e.value;
+      for (final specific in [true, false]) {
+        for (final t in advances) {
+          if (need <= 1e-9) break;
+          final ok = specific ? t.productId == e.key : t.productId == null;
+          if (!ok || left[t.id]! <= 1e-9) continue;
+          final use = need < left[t.id]! ? need : left[t.id]!;
+          left[t.id] = left[t.id]! - use;
+          need -= use;
+          total += use;
+        }
+      }
+    }
+    return total;
+  }
+
   /// يسجّل مبلغاً دفعه الزبون مقدماً، ويُخصم من قيمة ما يأخذه لاحقاً.
   Future<void> addOrderAdvance(
     String orderId, {
     required double amount,
     required DateTime date,
     String note = '',
+    String? productId,
   }) async {
     final o = orderById(orderId);
     if (o == null) throw StateError('الفاتورة المفتوحة غير موجودة');
@@ -1855,6 +1915,16 @@ class AppState extends ChangeNotifier {
     final left = o.total - orderPaid(o);
     if (amount > left + 1e-9) {
       throw StateError('الباقي من مبلغ الفاتورة ${fmt.money(left)} فقط');
+    }
+    if (productId != null) {
+      // لا يُدفع لصنف أكثر من قيمة ما بقي منه بعد ما دُفع له مسبقاً.
+      final rest = productValueLeft(o, productId);
+      if (amount > rest + 1e-9) {
+        throw StateError(
+          'الباقي من قيمة "${productById(productId)?.name}" '
+          '${fmt.money(rest)} فقط',
+        );
+      }
     }
     _transactions.add(
       Transaction(
@@ -1867,17 +1937,32 @@ class AppState extends ChangeNotifier {
           if (note.trim().isNotEmpty) note.trim(),
         ].join(' - '),
         refId: o.id,
+        productId: productId,
       ),
     );
     notifyListeners();
     await _saveTx();
   }
 
+  /// قيمة ما بقي للزبون من صنف (في كل المخازن) بعد رصيد الدفعات المخصصة له.
+  double productValueLeft(OpenOrder o, String productId) {
+    var value = 0.0;
+    for (final l in o.lines) {
+      if (l.productId != productId) continue;
+      value += remainingInOrder(o, productId, at: o.whOf(l)) * l.unitPrice;
+    }
+    final plan = _replayAdvances(o.id);
+    for (final t in orderAdvances(o.id)) {
+      if (t.productId == productId) value -= plan.left[t.id] ?? 0;
+    }
+    return value < 0 ? 0 : value;
+  }
+
   /// يحذف دفعة مقدمة، إلا إذا استُعملت في بضاعة أخذها الزبون.
   Future<void> deleteOrderAdvance(String orderId, String txId) async {
     final t = orderAdvances(orderId).where((t) => t.id == txId).firstOrNull;
     if (t == null) return;
-    if (orderCredit(orderId) < t.amount - 1e-9) {
+    if ((_replayAdvances(orderId).left[t.id] ?? 0) < t.amount - 1e-9) {
       throw StateError(
         'استُعمل هذا المبلغ في بضاعة أخذها الزبون؛ احذف تلك الفاتورة أولاً',
       );
@@ -2006,7 +2091,11 @@ class AppState extends ChangeNotifier {
     if (lines.isEmpty) throw StateError('اكتب الكمية التي أخذها الزبون');
     final total = lines.fold<double>(0, (s, l) => s + l.total);
     // يُخصم أولاً من المدفوع مقدماً، ثم يُدفع الباقي أو يصبح ديناً.
-    final prepaid = orderCredit(o.id).clamp(0.0, total);
+    final values = <String, double>{};
+    for (final l in lines) {
+      values[l.productId] = (values[l.productId] ?? 0) + l.total;
+    }
+    final prepaid = creditFor(o.id, values).clamp(0.0, total);
     final inv = Invoice(
       id: newId(),
       type: InvoiceType.sale,

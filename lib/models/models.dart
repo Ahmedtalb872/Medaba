@@ -306,6 +306,9 @@ class Transaction {
   /// ما تخصه المعاملة: مخزن أو حاوية (مثل أجور عمال التفريغ).
   final String? refId;
 
+  /// الصنف الذي دُفع عنه (دفعة مقدمة لصنف معيّن في فاتورة مفتوحة).
+  final String? productId;
+
   const Transaction({
     required this.id,
     required this.category,
@@ -314,6 +317,7 @@ class Transaction {
     this.note = '',
     this.personId,
     this.refId,
+    this.productId,
   });
 
   TxType get type => category.type;
@@ -326,6 +330,7 @@ class Transaction {
     'note': note,
     'personId': personId,
     if (refId != null) 'refId': refId,
+    if (productId != null) 'productId': productId,
   };
 
   factory Transaction.fromJson(Map<String, dynamic> j) => Transaction(
@@ -336,5 +341,6 @@ class Transaction {
     note: j['note'] as String? ?? '',
     personId: j['personId'] as String?,
     refId: j['refId'] as String?,
+    productId: j['productId'] as String?,
   );
 }

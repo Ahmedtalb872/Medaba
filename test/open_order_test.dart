@@ -607,4 +607,56 @@ void main() {
       contains('رصيد لم يأخذ به بضاعة بعد • 10,000'),
     );
   });
+
+  test('an advance for one item is used only for that item', () async {
+    await s.saveProduct(
+      const Product(id: 'q', name: 'أسمنت', unit: 'كيس', salePrice: 280),
+    );
+    await s.saveMove(
+      StockMove(
+        id: 'inq',
+        type: MoveType.stockIn,
+        productId: 'q',
+        warehouseId: 'w',
+        qty: 100,
+        date: day,
+      ),
+    );
+    await s.saveOpenOrder(
+      OpenOrder(
+        id: 'o',
+        number: 'O-0001',
+        date: day,
+        partyName: 'كريس',
+        warehouseId: 'w',
+        lines: const [
+          InvoiceLine(productId: 'p', qty: 100, unitPrice: 140),
+          InvoiceLine(productId: 'q', qty: 50, unitPrice: 280),
+        ],
+      ),
+    );
+    // لا يُدفع للأسمنت أكثر من قيمته (50 × 280 = 14000).
+    expect(
+      () => s.addOrderAdvance('o', amount: 20000, date: day, productId: 'q'),
+      throwsStateError,
+    );
+    await s.addOrderAdvance('o', amount: 10000, date: day, productId: 'q');
+    var pays = s.orderPayments(s.orderById('o')!);
+    expect(pays.single.source, contains('عن أسمنت'));
+    expect(pays.single.goods.single.what, contains('رصيد لـ أسمنت'));
+
+    // أخذ من الصنف الآخر لا يستعمل دفعة الأسمنت.
+    final a = await s.pickupFromOrder('o', quantities: {'p': 10}, paid: 1400);
+    expect(a.prepaid, 0);
+    // أخذ من الأسمنت يستعملها.
+    final b = await s.pickupFromOrder('o', quantities: {'q': 20}, paid: 0);
+    expect(b.prepaid, 5600);
+    pays = s.orderPayments(s.orderById('o')!);
+    final adv = pays.firstWhere((p) => p.advanceId != null);
+    expect(adv.goods.first.ref, b.number);
+    expect(adv.goods.first.amount, 5600);
+    expect(adv.goods.last.amount, 4400);
+    // المستعمل منها لا يُحذف.
+    expect(() => s.deleteOrderAdvance('o', adv.advanceId!), throwsStateError);
+  });
 }

@@ -808,7 +808,16 @@ Future<void> showPickupForm(BuildContext context, OpenOrder o) {
   );
 
   /// ما يُخصم من المدفوع مقدماً، وما بقي ليُدفع الآن.
-  double fromCredit() => credit.clamp(0.0, value());
+  // دفعات الصنف نفسه أولاً، ثم الدفعات العامة.
+  double fromCredit() {
+    final values = <String, double>{};
+    for (final l in here()) {
+      final v = (fmt.parseNumber(qty[keyOf(l)]!.text) ?? 0) * l.unitPrice;
+      values[l.productId] = (values[l.productId] ?? 0) + v;
+    }
+    return s.creditFor(o.id, values);
+  }
+
   double due() => value() - fromCredit();
 
   return showFormDialog(
@@ -950,24 +959,66 @@ Future<void> showOrderPaymentForm(BuildContext context, OpenOrder o) {
   final amount = TextEditingController();
   final note = TextEditingController();
   var date = DateTime.now();
-  final left = o.total - s.orderPaid(o);
+  final orderLeft = o.total - s.orderPaid(o);
+  // الصنف الذي دُفع عنه المبلغ؛ null = لكل الأصناف.
+  String? product;
+  final products = {for (final l in o.lines) l.productId}.toList();
+  double left() {
+    if (product == null) return orderLeft;
+    final v = s.productValueLeft(o, product!);
+    return v < orderLeft ? v : orderLeft;
+  }
+
   return showFormDialog(
     context: context,
     formKey: key,
     title: 'دفعة مالية من ${o.partyName} • ${o.number}',
     fields: (setState) => [
-      Text('الباقي من مبلغ الفاتورة: ${fmt.money(left)}'),
+      DropdownButtonFormField<String?>(
+        initialValue: product,
+        isExpanded: true,
+        decoration: const InputDecoration(labelText: 'دُفع عن أي صنف'),
+        items: [
+          const DropdownMenuItem<String?>(
+            value: null,
+            child: Text('كل الأصناف (عام)'),
+          ),
+          for (final p in products)
+            DropdownMenuItem<String?>(
+              value: p,
+              child: Row(
+                children: [
+                  ProductThumb(product: s.productById(p), size: 28),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '${s.productById(p)?.name ?? 'صنف محذوف'} '
+                      '(${s.productById(p)?.unit ?? ''})',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+        onChanged: (v) => setState(() => product = v),
+      ),
+      Text(
+        product == null
+            ? 'الباقي من مبلغ الفاتورة: ${fmt.money(left())}'
+            : 'الباقي من قيمة هذا الصنف: ${fmt.money(left())}',
+      ),
       TextFormField(
         controller: amount,
         decoration: InputDecoration(
           labelText: 'المبلغ المدفوع',
           suffixIcon: TextButton(
-            onPressed: () => amount.text = fmt.number(left),
+            onPressed: () => amount.text = fmt.number(left()),
             child: const Text('الكل'),
           ),
         ),
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        validator: numberValidator(min: 0.01, max: left),
+        validator: (v) => numberValidator(min: 0.01, max: left())(v),
       ),
       DateField(
         label: 'التاريخ',
@@ -980,20 +1031,20 @@ Future<void> showOrderPaymentForm(BuildContext context, OpenOrder o) {
           labelText: 'ملاحظة (نقداً، تحويل Bankily...)',
         ),
       ),
-      const Text('يُخصم هذا المبلغ تلقائياً من قيمة ما يأخذه الزبون لاحقاً.'),
+      Text(
+        product == null
+            ? 'يُخصم هذا المبلغ تلقائياً من قيمة ما يأخذه الزبون لاحقاً.'
+            : 'يُخصم هذا المبلغ تلقائياً عندما يأخذ الزبون من هذا الصنف.',
+      ),
     ],
-    onSave: () async {
-      try {
-        await s.addOrderAdvance(
-          o.id,
-          amount: fmt.parseNumber(amount.text) ?? 0,
-          date: date,
-          note: note.text,
-        );
-      } on StateError catch (e) {
-        if (context.mounted) _snack(context, e.message);
-      }
-    },
+    // الرفض يظهر داخل النموذج ويبقى مفتوحاً.
+    onSave: () => s.addOrderAdvance(
+      o.id,
+      amount: fmt.parseNumber(amount.text) ?? 0,
+      date: date,
+      note: note.text,
+      productId: product,
+    ),
   );
 }
 
