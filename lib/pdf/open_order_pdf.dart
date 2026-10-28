@@ -398,14 +398,6 @@ Future<Uint8List> buildOpenOrderPdf({
           _title('ملاحظات'),
           pw.Text(o.notes, textDirection: _dir(o.notes)),
         ],
-        pw.SizedBox(height: 36),
-        pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            _sign('توقيع الزبون'),
-            _sign('توقيع ${company.ownerRole}'),
-          ],
-        ),
       ],
     ),
   );
@@ -530,15 +522,3 @@ pw.Widget _row(
     ),
   );
 }
-
-pw.Widget _sign(String label) => pw.Column(
-  children: [
-    pw.Container(width: 150, height: 1, color: _muted),
-    pw.SizedBox(height: 4),
-    pw.Text(
-      label,
-      textDirection: pw.TextDirection.rtl,
-      style: const pw.TextStyle(fontSize: 9, color: _muted),
-    ),
-  ],
-);
