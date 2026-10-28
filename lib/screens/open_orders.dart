@@ -1,12 +1,17 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:printing/printing.dart';
 import 'package:provider/provider.dart';
 
 import '../models/invoice.dart';
 import '../models/models.dart';
 import '../models/open_order.dart';
+import '../pdf/open_order_pdf.dart';
 import '../state/app_state.dart';
 import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
+import '../utils/share_pdf.dart';
 import '../widgets/common.dart';
 import 'daily_screens.dart';
 import 'invoices_screen.dart';
@@ -220,6 +225,16 @@ class OpenOrderPage extends StatelessWidget {
       appBar: AppBar(
         title: Text('فاتورة مفتوحة ${o.number}'),
         actions: [
+          IconButton(
+            tooltip: 'PDF: إرسال أو طباعة',
+            icon: const Icon(Icons.picture_as_pdf_outlined),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => _OrderPdfPage(order: o, s: s),
+              ),
+            ),
+          ),
           IconButton(
             tooltip: 'تعديل',
             icon: const Icon(Icons.edit_outlined),
@@ -963,5 +978,67 @@ Future<void> showOrderPaymentForm(BuildContext context, OpenOrder o) {
         if (context.mounted) _snack(context, e.message);
       }
     },
+  );
+}
+
+/// معاينة كشف الفاتورة المفتوحة PDF مع الإرسال والطباعة.
+class _OrderPdfPage extends StatefulWidget {
+  final OpenOrder order;
+  final AppState s;
+  const _OrderPdfPage({required this.order, required this.s});
+
+  @override
+  State<_OrderPdfPage> createState() => _OrderPdfPageState();
+}
+
+class _OrderPdfPageState extends State<_OrderPdfPage> {
+  /// يُبنى الملف مرة واحدة فيكون جاهزاً للمشاركة مباشرة على الهاتف.
+  late final Future<Uint8List> _pdf = buildOpenOrderPdf(
+    order: widget.order,
+    s: widget.s,
+  );
+
+  String get fileName => '${widget.order.number}-${widget.order.partyName}.pdf';
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: Text('فاتورة مفتوحة ${widget.order.number}'),
+      actions: [
+        IconButton(
+          tooltip: 'طباعة',
+          icon: const Icon(Icons.print_outlined),
+          onPressed: () =>
+              Printing.layoutPdf(name: fileName, onLayout: (_) => _pdf),
+        ),
+        Padding(
+          padding: const EdgeInsetsDirectional.only(end: 8),
+          child: FilledButton.icon(
+            icon: const Icon(Icons.share_outlined),
+            label: const Text('إرسال / تنزيل'),
+            onPressed: () async => sharePdfFile(await _pdf, fileName),
+          ),
+        ),
+      ],
+    ),
+    body: PdfPreview(
+      build: (_) => _pdf,
+      pdfFileName: fileName,
+      canChangeOrientation: false,
+      canChangePageFormat: false,
+      canDebug: false,
+      allowPrinting: false,
+      allowSharing: false,
+      onError: (context, error) => const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'تعذّر عرض المعاينة في هذا المتصفح.\n'
+            'استخدم زر «إرسال / تنزيل» أو «طباعة» في الأعلى.',
+            textAlign: TextAlign.center,
+          ),
+        ),
+      ),
+    ),
   );
 }

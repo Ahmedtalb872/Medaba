@@ -6,6 +6,7 @@ import 'package:medaba/models/debt.dart';
 import 'package:medaba/models/invoice.dart';
 import 'package:medaba/models/inventory.dart';
 import 'package:medaba/models/open_order.dart';
+import 'package:medaba/pdf/open_order_pdf.dart';
 import 'package:medaba/screens/open_orders.dart';
 import 'package:medaba/state/app_state.dart';
 import 'package:provider/provider.dart';
@@ -521,5 +522,45 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('لم يأخذ الزبون شيئاً في هذه الفترة'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  test('the open invoice PDF builds with several warehouses', () async {
+    await s.saveWarehouse(const Warehouse(id: 'w2', name: 'مخزن 2'));
+    await s.saveMove(
+      StockMove(
+        id: 'in2',
+        type: MoveType.stockIn,
+        productId: 'p',
+        warehouseId: 'w2',
+        qty: 100,
+        date: day,
+      ),
+    );
+    await s.saveOpenOrder(
+      OpenOrder(
+        id: 'o',
+        number: 'O-0001',
+        date: day,
+        partyName: 'كريس',
+        warehouseId: 'w',
+        lines: const [
+          InvoiceLine(productId: 'p', qty: 500, unitPrice: 140),
+          InvoiceLine(
+            productId: 'p',
+            qty: 50,
+            unitPrice: 140,
+            warehouseId: 'w2',
+          ),
+        ],
+      ),
+    );
+    await s.pickupFromOrder(
+      'o',
+      quantities: {'p': 20},
+      paid: 2800,
+      warehouseId: 'w2',
+    );
+    final pdf = await buildOpenOrderPdf(order: s.orderById('o')!, s: s);
+    expect(pdf.length, greaterThan(2000));
   });
 }
