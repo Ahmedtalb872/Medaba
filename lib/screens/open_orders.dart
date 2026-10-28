@@ -13,6 +13,7 @@ import '../theme/app_colors.dart';
 import '../utils/format.dart' as fmt;
 import '../utils/share_pdf.dart';
 import '../widgets/common.dart';
+import '../widgets/product_thumb.dart';
 import 'daily_screens.dart';
 import 'invoices_screen.dart';
 
@@ -336,6 +337,10 @@ class OpenOrderPage extends StatelessWidget {
                 for (final l in o.lines)
                   ListTile(
                     contentPadding: EdgeInsets.zero,
+                    leading: ProductThumb(
+                      product: s.productById(l.productId),
+                      size: 44,
+                    ),
                     title: Text('${name(l.productId)} • ${whName(o.whOf(l))}'),
                     subtitle: Text(
                       'الأصلية ${fmt.number(l.qty)} ${unit(l.productId)} • '
@@ -627,6 +632,8 @@ Future<void> showOpenOrderForm(BuildContext context, {OpenOrder? existing}) {
           children: [
             Row(
               children: [
+                ProductThumb(product: s.productById(l.productId), size: 44),
+                const SizedBox(width: 8),
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     key: ValueKey('p$i${l.productId}'),
@@ -839,6 +846,13 @@ Future<void> showPickupForm(BuildContext context, OpenOrder o) {
             if (!paidTouched) paid.text = fmt.number(due());
           }),
           decoration: InputDecoration(
+            prefixIcon: Padding(
+              padding: const EdgeInsets.all(6),
+              child: ProductThumb(
+                product: s.productById(l.productId),
+                size: 36,
+              ),
+            ),
             labelText:
                 'الكمية المأخوذة: ${s.productById(l.productId)?.name ?? ''}',
             suffixText: s.productById(l.productId)?.unit,

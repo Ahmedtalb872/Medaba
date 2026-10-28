@@ -6,6 +6,7 @@ import 'package:pdf/widgets.dart' as pw;
 import '../models/open_order.dart';
 import '../state/app_state.dart';
 import '../utils/format.dart' as fmt;
+import '../utils/product_image.dart';
 import 'invoice_pdf.dart' show loadPdfTheme;
 
 const _brand = PdfColor.fromInt(0xFF0B4D38);
@@ -37,6 +38,34 @@ Future<Uint8List> buildOpenOrderPdf({
   String name(String id) => s.productById(id)?.name ?? 'صنف محذوف';
   String unit(String id) => s.productById(id)?.unit ?? '';
   String whName(String id) => s.warehouseById(id)?.name ?? '-';
+
+  // صورة كل صنف تُحمَّل مرة واحدة في الملف وإن تكررت.
+  final images = <String, pw.MemoryImage?>{};
+  pw.Widget? thumb(String pid, double size) {
+    final img = images.putIfAbsent(pid, () {
+      final data = s.productById(pid)?.image;
+      if (data == null) return null;
+      try {
+        return pw.MemoryImage(productImageBytes(data));
+      } catch (_) {
+        return null;
+      }
+    });
+    if (img == null) return null;
+    return pw.Container(
+      padding: const pw.EdgeInsets.all(1),
+      decoration: pw.BoxDecoration(
+        color: PdfColors.white,
+        border: pw.Border.all(color: _line),
+        borderRadius: pw.BorderRadius.circular(5),
+      ),
+      child: pw.ClipRRect(
+        horizontalRadius: 4,
+        verticalRadius: 4,
+        child: pw.Image(img, width: size, height: size, fit: pw.BoxFit.cover),
+      ),
+    );
+  }
 
   final pickups = s.pickupsOf(o.id);
   // نسخة الزبون لا تذكر المخازن حتى في وصف ما دُفع عنه.
@@ -148,6 +177,7 @@ Future<Uint8List> buildOpenOrderPdf({
               fmt.money(r.qty * r.price),
             ],
             const [4, 2, 3, 2, 2, 2, 3],
+            lead: {0: thumb(r.pid, 30)},
           );
         }(),
       pw.SizedBox(height: 8),
@@ -180,6 +210,7 @@ Future<Uint8List> buildOpenOrderPdf({
                 fmt.money(l.total),
               ],
               const [1, 3, 2, 4, 2, 2, 3],
+              lead: {3: thumb(l.productId, 16)},
             ),
       ],
     ]);
@@ -489,6 +520,7 @@ pw.Widget _row(
   bool head = false,
   bool light = false,
   bool sub = false,
+  Map<int, pw.Widget?> lead = const {},
 }) {
   final style = pw.TextStyle(
     fontSize: head ? 9 : (sub ? 7.5 : 8.5),
@@ -512,12 +544,28 @@ pw.Widget _row(
             flex: flex[i],
             child: pw.Padding(
               padding: const pw.EdgeInsets.symmetric(horizontal: 2),
-              child: pw.Text(
-                c,
-                style: style,
-                textDirection: _dir(c),
-                textAlign: pw.TextAlign.right,
-              ),
+              child: lead[i] == null
+                  ? pw.Text(
+                      c,
+                      style: style,
+                      textDirection: _dir(c),
+                      textAlign: pw.TextAlign.right,
+                    )
+                  // صورة الصنف بجانب اسمه.
+                  : pw.Row(
+                      children: [
+                        lead[i]!,
+                        pw.SizedBox(width: 5),
+                        pw.Expanded(
+                          child: pw.Text(
+                            c,
+                            style: style,
+                            textDirection: _dir(c),
+                            textAlign: pw.TextAlign.right,
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ),
       ],
