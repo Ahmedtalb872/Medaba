@@ -46,9 +46,10 @@ bool get _isPhone {
   ).hasMatch(nav.userAgent)) {
     return true;
   }
+  // iPad بلوحة مفاتيح وفأرة يُظهر نفسه حاسوباً (Macintosh) ومؤشره «دقيق»،
+  // لكن شاشته تبقى شاشة لمس، فيكفي وجود اللمس.
   try {
-    return nav.maxTouchPoints > 0 &&
-        web.window.matchMedia('(pointer: coarse)').matches;
+    return nav.maxTouchPoints > 0;
   } catch (_) {
     return false;
   }
